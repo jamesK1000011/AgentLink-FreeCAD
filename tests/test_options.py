@@ -317,7 +317,7 @@ class Pick(Base):
         self.assertEqual(options.read_value(a, 4), {"length": 4})
         self.assertEqual(options.read_value(a, "Through All"), {"extent": "through_all"})
         self.assertEqual(options.read_value({"arg": "angle", "unit": "deg"}, "90°"), {"angle": 90.0})
-        self.assertEqual(options.read_value({"arg": "occurrences"}, "6"), {"occurrences": 6})
+        self.assertEqual(options.read_value({"arg": "count"}, "6"), {"count": 6})
         self.assertEqual(options.read_value({"arg": "kind"}, "box"), {"kind": "box"})
         with self.assertRaises(Exception):
             options.read_value(a, "4deg")

@@ -151,7 +151,7 @@ class GapsRedTeam(unittest.TestCase):
         self.ok("pd_body_new", {"name": "M9 spring"})
         self.ok("sketch_new", {"body": "M9 spring", "plane": "XZ", "name": "M9 wire"})
         self.ok("sketch_add", {"sketch": "M9 wire", "items": [{"kind": "circle", "center": [10, 0], "radius": 1}]})
-        err, out = self.call("pd_helix", {"body": "M9 spring", "profile": "M9 wire", "height": 20, "turns": 5, "growth": 2})
+        err, out = self.call("pd_helix", {"body": "M9 spring", "sketch": "M9 wire", "height": 20, "turns": 5, "growth": 2})
         if not err:
             h = next(o for o in self.obj("M9 spring").Group if o.TypeId == "PartDesign::AdditiveHelix")
             self.assertEqual(h.Mode, "height-turns-growth")

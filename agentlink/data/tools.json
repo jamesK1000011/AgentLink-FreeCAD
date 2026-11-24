@@ -5452,7 +5452,7 @@
   },
   "part_boolean": {
    "group": "model",
-   "description": "Do a fuse, cut or common of base with tools. tools: solid bodies by name. base: the body that is kept. You must name it when more than one body shows. common with several tools keeps what base shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. The result keeps the label of base (name: a new label). It is a plain shape, with coplanar faces merged. The tool removes the tools (keep: true hides them). A hidden body is still a body to other tools. A PartDesign Body base gives a new Body on the result, and the tool hides the old one. Trap: faces and edges get new numbers; use shape_query again. The tool refuses, and keeps the tools, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, hidden + hiddenNote. object_delete of the result shows the inputs again. Prefer pockets, pads and holes in one PartDesign body to a chain of booleans. A boolean gives a plain shape with no history. Its faces get new names.",
+   "description": "Do a fuse, cut or common of body with bodies. bodies: solid bodies by name (the tools). body: the body that is kept. You must name it when more than one body shows. common with several bodies keeps what body shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. The result keeps the label of body (name: a new label). It is a plain shape, with coplanar faces merged. The tool removes bodies (keep: true hides them). A hidden body is still a body to other tools. A PartDesign Body as body gives a new Body on the result, and the tool hides the old one. Trap: faces and edges get new numbers; use shape_query again. The tool refuses, and keeps bodies, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, hidden + hiddenNote. object_delete of the result shows the inputs again. Prefer pockets, pads and holes in one PartDesign body to a chain of booleans. A boolean gives a plain shape with no history. Its faces get new names.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -5464,11 +5464,11 @@
        "common"
       ]
      },
-     "base": {
+     "body": {
       "type": "string",
       "description": "A body's name or label; may be left out when there is one."
      },
-     "tools": {
+     "bodies": {
       "description": "A body or a list of them."
      },
      "keep": {
@@ -5480,7 +5480,7 @@
     },
     "required": [
      "op",
-     "tools"
+     "bodies"
     ],
     "additionalProperties": false
    },
@@ -5490,10 +5490,10 @@
    "runner": "steps",
    "steps": [
     {"refuse": "op: fuse, cut or common.", "when": "=a.op not in ('fuse', 'cut', 'common')"},
-    {"let": {"op": "=a.op", "base": "=solid_body(a.base)", "names": "=ref_list(a.tools)"}},
-    {"refuse": "tools: the bodies to fuse, cut away or keep in common with base.", "when": "=not names"},
+    {"let": {"op": "=a.op", "base": "=solid_body(a.body)", "names": "=ref_list(a.bodies)"}},
+    {"refuse": "bodies: the bodies to fuse, cut away or keep in common with body.", "when": "=not names"},
     {"let": {"tl": "=[solid_body(n) for n in names]"}},
-    {"refuse": {"fmt": "tools: base ({base.Label}) is among them — a body with itself changes nothing. tools: the other bodies; base: the one that is kept."}, "when": "=any(t is base for t in tl)"},
+    {"refuse": {"fmt": "bodies: body ({base.Label}) is among them — a body with itself changes nothing. bodies: the other bodies; body: the one that is kept."}, "when": "=any(t is base for t in tl)"},
     {"let": {"bs": "=base.Shape", "shapes": "=[t.Shape for t in tl]"}},
     {"each": "t", "in": "=tl", "steps": [{"let": {"why": "=unsound_tool(t.Shape)"}}, {"refuse": {"fmt": "{op}: the tool {t.Label} is not a sound solid ({why}), so OCC would drop it and leave {base.Label} as it was. Nothing was changed; {t.Label} is kept. body_check {t.Label} says more; part_fix or part_refine {{ fix: true }} may repair it, else rebuild it."}, "code": "failed", "when": "=why"}]},
     {"let": {"res": "=clean(boolean(bs, op, shapes))"}},
@@ -7307,7 +7307,7 @@
   },
   "pd_linear_pattern": {
    "group": "feature",
-   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. occurrences: 2 or more, with the original. spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. For a grid: pd_multitransform. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count and the spacing.",
+   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. count: 2 or more, with the original. spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. For a grid: pd_multitransform. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count and the spacing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7335,7 +7335,7 @@
      "direction": {
       "type": "string"
      },
-     "occurrences": {
+     "count": {
       "type": "integer"
      },
      "spacing": {
@@ -7375,9 +7375,9 @@
       {"set": {"f.Originals": "=orig"}}
      ]
     },
-    {"let": {"n": "=a.get('occurrences', 2)"}},
+    {"let": {"n": "=a.get('count', 2)"}},
     {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
-    {"refuse": "occurrences: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
+    {"refuse": "count: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
     {"set": {"f.Occurrences": "=n"}},
     {"set": {"f.Direction": "=ref"}},
     {"let": {"step": "=a.get('spacing', a.get('length'))"}},
@@ -7395,7 +7395,7 @@
   },
   "pd_polar_pattern": {
    "group": "feature",
-   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). occurrences: with the original. angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count. Copies of a whole part go in the assembly as links.",
+   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). count: with the original. angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count. Copies of a whole part go in the assembly as links.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7423,7 +7423,7 @@
      "axis": {
       "type": "string"
      },
-     "occurrences": {
+     "count": {
       "type": "integer"
      },
      "angle": {
@@ -7460,9 +7460,9 @@
       {"set": {"f.Originals": "=orig"}}
      ]
     },
-    {"let": {"n": "=a.get('occurrences', 2)"}},
+    {"let": {"n": "=a.get('count', 2)"}},
     {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
-    {"refuse": "occurrences: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
+    {"refuse": "count: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
     {"set": {"f.Occurrences": "=n"}},
     {"set": {"f.Axis": "=ref"}},
     {"let": {"ang": "=a.get('angle', 360)"}},
@@ -7480,7 +7480,7 @@
   },
   "pd_loft": {
    "group": "feature",
-   "description": "Loft through closed sketches. profile: the first sketch. sections: [the other sketches, in order, each on its own plane]. ruled, closed. subtractive: true cuts it. The sketches must have the same edge count and matching start corners, or the loft twists. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Loft through closed sketches. sketch: the first sketch. sections: [the other sketches, in order, each on its own plane]. ruled, closed. subtractive: true cuts it. The sketches must have the same edge count and matching start corners, or the loft twists. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7488,7 +7488,7 @@
       "type": "string",
       "description": "The PartDesign body; may be left out when there is one."
      },
-     "profile": {
+     "sketch": {
       "type": "string",
       "description": "The sketch, in the body."
      },
@@ -7509,7 +7509,7 @@
      }
     },
     "required": [
-     "profile",
+     "sketch",
      "sections"
     ],
     "additionalProperties": false
@@ -7519,21 +7519,21 @@
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.profile, b)"}},
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
     {"let": {"f": "=new(b, 'PartDesign::' + ('Subtractive' if sub else 'Additive') + 'Loft', 'Loft')"}},
     {"set": {"f.Profile": "=sk"}},
     {"let": {"secs": "=[sketch_of(r, b) for r in (a.sections or [])]"}},
-    {"refuse": "sections: [sketch names] — the profiles after the first (profile), in order; each on its own plane (pd_datum_plane, or sketch_new with offset).", "when": "=not secs or sk in secs"},
+    {"refuse": "sections: [sketch names] — the sketches after the first (sketch), in order; each on its own plane (pd_datum_plane, or sketch_new with offset).", "when": "=not secs or sk in secs"},
     {"set": {"f.Sections": "=secs", "f.Ruled": "=bool(a.get('ruled', False))", "f.Closed": "=bool(a.get('closed', False))"}}
    ],
    "answer": {"via": "settle", "with": ["=b", "=f", "pd_loft", "=before", "='cut' if sub else 'add'", "Sections must each be one closed wire and should have the same number of edges, started at matching corners; ruled: true for straight sides."]}
   },
   "pd_pipe": {
    "group": "feature",
-   "description": "Sweep a closed profile along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. profile: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a path from the skeleton (a pd_binder) to an edge of a made solid. Keep each member of a weldment unrefined.",
+   "description": "Sweep a closed sketch along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. sketch: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: feature, sketch, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a path from the skeleton (a pd_binder) to an edge of a made solid. Keep each member of a weldment unrefined.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7541,7 +7541,7 @@
       "type": "string",
       "description": "The PartDesign body; may be left out when there is one."
      },
-     "profile": {
+     "sketch": {
       "description": "A sketch in the body, or { circle: { d, wall } }."
      },
      "path": {
@@ -7566,7 +7566,7 @@
      }
     },
     "required": [
-     "profile",
+     "sketch",
      "path"
     ],
     "additionalProperties": false
@@ -7576,8 +7576,8 @@
    "date": "2026-11-20",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "made": "=is_dict(a.profile)"}},
-    {"let": {"spec": "=tube_spec(a.profile) if made else None", "sk": "=None if made else sketch_of(a.profile, b)"}},
+    {"let": {"b": "=body(a.body)", "made": "=is_dict(a.sketch)"}},
+    {"let": {"spec": "=tube_spec(a.sketch) if made else None", "sk": "=None if made else sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not made and not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
@@ -7592,10 +7592,10 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The profile should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the profile fails."],
+    "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The sketch should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the sketch fails."],
     "then": [
-     {"put": {"profile": "=sk.Label", "path": "=path.Label", "edges": "=names"}, "when": "=made or a.edges is not None or not path.isDerivedFrom('Sketcher::SketchObject')"},
-     {"put": {"profileIs": "=held"}, "when": "=held"}
+     {"put": {"sketch": "=sk.Label", "path": "=path.Label", "edges": "=names"}, "when": "=made or a.edges is not None or not path.isDerivedFrom('Sketcher::SketchObject')"},
+     {"put": {"sketchIs": "=held"}, "when": "=held"}
     ]
    }
   },
@@ -20250,14 +20250,14 @@
   },
   "pd_helix": {
    "group": "feature",
-   "description": "Sweep the profile of a closed sketch in a helix about an axis. axis: default the sketch's V_Axis; also H_Axis, x | y | z, a datum line, the id of a line. Give two of pitch (mm for each turn), height (mm), turns. taper: degrees. Or growth: mm for each turn, with height and turns (a spiral). leftHanded, reversed. subtractive: true cuts it (a thread, a groove). Keep the profile off the axis and less than the pitch. Many turns are slow. The answer adds helix.",
+   "description": "Sweep a closed sketch in a helix about an axis. axis: default the sketch's V_Axis; also H_Axis, x | y | z, a datum line, the id of a line. Give two of pitch (mm for each turn), height (mm), turns. taper: degrees. Or growth: mm for each turn, with height and turns (a spiral). leftHanded, reversed. subtractive: true cuts it (a thread, a groove). Keep the sketch off the axis and less than the pitch. Many turns are slow. The answer adds helix.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "body": {
       "type": "string"
      },
-     "profile": {
+     "sketch": {
       "type": "string"
      },
      "axis": {
@@ -20295,7 +20295,7 @@
      }
     },
     "required": [
-     "profile"
+     "sketch"
     ],
     "additionalProperties": false
    },
@@ -20306,7 +20306,7 @@
    "runner": "steps",
    "steps": [
     {"let": {"b": "=body(a.body)"}},
-    {"let": {"sk": "=sketch_of(a.profile, b)", "sub": "=bool(a.subtractive)", "before": "=volume(b)"}},
+    {"let": {"sk": "=sketch_of(a.sketch, b)", "sub": "=bool(a.subtractive)", "before": "=volume(b)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to cut a helix into: pd_pad or pd_primitive first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
     {"let": {"pitch": "=a.pitch", "height": "=a.height", "turns": "=a.turns"}},
     {"let": {"sizes": "=(('pitch', pitch), ('height', height), ('turns', turns))"}},
@@ -20328,7 +20328,7 @@
     {"set": {"f.Reversed": true}, "when": "=a.reversed"},
     {"set": {"b.Tip": "=f"}, "when": "=b.Tip != f"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_helix", "=before", "='cut' if sub else 'add'", "='The profile is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the profile\\'s height makes the turns run into one another.' + (' A cut must pass through the body.' if sub else ' An added helix must touch the body\\'s solid, if it has one, or it is a second solid.')"], "then": [{"put": {"helix": "={k: num_json(getprop(f, p)) for k, p in (('pitch', 'Pitch'), ('height', 'Height'), ('turns', 'Turns'))}"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_helix", "=before", "='cut' if sub else 'add'", "='The sketch is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the sketch\\'s height makes the turns run into one another.' + (' A cut must pass through the body.' if sub else ' An added helix must touch the body\\'s solid, if it has one, or it is a second solid.')"], "then": [{"put": {"helix": "={k: num_json(getprop(f, p)) for k, p in (('pitch', 'Pitch'), ('height', 'Height'), ('turns', 'Turns'))}"}}]}
   },
   "pd_multitransform": {
    "group": "feature",
@@ -20528,7 +20528,7 @@
   },
   "pd_boolean": {
    "group": "feature",
-   "description": "Do a boolean inside a body with other PartDesign bodies. op: fuse (default) | cut | common. with: [body names]. The tool bodies move inside the boolean, stay editable, and the boolean follows them. The tool refuses a fuse or cut that changes nothing.",
+   "description": "Do a boolean inside a body with other PartDesign bodies. op: fuse (default) | cut | common. bodies: [body names]. The tool bodies move inside the boolean, stay editable, and the boolean follows them. The tool refuses a fuse or cut that changes nothing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20543,7 +20543,7 @@
        "common"
       ]
      },
-     "with": {
+     "bodies": {
       "type": "array",
       "items": {
        "type": "string"
@@ -20554,7 +20554,7 @@
      }
     },
     "required": [
-     "with"
+     "bodies"
     ],
     "additionalProperties": false
    },
@@ -20569,14 +20569,14 @@
     {"let": {"before": "=volume(b)", "op": "={'fuse': 'Fuse', 'cut': 'Cut', 'common': 'Common'}.get(a.get('op', 'fuse'))"}},
     {"refuse": "op: fuse, cut or common.", "when": "=op is None"},
     {"let": {"others": "=[]"}},
-    {"each": "r", "in": "=ref_list(a.get('with')) or []", "steps": [{"let": {"o": "=body(r)"}}, {"refuse": {"fmt": "with: other bodies than {b.Label} itself."}, "when": "=o is b"}, {"push": {"others": "=o"}}]},
-    {"refuse": "with: [body names] — the other PartDesign bodies to fuse with, cut away or keep the common part of (a plain Part solid first becomes a body with pd_clone).", "when": "=not others"},
+    {"each": "r", "in": "=ref_list(a.bodies) or []", "steps": [{"let": {"o": "=body(r)"}}, {"refuse": {"fmt": "bodies: other bodies than {b.Label} itself."}, "when": "=o is b"}, {"push": {"others": "=o"}}]},
+    {"refuse": "bodies: [body names] — the other PartDesign bodies to fuse with, cut away or keep the common part of (a plain Part solid first becomes a body with pd_clone).", "when": "=not others"},
     {"let": {"f": "=new(b, 'PartDesign::Boolean', a.name or op)"}},
     {"set": {"f.Type": "=op"}},
     {"do": "=f.addObjects(others)"},
     {"set": {"b.Tip": "=f"}, "when": "=b.Tip != f"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_boolean", "=before", "={'Fuse': 'add', 'Cut': 'cut'}.get(op)", "The bodies must overlap this one as they stand in the document; they move inside the boolean and follow their own edits."], "then": [{"put": {"with": "=[o.Label for o in others]"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_boolean", "=before", "={'Fuse': 'add', 'Cut': 'cut'}.get(op)", "The bodies must overlap this one as they stand in the document; they move inside the boolean and follow their own edits."], "then": [{"put": {"bodies": "=[o.Label for o in others]"}}]}
   },
   "sketch_copy": {
    "group": "sketch",

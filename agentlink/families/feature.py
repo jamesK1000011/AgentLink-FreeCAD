@@ -221,7 +221,7 @@ def whole_body(f, b, prior):
         b.Tip = f
 
 
-# ---- pd_pipe: the path as edges of any object, and a tube profile made for it -------------------
+# ---- pd_pipe: the path as edges of any object, and a tube sketch made for it -------------------
 
 PIPE_MODES = ("Standard", "Fixed", "Frenet", "Auxiliary", "Binormal")
 PIPE_TRANSITIONS = ("Transformed", "Right corner", "Round corner")
@@ -243,7 +243,7 @@ def pipe_path(doc, b, ref, edges, sk=None):
                 raise ToolError("invalid_input", f"path: {o.Label} has no edges: give a sketch, a pd_binder of a skeleton, or a wire.") from None
             raise e
     if sk is not None and o is sk:
-        raise ToolError("invalid_input", "path: another sketch than the profile — the profile is swept along the path's edges.")
+        raise ToolError("invalid_input", "path: not the sketch given in sketch — the sketch is swept along the path's edges.")
     all_edges = list(o.Shape.Edges)
     if not all_edges:
         raise ToolError("invalid_input", f"path: {o.Label} has no edges (construction geometry does not count): sketch_add a line, arc or polyline.")
@@ -325,21 +325,21 @@ def edge_tangent(e, backwards):
 
 
 def tube_spec(spec):
-    """profile { circle: { d, wall } }: (d, wall) as numbers or expression
+    """sketch { circle: { d, wall } }: (d, wall) as numbers or expression
     text; wall None for a solid rod."""
     c = spec.get("circle") if isinstance(spec, dict) else None
     if not isinstance(c, dict) or set(spec) - {"circle"} or set(c) - {"d", "wall"} or "d" not in c:
-        raise ToolError("invalid_input", "profile: a sketch's name, or { circle: { d: 28.6, wall: 0.9 } } (mm or an expression such as \"Geo.tt_od\") — a tube square to the path at its start; leave wall out for a rod.")
+        raise ToolError("invalid_input", "sketch: a sketch's name, or { circle: { d: 28.6, wall: 0.9 } } (mm or an expression such as \"Geo.tt_od\") — a tube square to the path at its start; leave wall out for a rod.")
     d, wall = c["d"], c.get("wall")
     for k, v in (("d", d), ("wall", wall)):
         if v is None:
             continue
         if isinstance(v, bool) or not isinstance(v, (int, float, str)) or (isinstance(v, str) and not v.strip()):
-            raise ToolError("invalid_input", f"profile.circle.{k}: mm, or an expression (\"Geo.tt_od\").")
+            raise ToolError("invalid_input", f"sketch.circle.{k}: mm, or an expression (\"Geo.tt_od\").")
         if isinstance(v, (int, float)) and v <= 0:
-            raise ToolError("invalid_input", f"profile.circle.{k}: more than 0 mm.")
+            raise ToolError("invalid_input", f"sketch.circle.{k}: more than 0 mm.")
     if isinstance(d, (int, float)) and isinstance(wall, (int, float)) and 2 * wall >= d:
-        raise ToolError("invalid_input", f"profile.circle.wall: less than half of d ({d / 2:g} mm) — a wall of {wall:g} mm leaves no bore.")
+        raise ToolError("invalid_input", f"sketch.circle.wall: less than half of d ({d / 2:g} mm) — a wall of {wall:g} mm leaves no bore.")
     return d, wall
 
 
@@ -368,9 +368,9 @@ def path_closed(path, names, tol=1e-4):
     return all(sum(1 for j, q in enumerate(ends) if j != i and (p - q).Length < tol) >= 1 for i, p in enumerate(ends))
 
 
-CLOSED_TUBE = ("profile: a tube (circle with wall) on a closed path ({path}: {edges}) — FreeCAD's Pipe makes a solid ring there and leaves the bore out "
-               "(bicycle runs, a rim on a circle path). Nothing was made. Make the ring in two calls on the same path: pd_pipe {{ profile: {{ circle: {{ d: {d} }} }} }}, "
-               "then pd_pipe {{ profile: {{ circle: {{ d: {bore} }} }}, subtractive: true }}. Or pd_revolve a sketch of the ring's section.")
+CLOSED_TUBE = ("sketch: a tube (circle with wall) on a closed path ({path}: {edges}) — FreeCAD's Pipe makes a solid ring there and leaves the bore out "
+               "(bicycle runs, a rim on a circle path). Nothing was made. Make the ring in two calls on the same path: pd_pipe {{ sketch: {{ circle: {{ d: {d} }} }} }}, "
+               "then pd_pipe {{ sketch: {{ circle: {{ d: {bore} }} }}, subtractive: true }}. Or pd_revolve a sketch of the ring's section.")
 
 
 def closed_tube_words(path, names, spec):

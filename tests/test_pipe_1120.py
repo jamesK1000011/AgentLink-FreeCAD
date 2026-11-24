@@ -2,7 +2,7 @@
 # The findings of the skeleton bicycle build of 20 Nov 2026, on the data
 # tests' stand-in FreeCADs in a child process each:
 #   1  pd_pipe sweeps along chosen edges of any object (a SubShapeBinder of a
-#      skeleton), joined end to end; profile { circle: { d, wall } } makes the
+#      skeleton), joined end to end; sketch { circle: { d, wall } } makes the
 #      tube's sketch square to the path at its start (attached NormalToEdge),
 #      d and wall numbers or expressions; mode and transition passed on;
 #   2  shape_query lists the edges and vertices of an object with no solid;
@@ -67,7 +67,7 @@ class PdPipe(unittest.TestCase):
 
     def test_a_tube_along_one_edge_of_a_binder(self):
         got = self.pd('''
-            out = run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge3"], "profile": {"circle": {"d": 28.6, "wall": 0.9}}, "transition": "Round corner"})
+            out = run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge3"], "sketch": {"circle": {"d": 28.6, "wall": 0.9}}, "transition": "Round corner"})
             pipe = [o for o in s.doc.Objects if o.TypeId == "PartDesign::AdditivePipe"][0]
             sk = pipe.Profile
             print(json.dumps({"out": out, "spine": [pipe.Spine[0].Label, pipe.Spine[1]], "transition": pipe.Transition,
@@ -78,10 +78,10 @@ class PdPipe(unittest.TestCase):
         self.assertEqual(got["out"][0], "ok", got["out"])
         ans = got["out"][1]
         self.assertEqual(ans["feature"], "Pipe")
-        self.assertEqual(ans["profile"], "FrameSkel tube")
+        self.assertEqual(ans["sketch"], "FrameSkel tube")
         self.assertEqual(ans["path"], "FrameSkel")
         self.assertEqual(ans["edges"], ["Edge3"])
-        self.assertIn("NormalToEdge", ans["profileIs"])
+        self.assertIn("NormalToEdge", ans["sketchIs"])
         self.assertGreater(ans["volumeChange"], 0)
         self.assertEqual(got["spine"], ["FrameSkel", ["Edge3"]])
         self.assertEqual(got["transition"], "Round corner")
@@ -94,7 +94,7 @@ class PdPipe(unittest.TestCase):
 
     def test_edges_joined_end_to_end_start_at_the_free_end(self):
         got = self.pd('''
-            out = run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge3", "Edge2"], "profile": {"circle": {"d": "Geo.tt_od", "wall": "Geo.tt_wall"}}})
+            out = run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge3", "Edge2"], "sketch": {"circle": {"d": "Geo.tt_od", "wall": "Geo.tt_wall"}}})
             pipe = [o for o in s.doc.Objects if o.TypeId == "PartDesign::AdditivePipe"][0]
             print(json.dumps({"out": out, "spine": pipe.Spine[1], "map": [pipe.Profile.MapMode, pipe.Profile.MapPathParameter,
                               pipe.Profile.AttachmentSupport[0][1]], "exprs": exprs}))
@@ -107,7 +107,7 @@ class PdPipe(unittest.TestCase):
 
     def test_a_chain_that_starts_backwards(self):
         got = self.pd('''
-            out = run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge2", "Edge1"], "profile": {"circle": {"d": 20}}})
+            out = run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge2", "Edge1"], "sketch": {"circle": {"d": 20}}})
             pipe = [o for o in s.doc.Objects if o.TypeId == "PartDesign::AdditivePipe"][0]
             print(json.dumps([out, pipe.Spine[1], pipe.Profile.MapPathParameter, len(pipe.Profile.Geometry)]))
         ''')
@@ -121,22 +121,22 @@ class PdPipe(unittest.TestCase):
     def test_a_sketch_profile_on_a_sketch_path_answers_as_before(self):
         got = self.pd('''
             fc.sketch(s, b, "Path", edges=3)
-            print(json.dumps(run("pd_pipe", {"path": "Path", "profile": "Ring"})))
+            print(json.dumps(run("pd_pipe", {"path": "Path", "sketch": "Ring"})))
         ''')
         self.assertEqual(got[0], "ok", got)
-        self.assertNotIn("profile", got[1])
-        self.assertNotIn("profileIs", got[1])
+        self.assertNotIn("sketch", got[1])
+        self.assertNotIn("sketchIs", got[1])
 
     def test_refusals(self):
         got = self.pd('''
             print(json.dumps([run("pd_pipe", a) for a in (
-                {"path": "FrameSkel", "edges": ["Edge1", "Edge4"], "profile": "Ring"},
-                {"path": "FrameSkel", "edges": ["Edge9"], "profile": "Ring"},
-                {"path": "FrameSkel", "edges": ["Edge1", "Edge1"], "profile": "Ring"},
-                {"path": "FrameSkel", "profile": {"circle": {"d": 10, "wall": 5}}},
-                {"path": "FrameSkel", "profile": {"circle": {"wall": 1}}},
-                {"path": "FrameSkel", "profile": "Ring", "mode": "Sideways"},
-                {"path": "Nope", "profile": "Ring"},
+                {"path": "FrameSkel", "edges": ["Edge1", "Edge4"], "sketch": "Ring"},
+                {"path": "FrameSkel", "edges": ["Edge9"], "sketch": "Ring"},
+                {"path": "FrameSkel", "edges": ["Edge1", "Edge1"], "sketch": "Ring"},
+                {"path": "FrameSkel", "sketch": {"circle": {"d": 10, "wall": 5}}},
+                {"path": "FrameSkel", "sketch": {"circle": {"wall": 1}}},
+                {"path": "FrameSkel", "sketch": "Ring", "mode": "Sideways"},
+                {"path": "Nope", "sketch": "Ring"},
             )]))
         ''')
         self.assertEqual([g[0] for g in got], ["refused"] * 7, got)

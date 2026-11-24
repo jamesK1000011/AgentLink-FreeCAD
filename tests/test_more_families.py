@@ -384,7 +384,7 @@ class MoreFamilies(Base):
         # a quarter of a spinning PLA disk on symmetry slides: centre (3+nu)/8 rho w2 R2
         self.ok("part_primitive", {"kind": "cylinder", "radius": 100, "height": 5, "name": "Sp disk"})
         self.box("Sp q", [120, 120, 10], [0, 0, -2])
-        self.ok("part_boolean", {"op": "common", "base": "Sp disk", "tools": ["Sp q"]})
+        self.ok("part_boolean", {"op": "common", "body": "Sp disk", "bodies": ["Sp q"]})
         self.ok("fea_setup", {"body": "Sp disk", "material": "PLA", "mesh": 5})
         for n in ([-1, 0, 0], [0, -1, 0], [0, 0, -1]):
             self.ok("fea_hold", {"faces": {"normal": n}, "kind": "slide"})
@@ -398,7 +398,7 @@ class MoreFamilies(Base):
         self.have("td_hatch")
         self.box("Td plate", [60, 40, 10], [0, 1000, 0])
         self.ok("part_primitive", {"kind": "cylinder", "radius": 6, "height": 10, "at": [30, 1020, 0], "name": "Td hole"})
-        self.ok("part_boolean", {"op": "cut", "base": "Td plate", "tools": ["Td hole"], "name": "Td holed"})
+        self.ok("part_boolean", {"op": "cut", "body": "Td plate", "bodies": ["Td hole"], "name": "Td holed"})
         self.ok("td_page", {"action": "new", "paper": "A4", "name": "Td sheet"})
         self.ok("td_view", {"page": "Td sheet", "bodies": ["Td holed"], "direction": "top", "name": "Td top"})
         m = self.ok("td_centermarks", {"views": ["Td top"]})
@@ -425,7 +425,7 @@ class MoreFamilies(Base):
     def test_part_more(self):
         self.box("Pm B", [40, 30, 20], [500, 0, 0])
         self.ok("part_primitive", {"kind": "cylinder", "radius": 5, "height": 40, "at": [520, 15, -10], "name": "Pm C"})
-        self.ok("part_boolean", {"op": "cut", "base": "Pm B", "tools": ["Pm C"]})
+        self.ok("part_boolean", {"op": "cut", "body": "Pm B", "bodies": ["Pm C"]})
         sec = self.ok("part_section", {"body": "Pm B", "plane": {"normal": [0, 0, 1], "at": [0, 0, 10]}, "face": True})
         self.assertAlmostEqual(sec["area_mm2"], 1200 - 78.54, delta=0.1)
         self.ok("part_wire", {"kind": "polygon", "sides": 6, "radius": 10, "name": "Pm hex"})

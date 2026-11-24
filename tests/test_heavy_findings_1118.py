@@ -220,11 +220,11 @@ class BooleanPairs(Home):
         cutter = Obj("Cutter", Shape(self.grid(586, x0=100.0)))
         box = Obj("Box", Shape(self.grid(6, x0=5000.0)))
         s = Sess(Doc([base, cutter, box]))
-        cut = self.heavy.boolean_parts(s, {"op": "cut", "base": "Base", "tools": ["Cutter"]})
+        cut = self.heavy.boolean_parts(s, {"op": "cut", "body": "Base", "bodies": ["Cutter"]})
         self.assertLess(cut["pairs"], 36000 * 586 / 100)
         self.assertEqual((cut["base"], cut["tools"]), (36000, 586))
         est_cut = self.keep.sized_estimate({}, "part_boolean", cut["size"])
-        common = self.heavy.boolean_parts(s, {"op": "common", "base": "Base", "tools": ["Box"]})
+        common = self.heavy.boolean_parts(s, {"op": "common", "body": "Base", "bodies": ["Box"]})
         est_common = self.keep.sized_estimate({}, "part_boolean", common["size"])
         # live: the common took 29 s; the cut was put at 40 min before
         self.assertTrue(10 < est_common < 90, est_common)
@@ -235,7 +235,7 @@ class BooleanPairs(Home):
         base = Obj("Base", Shape(self.grid(60000)))
         tool = Obj("Tool", Shape(self.grid(60000)))
         g = self.heavy.Gate(Sess(Doc([base, tool])))
-        g.before(Tool("part_boolean"), {"op": "fuse", "base": "Base", "tools": ["Tool"]})
+        g.before(Tool("part_boolean"), {"op": "fuse", "body": "Base", "bodies": ["Tool"]})
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
 
 

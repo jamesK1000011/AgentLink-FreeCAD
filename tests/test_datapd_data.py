@@ -116,7 +116,7 @@ class DatapdData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
-            c["old"] = _meant.renamed_words(c["tool"], c["old"])  # inputs renamed since, in the refusals: tests/_meant.py RENAMED
+            c["old"] = _meant.case_as_meant(c["tool"], c["case"], _meant.renamed_words(c["tool"], c["old"]))  # renamed inputs (RENAMED) and meant changes (CASES): tests/_meant.py
             c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
@@ -292,7 +292,7 @@ def _main(mode):
             fc.trace.append("---- the call")
             t = _tool(mods[where[tool]], s, tool, which == "old")
             try:
-                given = _meant.args_for_old(tool, args) if which == "old" else args  # inputs renamed since: tests/_meant.py RENAMED
+                given = _meant.args_for_old(tool, args) if which == "old" else _meant.args_as_meant(tool, args)  # renamed inputs: tests/_meant.py RENAMED, RENAMES
                 res = ["ok", t.fn(json.loads(json.dumps(given)))]
             except ToolError as e:
                 res = ["refused", e.code, e.message]

@@ -254,18 +254,18 @@ class ClosedTube(unittest.TestCase):
             ring.__dict__["Shape"] = fc.Shape("compound", [], edges=sq + [fc.edge(V(0, 0, 0), V(0, 0, 0))])
             b._place(ring)
             n0 = len(s.doc.Objects)
-            out = {"square": run("pd_pipe", {"path": "RimPath", "edges": ["Edge1", "Edge2", "Edge3", "Edge4"], "profile": {"circle": {"d": 30, "wall": 2}}}),
-                   "circle": run("pd_pipe", {"path": "RimPath", "edges": ["Edge5"], "profile": {"circle": {"d": "Geo.od", "wall": 2}}}),
+            out = {"square": run("pd_pipe", {"path": "RimPath", "edges": ["Edge1", "Edge2", "Edge3", "Edge4"], "sketch": {"circle": {"d": 30, "wall": 2}}}),
+                   "circle": run("pd_pipe", {"path": "RimPath", "edges": ["Edge5"], "sketch": {"circle": {"d": "Geo.od", "wall": 2}}}),
                    "made": len(s.doc.Objects) - n0,
-                   "rod": run("pd_pipe", {"path": "RimPath", "edges": ["Edge1", "Edge2", "Edge3", "Edge4"], "profile": {"circle": {"d": 30}}})[0],
-                   "open": run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge1", "Edge2"], "profile": {"circle": {"d": 30, "wall": 2}}})[0]}
+                   "rod": run("pd_pipe", {"path": "RimPath", "edges": ["Edge1", "Edge2", "Edge3", "Edge4"], "sketch": {"circle": {"d": 30}}})[0],
+                   "open": run("pd_pipe", {"path": "FrameSkel", "edges": ["Edge1", "Edge2"], "sketch": {"circle": {"d": 30, "wall": 2}}})[0]}
             print(json.dumps(out))
         ''')
         sq = got["square"]
         self.assertEqual(sq[:2], ["refused", "invalid_input"])
         self.assertIn("a tube (circle with wall) on a closed path (RimPath: Edge1, Edge2, Edge3, Edge4)", sq[2])
-        self.assertIn("pd_pipe { profile: { circle: { d: 30 } } }", sq[2])
-        self.assertIn("pd_pipe { profile: { circle: { d: 26 } }, subtractive: true }", sq[2])
+        self.assertIn("pd_pipe { sketch: { circle: { d: 30 } } }", sq[2])
+        self.assertIn("pd_pipe { sketch: { circle: { d: 26 } }, subtractive: true }", sq[2])
         self.assertIn("Nothing was made", sq[2])
         self.assertIn('d: "(Geo.od) - 2 * (2 mm)"', got["circle"][2])
         self.assertEqual(got["made"], 0)

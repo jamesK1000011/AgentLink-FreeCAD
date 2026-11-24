@@ -370,41 +370,23 @@ Release statistics for V1, made by `scripts/stats.py` from the data (all of them
 
 ```
 Per-tool status, all of V1 (measured: counted from the hardening records)
-proven on a test model    ████████████████████ 613/622
-  headless                ███████████████████░ 605/622
-  live in the window      ████████████████████ 608/622
-docs checked              ██████████████████░░ 554/622
-health check seen         ███████████████░░░░░ 480/622
-description rewritten     ██████████████████░░ 566/622
+proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/0
+  headless                ░░░░░░░░░░░░░░░░░░░░   0/0
+  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/0
+docs checked              ░░░░░░░░░░░░░░░░░░░░   0/0
+health check seen         ░░░░░░░░░░░░░░░░░░░░   0/0
+description rewritten     ░░░░░░░░░░░░░░░░░░░░   0/0
 
 By section (tools proven / total)
-Agent Link (core)         ████████████████████ 403/411
-Workshop                  ████████████████████  59/59
-ScanRuler for FreeCAD     ████████████████████ 132/133
-Texturizer                ████████████████████  11/11
-Tutor                     ████████████████████   3/3
-Agent Link for OrcaSlicer ████████████████████   5/5
-
-Developer tools (not counted): not in the totals above
-proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/8
-  headless                ░░░░░░░░░░░░░░░░░░░░   0/8
-  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/8
 ```
 
 | Section | Tools | Proven | Headless | Live |
 |---|---:|---:|---:|---:|
-| Agent Link (core) | 411 | 403 | 396 | 403 |
-| Workshop | 59 | 59 | 59 | 54 |
-| ScanRuler for FreeCAD | 133 | 132 | 132 | 132 |
-| Texturizer | 11 | 11 | 11 | 11 |
-| Tutor | 3 | 3 | 2 | 3 |
-| Agent Link for OrcaSlicer | 5 | 5 | 5 | 5 |
-| **All of V1** | **622** | **613** | **605** | **608** |
-| *Developer tools (not counted)* | *8* | *0* | *0* | *0* |
+| **All of V1** | **0** | **0** | **0** | **0** |
 
-Known gaps: 9 tools are not proven, 8 more are proven live only and 5 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 10 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop. In V1 but not counted: developer tools (8 tools: Porting), not FreeCAD functions.
+Known gaps: 0 tools are not proven, 0 more are proven live only and 0 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 0 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop.
 
-Tools: 420 in Agent Link (core), 632 with all add-ons installed (`library_pack` in this count is callable but not listed).
+Tools: 420 in Agent Link (core), 632 with all add-ons installed.
 
 Each token number is the estimated size of the `tools/list` answer: the tool names, descriptions and input schemas that the client loads into the agent's context at the start of a session. The server instructions, the guides and the tool answers are not in it. Estimate: 3.5 characters for each token.
 

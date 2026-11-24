@@ -119,7 +119,7 @@ class Sk2Data(unittest.TestCase):
         hid = 0
         for c in got:
             # Meant changes since BASE (tests/_meant.py): answer fields added (RESULTS), trace lines (TRACES).
-            c = {**c, "new": _meant.result_as_meant(c["tool"], c["new"]), "old": {**c["old"], "trace": _meant.trace_as_meant(c["old"].get("trace") or [])}}
+            c = {**c, "new": _meant.result_as_meant(c["tool"], c["new"]), "old": {**_meant.case_as_meant(c["tool"], c["case"], c["old"]), "trace": _meant.trace_as_meant(c["old"].get("trace") or [])}}
             # Meant difference (famfix), pd_multitransform: as FreeCAD's own command leaves them
             # (src/Mod/PartDesign/Gui/TaskMultiTransformParameters.cpp finishAdd: FCMD_OBJ_HIDE of
             # each step; the MultiTransform shown), each step is hidden as it is made and the
@@ -307,7 +307,7 @@ def _main(mode):
             fc.trace.append("---- the call")
             t = _tool(mods[where[tool]], s, tool, which == "old")
             try:
-                res = ["ok", t.fn(json.loads(json.dumps(args)))]
+                res = ["ok", t.fn(json.loads(json.dumps(args if which == "old" else _meant.args_as_meant(tool, args))))]  # renamed inputs: tests/_meant.py RENAMES
             except ToolError as e:
                 res = ["refused", e.code, e.message]
             except Exception as e:  # noqa: BLE001 - a crash is compared as one

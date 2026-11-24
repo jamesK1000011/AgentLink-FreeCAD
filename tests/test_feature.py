@@ -48,7 +48,7 @@ class FeatureTools(Base):
         h = self.ok("pd_hole", {"sketch": "Holes", "thread": "M5", "depth": "through"})
         self.assertLess(h["volumeChange"], -100)
         self.assertIn("M5", h["thread"])
-        p = self.ok("pd_linear_pattern", {"features": ["Pocket"], "direction": "y", "occurrences": 2, "spacing": 6})
+        p = self.ok("pd_linear_pattern", {"features": ["Pocket"], "direction": "y", "count": 2, "spacing": 6})
         self.assertLess(p["volumeChange"], -50)
 
     def test_6_edit_suppress_remove(self):
@@ -92,7 +92,7 @@ class FeatureTools(Base):
         self.assertEqual(d["origin"], [0, 0, 20])
         self.ok("sketch_new", {"body": "Frustum", "plane": "Up", "name": "TopSec"})
         self.ok("sketch_add", {"sketch": "TopSec", "items": [{"kind": "rectangle", "center": [0, 0], "size": [10, 10]}]})
-        lo = self.ok("pd_loft", {"body": "Frustum", "profile": "Bottom", "sections": ["TopSec"], "ruled": True})
+        lo = self.ok("pd_loft", {"body": "Frustum", "sketch": "Bottom", "sections": ["TopSec"], "ruled": True})
         self.assertAlmostEqual(lo["volume"], 20 / 3 * (400 + 100 + 200), delta=1)
 
     # ---- the hardening pass (16 Nov 2026): what FreeCAD 1.1's own source says ----

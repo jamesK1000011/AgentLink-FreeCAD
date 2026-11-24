@@ -20,16 +20,16 @@ class FeatureMore(Base):
         d = self.ok("pd_datum", {"body": "Block", "kind": "line", "on": {"near": [13, 10, 10]}})
         self.assertEqual(d["at"][:2], [10.0, 10.0])
         self.ok("pd_primitive", {"body": "Block", "kind": "prism", "size": {"sides": 6, "circumradius": 2, "height": 4}, "at": [5, 25, 10], "name": "Knob"})
-        p = self.ok("pd_polar_pattern", {"body": "Block", "features": ["Knob"], "axis": d["datum"], "occurrences": 3, "angle": 360})
+        p = self.ok("pd_polar_pattern", {"body": "Block", "features": ["Knob"], "axis": d["datum"], "count": 3, "angle": 360})
         self.assertGreater(p["volumeChange"], 0)
 
     def test_3_helix(self):
         self.ok("pd_body_new", {"name": "Spring"})
         self.ok("sketch_new", {"body": "Spring", "plane": "XZ", "name": "Wire"})
         self.ok("sketch_add", {"sketch": "Wire", "items": [{"kind": "circle", "center": [10, 0], "radius": 1}]})
-        h = self.ok("pd_helix", {"body": "Spring", "profile": "Wire", "pitch": 4, "height": 20})
+        h = self.ok("pd_helix", {"body": "Spring", "sketch": "Wire", "pitch": 4, "height": 20})
         self.assertEqual(h["helix"]["turns"], 5.0)
-        self.refused("pd_helix", {"body": "Spring", "profile": "Wire", "pitch": 4})
+        self.refused("pd_helix", {"body": "Spring", "sketch": "Wire", "pitch": 4})
 
     def test_4_binder_boolean(self):
         self.ok("pd_body_new", {"name": "Cap"})
@@ -38,7 +38,7 @@ class FeatureMore(Base):
         self.ok("pd_primitive", {"body": "Cutter", "kind": "cylinder", "size": {"radius": 6, "height": 20}, "at": [20, 15, 5]})
         self.ok("pd_body_new", {"name": "Sheet"})
         self.ok("pd_primitive", {"body": "Sheet", "kind": "box", "size": {"length": 50, "width": 50, "height": 3}, "at": [0, 0, 8]})
-        c = self.ok("pd_boolean", {"body": "Sheet", "op": "cut", "with": ["Cutter"]})
+        c = self.ok("pd_boolean", {"body": "Sheet", "op": "cut", "bodies": ["Cutter"]})
         self.assertAlmostEqual(c["volumeChange"], -math.pi * 36 * 3, delta=0.5)
 
     # ---- the hardening pass (16 Nov 2026) ----

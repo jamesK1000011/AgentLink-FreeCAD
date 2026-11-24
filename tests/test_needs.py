@@ -775,7 +775,10 @@ def _agree(suite):
 
     runners._step = watched
     out = {"wrong": [], "changedByReading": [], "notThenAnswered": [], "withArguments": {}, "withoutArguments": {}, "cases": 0}
+    import _meant
+
     for tool, case, prepare, args in cm.cases(fc, tempfile.mkdtemp()):
+        args = _meant.args_as_meant(tool, args)  # the cases' arguments with renamed inputs given by their new names (tests/_meant.py RENAMES)
         fc.state["flags"] = {}
         s = fc.Session(tempfile.mkdtemp())
         prepare(s)

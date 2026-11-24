@@ -396,7 +396,7 @@ Pin one FreeCAD version per project: 1.1 converts old Body origins when it opens
 | Read the skeleton | `shape_query { body: <binder or sketch>, kind: edge | vertex }` | select and read the status bar |
 | Bring the skeleton into a part | `pd_binder { body, from }` (a SubShapeBinder) | PartDesign > Sub-object shape binder |
 | Datums / LCS | `pd_datum { kind: lcs | line | point, refs: [vertex, edge], mode, offset }`; `part_datum` (planes, csys in a body or part); `pd_datum_plane` | Part > Create coordinate system (1.1 core datum); attachment panel |
-| Tubes on the skeleton | `pd_pipe { path: binder, edges: [..], profile: { circle: { d, wall } } }` (d and wall may be expressions) | PartDesign > Additive pipe |
+| Tubes on the skeleton | `pd_pipe { path: binder, edges: [..], sketch: { circle: { d, wall } } }` (d and wall may be expressions) | PartDesign > Additive pipe |
 | Features | `pd_pad`, `pd_pocket`, `pd_revolution`, `pd_polar_pattern`, `pd_hole`, `pd_fillet`, `feature_edit { body, feature, set }` | PartDesign toolbar |
 | Gears, sprockets | `pd_gear { kind: gear | sprocket, teeth, pitch }` (on the body's own XY plane) | PartDesign > Involute gear / Sprocket |
 | Material | `material_set { bodies, id }` or `custom { name, density }` | Material editor |

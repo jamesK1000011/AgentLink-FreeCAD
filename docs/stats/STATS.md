@@ -10,177 +10,7 @@ The source is the hardening records (status and inventory), which are not public
 
 | Section | Tools | Proven | Headless | Live | Docs checked | Health check seen | Description rewritten |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Agent Link (core) | 411 | 403 | 396 | 403 | 367 | 288 | 379 |
-| Workshop | 59 | 59 | 59 | 54 | 43 | 43 | 43 |
-| ScanRuler for FreeCAD | 133 | 132 | 132 | 132 | 132 | 132 | 132 |
-| Texturizer | 11 | 11 | 11 | 11 | 11 | 11 | 11 |
-| Tutor | 3 | 3 | 2 | 3 | 1 | 1 | 1 |
-| Agent Link for OrcaSlicer | 5 | 5 | 5 | 5 | 0 | 5 | 0 |
-| **All of V1** | **622** | **613** | **605** | **608** | **554** | **480** | **566** |
-| *Developer tools (not counted)* | *8* | *0* | *0* | *0* | *0* | *3* | *3* |
-
-### Agent Link (core)
-
-What you get with the hub alone: the FreeCAD workbenches that Agent Link covers with no add-on installed. 411 tools. The developer tools (Porting, 8 tools) are not in this count.
-
-```
-proven on a test model    ████████████████████ 403/411
-  headless                ███████████████████░ 396/411
-  live in the window      ████████████████████ 403/411
-docs checked              ██████████████████░░ 367/411
-health check seen         ██████████████░░░░░░ 288/411
-description rewritten     ██████████████████░░ 379/411
-
-Agent Link (core) by workbench (tools proven / total)
-Sketcher                  ████████████████████  20/20
-Part Design               ████████████████████  27/27
-Part                      ████████████████████  27/27
-Assembly                  ███████████████████░  17/18
-TechDraw                  ████████████████████  32/32
-Spreadsheet/VarSet        ████████████████████  18/18
-FEM                       ████████████████████  19/19
-Draft                     ████████████████████  19/19
-BIM                       ████████████████████  53/53
-Surface                   ████████████████████  11/11
-Mesh                      ████████████████████  21/21
-CAM                       ████████████████████  15/15
-Points                    ████████████████████   9/9
-Core                      ███████████████████░  62/67
-Window (GUI)              ███████████████████░  31/32
-Material                  ████████████████████   4/4
-Inspection                ████████████████████   6/6
-OpenSCAD                  █████████████████░░░   5/6
-Robot                     ████████████████████   7/7
-```
-
-### Workshop
-
-Make, Parts, Documents, Electronics and the safety tools. Its groups `core` and `strength` add tools to the hub's groups of the same name. 59 tools.
-
-```
-proven on a test model    ████████████████████  59/59
-  headless                ████████████████████  59/59
-  live in the window      ██████████████████░░  54/59
-docs checked              ███████████████░░░░░  43/59
-health check seen         ███████████████░░░░░  43/59
-description rewritten     ███████████████░░░░░  43/59
-
-Workshop by group (tools proven / total)
-drawing                   ████████████████████   4/4
-fits                      ████████████████████   2/2
-make                      ████████████████████   5/5
-parts                     ████████████████████   2/2
-cut                       ████████████████████   2/2
-mill                      ████████████████████   2/2
-embed                     ████████████████████   4/4
-fasteners                 ████████████████████   5/5
-mass                      ████████████████████   4/4
-thread                    ████████████████████   3/3
-electronics               ████████████████████   4/4
-slice                     ████████████████████   4/4
-printer                   ████████████████████   6/6
-safety                    ████████████████████   9/9
-core                      ████████████████████   2/2
-strength                  ████████████████████   1/1
-```
-
-### ScanRuler for FreeCAD
-
-Scans, meshes, reverse engineering and the panels. The features come from ScanRuler by Stefan Hermann (CNC Kitchen), under AGPL. 133 tools.
-
-```
-proven on a test model    ████████████████████ 132/133
-  headless                ████████████████████ 132/133
-  live in the window      ████████████████████ 132/133
-docs checked              ████████████████████ 132/133
-health check seen         ████████████████████ 132/133
-description rewritten     ████████████████████ 132/133
-
-ScanRuler for FreeCAD by group (tools proven / total)
-align                     ████████████████████   5/5
-catalog                   ████████████████████   3/3
-deviation                 ████████████████████   8/8
-dimensions                ████████████████████   6/6
-elements                  ████████████████████   8/8
-fit-scan                  ████████████████████   4/4
-flat                      ████████████████████  16/16
-manual                    ████████████████████   3/3
-meshtools                 ████████████████████  24/24
-pack                      ████████████████████   3/3
-reverse                   ███████████████████░  21/22
-scan                      ████████████████████  12/12
-scan-cad                  ████████████████████   1/1
-scan-noise                ████████████████████   2/2
-scan-thread               ████████████████████   1/1
-sections                  ████████████████████   6/6
-snapshot                  ████████████████████   3/3
-thickness                 ████████████████████   2/2
-wear                      ████████████████████   4/4
-```
-
-### Texturizer
-
-Surface textures on a model. 11 tools.
-
-```
-proven on a test model    ████████████████████  11/11
-  headless                ████████████████████  11/11
-  live in the window      ████████████████████  11/11
-docs checked              ████████████████████  11/11
-health check seen         ████████████████████  11/11
-description rewritten     ████████████████████  11/11
-
-Texturizer by group (tools proven / total)
-texture                   ████████████████████  11/11
-```
-
-### Tutor
-
-Lessons that point at the window. 3 tools.
-
-```
-proven on a test model    ████████████████████   3/3
-  headless                █████████████░░░░░░░   2/3
-  live in the window      ████████████████████   3/3
-docs checked              ███████░░░░░░░░░░░░░   1/3
-health check seen         ███████░░░░░░░░░░░░░   1/3
-description rewritten     ███████░░░░░░░░░░░░░   1/3
-
-Tutor by group (tools proven / total)
-tutor                     ████████████████████   3/3
-```
-
-### Agent Link for OrcaSlicer
-
-OrcaSlicer through Agent Link. Its own MCP server also has tools that Agent Link does not list (section 2). 5 tools.
-
-```
-proven on a test model    ████████████████████   5/5
-  headless                ████████████████████   5/5
-  live in the window      ████████████████████   5/5
-docs checked              ░░░░░░░░░░░░░░░░░░░░   0/5
-health check seen         ████████████████████   5/5
-description rewritten     ░░░░░░░░░░░░░░░░░░░░   0/5
-
-Agent Link for OrcaSlicer by group (tools proven / total)
-orca                      ████████████████████   5/5
-```
-
-### Developer tools (not counted)
-
-These tools turn a person's own FreeCAD macro or add-on into an Agent Link add-on (port_scaffold, cookbooks). They are a developer tool, not a FreeCAD function that Agent Link covers. The owner's decision, 19 Nov 2026. 8 tools. They are not in the totals of V1.
-
-```
-proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/8
-  headless                ░░░░░░░░░░░░░░░░░░░░   0/8
-  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/8
-docs checked              ░░░░░░░░░░░░░░░░░░░░   0/8
-health check seen         ████████░░░░░░░░░░░░   3/8
-description rewritten     ████████░░░░░░░░░░░░   3/8
-
-Developer tools (not counted) by workbench (tools proven / total)
-Porting                   ░░░░░░░░░░░░░░░░░░░░   0/8
-```
+| **All of V1** | **0** | **0** | **0** | **0** | **0** | **0** | **0** |
 
 ### All of V1 together
 
@@ -188,25 +18,14 @@ The same lines as the start of `python3 scripts/hardening_status.py bars`.
 
 ```
 Per-tool status, all of V1 (measured: counted from the hardening records)
-proven on a test model    ████████████████████ 613/622
-  headless                ███████████████████░ 605/622
-  live in the window      ████████████████████ 608/622
-docs checked              ██████████████████░░ 554/622
-health check seen         ███████████████░░░░░ 480/622
-description rewritten     ██████████████████░░ 566/622
+proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/0
+  headless                ░░░░░░░░░░░░░░░░░░░░   0/0
+  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/0
+docs checked              ░░░░░░░░░░░░░░░░░░░░   0/0
+health check seen         ░░░░░░░░░░░░░░░░░░░░   0/0
+description rewritten     ░░░░░░░░░░░░░░░░░░░░   0/0
 
 By section (tools proven / total)
-Agent Link (core)         ████████████████████ 403/411
-Workshop                  ████████████████████  59/59
-ScanRuler for FreeCAD     ████████████████████ 132/133
-Texturizer                ████████████████████  11/11
-Tutor                     ████████████████████   3/3
-Agent Link for OrcaSlicer ████████████████████   5/5
-
-Developer tools (not counted): not in the totals above
-proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/8
-  headless                ░░░░░░░░░░░░░░░░░░░░   0/8
-  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/8
 ```
 
 ## 2. Tools
@@ -262,7 +81,6 @@ The source is `docs/stats/addons.json`: each add-on's own tool data (its `data/t
 | Workshop-FreeCAD | `5fc0102` | 60 | 60 | 17 | – |
 
 With all these add-ons installed, Agent Link has 632 tools: 420 of the hub and 212 of the add-ons.
-`library_pack` is in this count. Workshop's library_pack is an alias of ScanRuler-FreeCAD's pack_write when ScanRuler-FreeCAD is installed (the V1 bundle): callable by name, never listed (docs/hardening/addons4-findings.md, item 6).
 
 ## 3. Token cost of the tool list
 
@@ -275,7 +93,7 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 | classic | ste | 24 | 22,615 | 6,461 |
 | classic | full | 24 | 31,768 | 9,077 |
 
-So with the default (static, ste), the tool list costs about 1,701 tokens for 6 tools. With every hub group turned on, the list has 420 tools, 357,486 characters and about 102,139 tokens (style full).
+So with the default (static, ste), the tool list costs about 1,701 tokens for 6 tools. With every hub group turned on, the list has 420 tools, 357,456 characters and about 102,130 tokens (style full).
 
 - static: only the base is listed (`session_state`, `batch`, `guide_read`, `tool_find`, `approve_file`, `approve_code`). The agent finds the other tools with `tool_find`.
 - classic: the lean groups are listed (`core`, `view`).
@@ -315,76 +133,10 @@ No benchmark runs in the repo yet.
 
 Each line is one tool: the section, the workbench or group, what is short, and why. The reason comes from the tool's `gap` in the hardening records, which cite the test run that found it. A tool with no recorded reason says "Not tested yet."
 
-### Agent Link (core)
-
-Rows under 100%: Assembly 17/18, Core 62/67, Window (GUI) 31/32, OpenSCAD 5/6.
-
-- `asm_rigid_group` (Assembly): not proven. It needs FreeCAD 1.2. The Mac has FreeCAD 1.1.3. Only its refusal is checked.
-- `app_force_restart` (Core): not headless. It quits FreeCAD. It needs the person's go, so the test models do not have it (unproven-findings.md).
-- `approve_code` (Core): not proven. Not tested yet.
-- `approve_file` (Core): not proven. Not tested yet.
-- `pick` (Core): not proven. Headless and live: not tested yet. tests/test_options.py runs it on stand-ins only.
-- `tool_find` (Core): not headless. Headless: not tested yet.
-- `fast` (Core): not proven. Not tested yet.
-- `get` (Core): not proven. Not tested yet.
-- `app_install` (Window (GUI)): not headless. It installs a FreeCAD release. It needs the person's go, so the test models do not have it (unproven-findings.md). Live: status read only.
-- `app_open` (Window (GUI)): not proven. Not tested yet.
-- `app_restart` (Window (GUI)): not headless. It quits FreeCAD. It needs the person's go, so the test models do not have it (unproven-findings.md).
-- `gui_input` (Window (GUI)): not headless. It sends real input into the window, so it needs the window (unproven-findings.md).
-- `live_run` (Window (GUI)): not headless. It runs scripts of calls in the window, and its reset makes the window test document again (unproven-findings.md).
-- `queue_go` (Window (GUI)): not headless. It is the person's go only, so the test models do not have it (hubrest-findings.md).
-- `scad_code` (OpenSCAD): not proven. It needs the OpenSCAD program, which is not on the Mac. Only its refusal is checked.
-
-### Workshop
-
-- `slice_open` (slice): not live. Live: it opens the OrcaSlicer window in front, so it needs the person at the Mac (addons-unproven-findings.md).
-- `printer_pause` (printer): not live. Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).
-- `printer_send` (printer): not live. Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).
-- `printer_status` (printer): not live. Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).
-- `printer_stop` (printer): not live. Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).
-
-### ScanRuler for FreeCAD
-
-Rows under 100%: reverse 21/22.
-
-- `reverse_build_stop` (reverse): not proven. Only its refusal is seen (run3-findings.md). A stop of a running build is not tested yet.
-
-### Texturizer
-
-Every tool is proven headless and live.
-
-### Tutor
-
-- `tutor_watch` (tutor): not headless. Headless: watch mode on is the person's to turn on. Only the answer with watch mode off is proven, live (addons-unproven-findings.md).
-
-### Agent Link for OrcaSlicer
-
-Every tool is proven headless and live.
-
 ### Review steps not done yet
 
-These rows are under 100% too: docs checked 554/622, health check seen 480/622, description rewritten 566/622. They are review steps of the hardening pass, not proofs. The per-tool list is kept with the hardening records, which are not public.
+These rows are under 100% too: docs checked 0/0, health check seen 0/0, description rewritten 0/0. They are review steps of the hardening pass, not proofs. The per-tool list is kept with the hardening records, which are not public.
 
 ### Not in V1 (not counted)
 
 These are not in the numbers above.
-
-- `code_answer`, `code_check`, `code_facts`, `code_fem`, `code_missing`, `code_packet`, `code_packs`, `code_project`, `code_span` (Home-FreeCAD, 9 tools): Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json).
-- `collab` (agentlink-collab, 1 tool): agentlink-collab is a private add-on. The hub and the V1 bundle have no collab tool.
-- Cookbook format 2, its auto-port draft and cookbook_probe: Off main for V1. They live on the branch cookbook-v2 until V2 (CHANGELOG, docs/design/porting-2026-11-18.md).
-- PrintLoop for the OrcaSlicer server: Not fetched in V1: packaging/addons.json serverAddons is empty (CHANGELOG, V1 scope).
-- `library_pack` is counted in Workshop's declared tools (section 2) but not here. Workshop's library_pack is an alias of ScanRuler-FreeCAD's pack_write when ScanRuler-FreeCAD is installed (the V1 bundle): callable by name, never listed (docs/hardening/addons4-findings.md, item 6).
-
-### Developer tools (not counted)
-
-These tools turn a person's own FreeCAD macro or add-on into an Agent Link add-on (port_scaffold, cookbooks). They are a developer tool, not a FreeCAD function that Agent Link covers. The owner's decision, 19 Nov 2026. They are in V1, but not in the numbers above. Their own numbers: 0/8 proven, 0/8 headless, 0/8 live.
-
-- `cookbook_approve` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
-- `cookbook_export` (Porting): not proven. Not tested yet.
-- `cookbook_import` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
-- `cookbook_list` (Porting): not proven. Not tested yet.
-- `cookbook_run` (Porting): not proven. Not tested yet.
-- `cookbook_show` (Porting): not proven. Not tested yet.
-- `cookbook_unapprove` (Porting): not proven. Not tested yet.
-- `port_scaffold` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
-- The live proof of `cookbook_approve`, `cookbook_import`, `port_scaffold` was on a cookbook format 2 draft. Format 2 is V2, so that proof does not count. These tools are V1 (cookbook format 1).
