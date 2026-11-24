@@ -87,7 +87,7 @@ class ToolError(Exception):
 # 22 Nov): fixable (the call cannot succeed as written; the message says
 # what to change), retry (a transient cause: the same call may succeed),
 # stop (it cannot succeed: report it). The kind's fixed sentence ends
-# the message. The code and the outcome stay as they are.
+# the message. The code and the status stay as they are.
 
 KIND_WORDS = {
     "fixable": "This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.",
@@ -382,7 +382,7 @@ GOES_WITH = {
 # no such input, they are left out and the answer's readAs says so. A tool
 # whose schema has the name as a real input keeps it.
 ANSWER_FIELDS = ("ms", "msBy", "around", "saidBefore", "record", "appliesNow", "health", "readAs", "step",
-                 "options", "notice", "rider", "truncated", "outcome", "isError", "said", "flattened")
+                 "options", "notice", "rider", "truncated", "status", "result", "isError", "said", "flattened")
 
 # Optional text inputs that an empty string ("") means nothing for: read as
 # left out, so the call gets the answer it gives without them (live findings,
@@ -919,7 +919,7 @@ def retry_once_ok(changes, err):
         return False
     if not changes:
         return True
-    return err.get("outcome") == "not_started"
+    return err.get("status") == "not_started"
 
 
 def failed_words(name, e):
@@ -1570,7 +1570,7 @@ class Server:
             # What the refused call left in the document: not_started (no
             # change was made: safe to call again), rolled_back (taken back
             # whole), cleanup_incomplete (left: the objects that stay).
-            err["outcome"] = outcome
+            err["status"] = outcome
         if left:
             err["left"] = list(left)
         if trace:

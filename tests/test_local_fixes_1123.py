@@ -284,7 +284,10 @@ class BatchKeepsWhatRan(unittest.TestCase):
         self.assertEqual({k: b["refused"][k] for k in ("call", "tool", "code", "kind")}, {"call": 3, "tool": "probe_make", "code": "invalid_input", "kind": "fixable"})
         self.assertIn("fail: told to refuse.", b["refused"]["error"])
         self.assertEqual((b["notRun"], b["next"]), ([4, 5], 3))
-        self.assertIn("ran and stay, each its own undo step", b["note"])
+        self.assertIn("Calls 0, 1, 2 (probe_make, probe_make, probe_make) ran and stay: do not send them again.", b["note"])
+        self.assertIn("in order: probe_make (fixed), probe_make, probe_make. Leave from out.", b["note"])
+        self.assertEqual((b["result"], b["refused"]["status"]), ("kept", "not_started"))
+        self.assertNotIn("outcome", b)
         self.assertEqual([x for x in got["labels"] if x in "ABCDEF"], ["A", "B", "C"])
         self.assertEqual(got["undo"], 3)  # each call its own undo step
         self.assertNotIn("undone", b)

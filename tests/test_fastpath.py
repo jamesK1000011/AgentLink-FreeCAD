@@ -401,7 +401,7 @@ class FastPath(unittest.TestCase):
     def test_keep_keeps_what_ran(self):
         got = run_case("keep")
         err = got["got"]["body"]["error"]
-        self.assertEqual(err["outcome"], "kept")
+        self.assertEqual(err["status"], "kept")
         self.assertIn("Ran before it: do.0 probe_change, do.1 probe_change.", err["message"])
         self.assertIn("Go on from step do.2", err["message"])
         self.assertEqual(got["undone"], 0)
@@ -412,7 +412,7 @@ class FastPath(unittest.TestCase):
         self.assertTrue(got["got"]["isError"])
         err = got["got"]["body"]["error"]
         self.assertEqual(err["code"], "invalid_state")
-        self.assertEqual(err["outcome"], "rolled_back")
+        self.assertEqual(err["status"], "rolled_back")
         self.assertIn("step do.2 (probe_fail)", err["message"])
         self.assertIn("2 undo steps", err["message"])
         self.assertEqual(got["undone"], 2)
@@ -424,7 +424,7 @@ class FastPath(unittest.TestCase):
         got = run_case("person")
         self.assertTrue(got["got"]["isError"])
         err = got["got"]["body"]["error"]
-        self.assertEqual(err["outcome"], "partial")
+        self.assertEqual(err["status"], "partial")
         self.assertIn("not the agent's (Person edit)", err["message"])
         self.assertIn("P1", got["labels"])
         self.assertNotIn("P2", got["labels"])
@@ -437,7 +437,7 @@ class FastPath(unittest.TestCase):
         self.assertIn("step do.1.steps.0 (sketch_add)", msg)
         self.assertIn("bogus", msg)
         self.assertIn("Nothing was run", msg)
-        self.assertEqual(got["bad"]["body"]["error"]["outcome"], "not_started")
+        self.assertEqual(got["bad"]["body"]["error"]["status"], "not_started")
         self.assertFalse(got["good"]["isError"], got["good"])
         self.assertTrue(got["good"]["body"]["fast"].startswith("check ok: 5 calls"), got["good"])
         self.assertEqual([t for t, _a in got["seen"]], ["fast", "fast"])
@@ -452,7 +452,7 @@ class FastPath(unittest.TestCase):
         self.assertEqual(got["seenFast"], ["fast"])
         # After a change the document is not known before the run: the step runs, is refused, and the block is taken back.
         self.assertTrue(got["late"]["isError"])
-        self.assertEqual(got["late"]["body"]["error"]["outcome"], "rolled_back")
+        self.assertEqual(got["late"]["body"]["error"]["status"], "rolled_back")
         self.assertNotIn("P1", got["labelsAfterLate"])
         # batch { check: true }: refused with the call's index, nothing run; without check it runs as before.
         self.assertTrue(got["batch"]["isError"])

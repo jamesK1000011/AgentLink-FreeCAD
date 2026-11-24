@@ -48,23 +48,23 @@ class Outcome(unittest.TestCase):
     def test_read_refusal_has_no_outcome(self):
         r, b = call(server(), "read_refuse")
         self.assertTrue(r["isError"])
-        self.assertNotIn("outcome", b["error"])
+        self.assertNotIn("status", b["error"])
 
     def test_change_refused_before_it_starts(self):
         r, b = call(server(), "change_refuse")
-        self.assertEqual(b["error"]["outcome"], "not_started")
+        self.assertEqual(b["error"]["status"], "not_started")
         self.assertNotIn("left", b["error"])
 
     def test_cleanup_incomplete_names_what_stays(self):
         r, b = call(server(), "change_left")
-        self.assertEqual(b["error"]["outcome"], "cleanup_incomplete")
+        self.assertEqual(b["error"]["status"], "cleanup_incomplete")
         self.assertEqual(b["error"]["left"], ["Pad"])
 
     def test_invalid_input_is_not_started(self):
         s = Server("t", "0", [Tool("c", "c", {"type": "object", "properties": {"x": {"type": "number"}}, "additionalProperties": False}, lambda a: {}, changes=True)])
         r, b = call(s, "c", {"y": 1})
         self.assertEqual(b["error"]["code"], "invalid_input")
-        self.assertEqual(b["error"]["outcome"], "not_started")
+        self.assertEqual(b["error"]["status"], "not_started")
 
 
 class Exit(unittest.TestCase):
@@ -74,7 +74,7 @@ class Exit(unittest.TestCase):
         self.assertTrue(r["isError"])
         self.assertEqual(b["error"]["code"], "failed")
         self.assertIn("called exit", b["error"]["message"])
-        self.assertEqual(b["error"]["outcome"], "not_started")
+        self.assertEqual(b["error"]["status"], "not_started")
         r, b = call(s, "ok")
         self.assertEqual(b["fine"], True)
 

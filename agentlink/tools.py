@@ -149,12 +149,62 @@ def own_steps(server, s, name, start, doc, u0, limit, mine, ok):
     return inc, start
 
 
+def _kept_or_none(results):
+    """A batch's result when what ran stays: kept when a call went through,
+    ran_none when none did (1f, 24 Nov)."""
+    return "kept" if any(isinstance(r, dict) and r.get("ok") for r in results or ()) else "ran_none"
+
+
+def _tool_names(calls, idx, fixed=None):
+    """The tools of the calls at idx, in order, at most 8, then "… and N more"."""
+    names = [str(calls[j].get("tool") or "?") + (" (fixed)" if j == fixed else "") for j in idx if 0 <= j < len(calls)]
+    return ", ".join(names[:8]) + (f" … and {len(names) - 8} more" if len(names) > 8 else "")
+
+
+def _resend_words(calls, i):
+    """How to go on after a stop before calls[i] (budget, heavy read) of an
+    inline list: one way only, a new batch with the calls not run (1g)."""
+    rest = list(range(i, len(calls)))
+    return f"send a new batch with these calls, in order: {_tool_names(calls, rest)}. Leave from out."
+
+
+_STATUS_WORDS = {"not_started": "it changed nothing", "rolled_back": "its own change was taken back",
+                 "cleanup_incomplete": "parts of its change stay (left names them)"}
+
+
+def _refused_note(ref, rows, calls, first, k, out, mine):
+    """The note of a batch stopped at a refused call: what the refused call
+    left, which calls stay, and the exact calls to send next (1f, 1g, 24
+    Nov). One way to go on for an inline list: a new batch with the fixed
+    call and the calls not run, and no from (Haiku counted from wrong)."""
+    if ref.get("buildFailed"):
+        what = f"Call {first + k} ({ref['tool']}): the build after it left objects failing."
+    else:
+        what = f"Call {first + k} ({ref['tool']}) was refused; {_STATUS_WORDS.get(ref.get('status'), 'it changed nothing')}."
+    done = out.get("done") or []
+    gone = out.get("takenBack") or []
+    rel = lambda xs: [x - first for x in xs]  # noqa: E731
+    parts = [what]
+    if gone:
+        parts.append(f"Calls {', '.join(map(str, gone))} ({_tool_names(calls, rel(gone))}) were taken back (rollback: true).")
+    elif done:
+        parts.append(f"Calls {', '.join(map(str, done))} ({_tool_names(calls, rel(done))}) ran and stay: do not send them again.")
+    resend = rel(gone) + [k] + list(range(k + 1, len(calls)))
+    if mine.get("file"):
+        parts.append(f"Next: fix call {first + k} in the file, then batch {{ file: \"{mine['file']}\", from: {first + k} }}.")
+    else:
+        parts.append(f"Next: send a new batch with these calls, in order: {_tool_names(calls, resend, fixed=k)}. Leave from out.")
+        if first:
+            parts.append("from counts in the list you send. In a new, shorter list, leave from out.")
+    return " ".join(parts)
+
+
 def roll_back(s, start, made, own, names0, results=(), label="batch"):
     """A batch's (or a fast block's) rollback in start: only the agent's own
     steps, up to made, stopping at the first step that is not the agent's
     (the person's, made while it ran: that step and all under it stay,
     design E5 #6); then every object made since names0 that undo did not
-    reach. The answer's fields: undone, outcome, and removed, writtenNote,
+    reach. The answer's fields: undone, result, and removed, writtenNote,
     warning or rollbackNote where they apply."""
     out = {}
     undone, foreign = changes.undo_own(start, made, own)
@@ -173,7 +223,7 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
     if s.doc is start:
         s.snapshot(f"{label} rolled back")
     out["undone"] = undone
-    out["outcome"] = "not_started" if not made else ("rolled_back" if undone >= made else "partial")
+    out["result"] = "ran_none" if not made else ("rolled_back" if undone >= made else "partial")
     if any(isinstance(r.get("written"), dict) for r in results):
         out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
     if s.doc is not start:
@@ -184,13 +234,13 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
                 else f"nothing in {start.Label} was changed")
         out["warning"] = f"The {label} moved to another document ({s.doc.Label if s.doc else 'none'}): {here}; what was done in {s.doc.Label if s.doc else 'it'} stays."
     elif foreign is not None:
-        out["outcome"] = "partial"
+        out["result"] = "partial"
         out["rollbackNote"] = (f"Stopped at a step that is not the agent's ({foreign}). {undone} of {made} agent steps were taken back. "
                                "The person's step stays, and the agent steps under it stay. "
                                "history_restore to the agent checkpoint goes back without your step.")
     elif undone < made:
         out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
-    if out["outcome"] == "rolled_back":
+    if out["result"] == "rolled_back":
         # The calls before the refusal answered ok, and what they made is
         # gone now: say so on each, and name it (live, 22 Nov: a model kept
         # naming a sketch that the rollback had taken back).
@@ -2812,11 +2862,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 out["refused"] = ref
                 out["notRun"] = list(range(first + k + 1, first + n))
                 out["next"] = first + k
+                st = err.get("status")
+                if st:
+                    ref["status"] = st
                 if not out.get("note"):
-                    kept = ("taken back (rollback: true)" if gone or out.get("outcome") == "rolled_back"
-                            else "ran and stay, each its own undo step" if out["done"] else "none")
-                    out["note"] = (f"Call {first + k} ({ref['tool']}) was refused; the calls in done {kept}; the calls in notRun did not run. "
-                                   f"Fix call {first + k} and send it with the calls after it (or the same calls with from: {first + k}).")
+                    out["note"] = _refused_note(ref, rows, calls, first, k, out, mine)
             elif isinstance(out.get("notRun"), int) and not isinstance(out.get("notRun"), bool):
                 out["notRun"] = list(range(first + n - out["notRun"], first + n))
             if not stop:
@@ -2841,13 +2891,15 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # step opened: no undo there (a dialog's command can hold an
                 # open transaction). What ran stays.
                 out["undone"] = 0
-                out["outcome"] = "kept" if made else "not_started"
+                out["result"] = _kept_or_none(results)
                 out["rollbackNote"] = ("Not rolled back: a menu or dialog that a gui_input of this batch opened was still open, and the batch does not undo inside its loop. "
                                        "What ran stays. Close it, then history_undo takes back what you do not want.")
                 return ended(out)
             if not rollback or start is None:
                 # What ran stays (rollback: false), or there is no document left to take it back in.
-                out["outcome"] = "kept" if made else "not_started"
+                # From the rows, not from the undo count: after doc_new every
+                # call counts 0 steps in the start document (1f, 24 Nov).
+                out["result"] = _kept_or_none(results)
             if rollback and start is None:
                 out["undone"] = 0
                 out["warning"] = "The document the batch started in was closed during it: nothing to take back there."
@@ -2896,12 +2948,12 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     # Out of time: what ran stays (this is no failure, so nothing
                     # is rolled back), the rest is named with how to run it.
                     nxt = first + i
-                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on (calls.{i} of this list)"
+                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else _resend_words(calls, i)
                     if hold is not None:
                         hold.build("end: out of time")
                     return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
                                   "note": f"Stopped after {time.time() - mine['t0']:.0f} s (budget {mine.get('budget', BATCH_BUDGET):g} s): a client waits about 80 s for an answer, so a long batch is answered in parts. "
-                                          f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."})
+                                          f"The {len(results)} calls above ran and stay: do not send them again. {len(calls) - i} were not started: {how}"})
                 if c.get("bad") is not None:
                     # Refused by its form (no tool, no such tool, arguments
                     # that are not an object): by itself, here in its order.
@@ -2943,7 +2995,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                         except _chain.Miss as e:
                             hmiss = kinded({"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."})
                     nxt = first + i + 1
-                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on"
+                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else _resend_words(calls, i + 1)
                     if hold is not None:
                         hold.build("before a heavy read")
                     job = None
@@ -2964,7 +3016,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     if hmiss is None and job is None:
                         return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
                                       "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
-                                              + (f"batch {{ file: \"{mine['file']}\", from: {first + i} }}" if mine.get("file") else f"batch again with the calls from index {first + i} on") + " runs it first."})
+                                              + (f"batch {{ file: \"{mine['file']}\", from: {first + i} }} runs it first." if mine.get("file") else _resend_words(calls, i))})
                     if hmiss is None:
                         # The GUI thread stands still here while the job's thread
                         # works: where both are, should the wait reach a minute
@@ -3308,14 +3360,14 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "}. The file is read on this side: a long run of calls stays out of the conversation. A relative path is in the session's folder; files are read where "
                       "other tools can read. The first refused call stops the others (stopOnError: false runs them all). The calls before it stay: each is its own undo step. "
                       "The answer has done (the calls that ran), refused (that call, its code, kind and error) and notRun. They count from 0. "
-                      "next is the refused call: fix it, then from: next with the same calls continues. "
+                      "The note names the calls to send next in a new batch, with no from. "
                       "A call with a wrong form is refused by itself, in its order. Examples: no tool, an unknown tool, arguments that are not an object. "
                       "rollback: true makes the batch stand or fall as a whole. At a refusal it undoes the batch's earlier changes and removes every object it made. "
                       "removed lists any that undo did not reach. With rollback, a call with a wrong form refuses the batch before anything runs. "
                       "Also with rollback: at most as many changing calls as FreeCAD keeps undo steps (20 by default). A heavy read (a wall-thickness or deviation reading) runs "
                       "as a job, also in a batch. The batch waits for it while its budget lasts. If it still runs then, the answer has the job id (job_status gives its "
                       f"answer) and where to continue. No call starts after budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}). The answer then has "
-                      "notRun and next. What ran stays, and from: next (with the same file or calls) continues. The result of each changing call has its own health. A batch "
+                      "notRun and next. What ran stays. Send the calls in notRun in a new batch (with file: the same file and from: next). The result of each changing call has its own health. A batch "
                       "does not run another batch. A call that took 500 ms or more around the tool itself also has around { wall, outside { ms, echoBefore, echoAfter, fit, "
                       "callDone, notice, meter, record, other }, inside { healthMark, health, snapshot, undoStep, afterChange, outputs }, tool } in ms. wall: the whole call. "
                       "outside: time not in its own ms (window echo and fit, add-ons told, the batch record). inside: the hub's part of its ms (health checks, the "

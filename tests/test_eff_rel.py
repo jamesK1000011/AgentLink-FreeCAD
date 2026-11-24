@@ -139,7 +139,7 @@ class E3BusyFromHold(Clocked):
         reply = json.loads(f.getvalue())
         self.assertEqual(reply["result"]["_meta"], {"retried": 1})
         err = json.loads(reply["result"]["content"][0]["text"])["error"]
-        self.assertEqual((err["code"], err["outcome"]), ("busy", "not_started"))
+        self.assertEqual((err["code"], err["status"]), ("busy", "not_started"))
         self.assertIn("Insert Radius", err["message"])
 
     def test_hold_that_ends_starts_again(self):
@@ -163,15 +163,15 @@ class E3BusyFromHold(Clocked):
 
 class E10Retry(Clocked):
     def test_rules(self):
-        busy_ns = {"code": "busy", "outcome": "not_started"}
+        busy_ns = {"code": "busy", "status": "not_started"}
         self.assertTrue(retry_once_ok(False, {"code": "busy"}))  # a read
-        self.assertTrue(retry_once_ok(False, {"code": "busy", "outcome": "unknown"}))  # a read changes nothing
+        self.assertTrue(retry_once_ok(False, {"code": "busy", "status": "unknown"}))  # a read changes nothing
         self.assertTrue(retry_once_ok(True, busy_ns))
-        self.assertFalse(retry_once_ok(True, {"code": "busy", "outcome": "unknown"}))
+        self.assertFalse(retry_once_ok(True, {"code": "busy", "status": "unknown"}))
         self.assertFalse(retry_once_ok(True, {"code": "busy"}))
-        self.assertFalse(retry_once_ok(True, {"code": "busy", "outcome": "rolled_back"}))
+        self.assertFalse(retry_once_ok(True, {"code": "busy", "status": "rolled_back"}))
         self.assertFalse(retry_once_ok(False, {"code": "invalid_input"}))
-        self.assertFalse(retry_once_ok(True, {"code": "failed", "outcome": "not_started"}))
+        self.assertFalse(retry_once_ok(True, {"code": "failed", "status": "not_started"}))
         self.assertFalse(retry_once_ok(False, None))
 
     def test_hold_closed_during_retry_runs_the_call(self):
@@ -210,7 +210,7 @@ class E10Retry(Clocked):
         link.expect("gui_input", 0.03, tick=0.01).join(2)
         reply = json.loads(f.getvalue())
         err = json.loads(reply["result"]["content"][0]["text"])["error"]
-        self.assertEqual(err["outcome"], "unknown")
+        self.assertEqual(err["status"], "unknown")
         self.assertNotIn("_meta", reply["result"])
         self.assertIn('job_status { job: "9" }', err["message"])
         self.assertFalse(retry_once_ok(True, err))
@@ -274,7 +274,7 @@ class E6LateAnswers(unittest.TestCase):
                 raise OSError("closed")
 
         def handle(msg):
-            return {"jsonrpc": "2.0", "id": msg["id"], "result": {"content": [{"type": "text", "text": compact({"error": {"code": "failed", "message": "x", "outcome": "rolled_back"}})}], "isError": True}}
+            return {"jsonrpc": "2.0", "id": msg["id"], "result": {"content": [{"type": "text", "text": compact({"error": {"code": "failed", "message": "x", "status": "rolled_back"}})}], "isError": True}}
 
         self.run_link(handle, Gone(), mid="a1", name="make_box")
         got = jobs.status({"job": "a1"})
@@ -368,7 +368,7 @@ class E2NoResend(Sup):
     def test_change_taken_then_cut_is_unknown_not_sent_again(self):
         err, out = self.call("change_cut", timeout=30)
         self.assertTrue(err)
-        self.assertEqual((out["error"]["code"], out["error"]["outcome"]), ("failed", "unknown"))
+        self.assertEqual((out["error"]["code"], out["error"]["status"]), ("failed", "unknown"))
         self.assertEqual(self.call("ping")[1], {"ok": "ping"})
         self.assertEqual(self.took().count("change_cut"), 1)
 

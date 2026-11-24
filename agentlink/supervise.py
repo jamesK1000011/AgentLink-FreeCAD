@@ -146,7 +146,7 @@ def _kinded(err):
 
 
 def _answer(mid, code, message, outcome=None):
-    text = json.dumps({"error": _kinded({"code": code, "message": message, **({"outcome": outcome} if outcome else {})})})
+    text = json.dumps({"error": _kinded({"code": code, "message": message, **({"status": outcome} if outcome else {})})})
     return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
 

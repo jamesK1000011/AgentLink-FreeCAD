@@ -165,7 +165,7 @@ class BatchRollbackKeepsThePersonsStep(unittest.TestCase):
         got = run_case("interleaved")
         body = got["body"]
         self.assertEqual(body["undone"], 1, body)
-        self.assertEqual(body["outcome"], "partial")
+        self.assertEqual(body["result"], "partial")
         self.assertIn("history_restore to the agent checkpoint goes back without your step", body["rollbackNote"])
         self.assertIn("Pocket", body["rollbackNote"])
         self.assertEqual(got["stack"], ["Pocket", "probe_change", "earlier"])
@@ -173,7 +173,7 @@ class BatchRollbackKeepsThePersonsStep(unittest.TestCase):
     def test_no_foreign_step_rolls_back_whole(self):
         got = run_case("clean")
         body = got["body"]
-        self.assertEqual((body["undone"], body["outcome"]), (2, "rolled_back"), body)
+        self.assertEqual((body["undone"], body["result"]), (2, "rolled_back"), body)
         self.assertNotIn("rollbackNote", body)
         self.assertEqual(got["stack"], ["earlier"])
         # The calls before the refusal say they were taken back (22 Nov).
@@ -323,7 +323,7 @@ class Hold(unittest.TestCase):
         try:
             r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "sketch_add_line", "arguments": {"sketch": "Sketch"}}})
             err = json.loads(r["result"]["content"][0]["text"])["error"]
-            self.assertEqual((err["code"], err["outcome"]), ("held_person_editing", "not_started"))
+            self.assertEqual((err["code"], err["status"]), ("held_person_editing", "not_started"))
             self.assertEqual(ran, [])
             r = srv.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "sketch_add_line", "arguments": {"sketch": "Sketch001"}}})
             self.assertFalse(r["result"].get("isError"), r)

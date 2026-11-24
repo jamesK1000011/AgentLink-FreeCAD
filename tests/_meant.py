@@ -226,7 +226,9 @@ SCHEMAS = {
                 "after": [("index", "select", {"type": "array", "items": {"type": "string"},
                                                "description": "Objects (\"Block\") or faces and edges (\"Block.Face6\") selected for this run only. The person's selection comes back after the run."})]},
     # 22 Nov (owner-approved): face selectors { side: "+z", of, largest } beside { at, normal }; one face only (agentlink/facesel.py)
-    **{n: {"why": "face selectors", "describe": {"upToFace": _UPTO}} for n in ("pd_pad", "pd_pocket")},
+    # 24 Nov, audit top 10 #1: length has a description (small models guessed height or depth)
+    "pd_pad": {"why": "face selectors; length described", "describe": {"upToFace": _UPTO, "length": "The pad's depth in mm, along the sketch's normal (type length)."}},
+    "pd_pocket": {"why": "face selectors; length described", "describe": {"upToFace": _UPTO, "length": "The cut's depth in mm (type length)."}},
     **{n: {"why": "face selectors", "describe": {"edges": _EDGES}} for n in ("pd_fillet", "pd_chamfer")},
     "pd_draft": {"why": "face selectors", "describe": {"faces": _FACES, "neutral": _PLANE_FACE}},
     "pd_thickness": {"why": "face selectors", "describe": {"faces": _FACES}},

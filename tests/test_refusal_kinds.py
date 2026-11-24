@@ -62,7 +62,7 @@ class Kinds(unittest.TestCase):
         r = Server.refusal("held_person_editing", "Held: the person is editing Pad.", outcome="not_started")
         self.assertTrue(r["isError"])
         err = json.loads(r["content"][0]["text"])["error"]
-        self.assertEqual((err["code"], err["kind"], err["outcome"]), ("held_person_editing", "stop", "not_started"))
+        self.assertEqual((err["code"], err["kind"], err["status"]), ("held_person_editing", "stop", "not_started"))
         self.assertTrue(err["message"].startswith("Held: the person is editing Pad."))
         self.assertTrue(err["message"].endswith(STOP))
 

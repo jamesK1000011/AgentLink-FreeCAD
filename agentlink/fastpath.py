@@ -1251,10 +1251,10 @@ def _run(server, session, steps, a):
         err.kind = stop.kind
         err.outcome = "kept"
         err.outcome_left = run.made
-        record.write({"error": {"code": err.code, "message": err.message, "outcome": "kept"}, "results": run.rows}, final=True)
+        record.write({"error": {"code": err.code, "message": err.message, "status": "kept"}, "results": run.rows}, final=True)
         raise err
     if start is None:
-        got = {"undone": 0, "outcome": "kept" if state["made"] else "not_started",
+        got = {"undone": 0, "result": "kept" if state["made"] else "ran_none",
                "warning": "The document the block started in was closed during it: nothing to take back there."}
     else:
         got = T.roll_back(s, start, state["made"], mine.get("own"), names0, run.rows, label="block")
@@ -1266,8 +1266,8 @@ def _run(server, session, steps, a):
         words.append("Ran before it: " + ", ".join(f"{r['step']} {r['tool']}" for r in ran_rows[:12]) + (" …" if len(ran_rows) > 12 else "") + ".")
     words.append(f"{ran} call{'s' if ran != 1 else ''} ran before it;"
                  f" the block was taken back ({got.get('undone', 0)} undo step{'s' if got.get('undone', 0) != 1 else ''})."
-                 if got.get("outcome") in ("rolled_back", "not_started") else
-                 f" {got.get('undone', 0)} of {state['made']} steps were taken back (outcome {got.get('outcome')}).")
+                 if got.get("result") in ("rolled_back", "ran_none") else
+                 f" {got.get('undone', 0)} of {state['made']} steps were taken back (result {got.get('result')}).")
     for k in ("warning", "rollbackNote"):
         if got.get(k):
             words.append(got[k])
@@ -1277,10 +1277,10 @@ def _run(server, session, steps, a):
         words.append(f"The record: {rel}.")
     err = ToolError(stop.code if stop.code in _CODES or stop.code == "busy" else "failed", " ".join(words))
     err.kind = stop.kind
-    err.outcome = got.get("outcome") or "not_started"
-    if got.get("outcome") in ("partial", "kept"):
+    err.outcome = {"ran_none": "not_started"}.get(got.get("result"), got.get("result")) or "not_started"
+    if got.get("result") in ("partial", "kept"):
         err.outcome_left = run.made
-    record.write({"error": {"code": err.code, "message": err.message, "outcome": err.outcome}, "results": run.rows}, final=True)
+    record.write({"error": {"code": err.code, "message": err.message, "status": err.outcome}, "results": run.rows}, final=True)
     raise err
 
 

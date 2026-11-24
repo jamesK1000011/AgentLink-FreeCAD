@@ -192,7 +192,7 @@ class OnStandIns(unittest.TestCase):
         ref = out["refused"]
         self.assertTrue(ref["isError"])
         self.assertEqual(ref["error"]["code"], "invalid_input")
-        self.assertEqual(ref["error"].get("outcome"), "not_started")
+        self.assertEqual(ref["error"].get("status"), "not_started")
         self.assertIn("Stem changed after it was last measured", ref["error"]["message"])
         self.assertIn("Changed: Bracket", ref["error"]["message"])
         self.assertEqual(out["savedAfterRefusal"], 0)

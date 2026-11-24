@@ -54,7 +54,7 @@ Every refusal is `{ error: { code, message } }`; the message says what to change
 | `unavailable` | Something this computer lacks: a program, the FreeCAD window, a module | Say so to the person; the message names what to install or set |
 | `failed` | It ran and did not work: a boolean, a fillet, a mesh, a solve. Nothing was kept | Change the input (a smaller radius, another face, a coarser mesh); never send the same call again unchanged |
 
-- A batch stops at the first refusal; what ran before it stays (`rollback: true` takes it all back): fix that call and send it with the calls after it (`from: next`).
+- A batch stops at the first refusal; what ran before it stays (`rollback: true` takes it all back): fix that call and send it with the calls after it in a new batch, as the note lists them (leave `from` out).
 - If FreeCAD itself stops (the answer says it was started again), the document was lost: `session_state`, then make the part again or `doc_open` what was saved. The same call doing it again means the call is the cause.
 
 ## Keeping answers small

@@ -1501,7 +1501,7 @@ class Link:
             msg += f" When the call ends, job_status {{ job: {json.dumps(str(mid))} }} gives its late answer."
         err = set_kind({"code": "busy", "message": msg})
         if outcome:
-            err["outcome"] = outcome
+            err["status"] = outcome
         if retried:
             err["retried"] = int(retried)  # in the answer itself, so every model sees it (owner, 22 Nov)
         result = {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
@@ -1610,7 +1610,7 @@ class Link:
                     # Only a dialog is up, and this call answers it: the
                     # dialog's own loop takes it (live 70).
                     continue
-                if retry_at is None and not getattr(line, "retried", 0) and retry_once_ok(self._line_changes(line), {"code": "busy", "outcome": "not_started"}):
+                if retry_at is None and not getattr(line, "retried", 0) and retry_once_ok(self._line_changes(line), {"code": "busy", "status": "not_started"}):
                     # Not started: tried once more after a short wait (E10).
                     line.retried = 1
                     retry_at = now + RETRY_DELAY

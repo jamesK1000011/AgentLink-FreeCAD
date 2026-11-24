@@ -678,7 +678,7 @@ def keep_late(link, mid, tool, reply, how):
     if result.get("isError") or (reply or {}).get("error"):
         err = (body.get("error") if isinstance(body, dict) else None) or (reply or {}).get("error") or {"code": "failed", "message": text[:300]}
         entry["error"] = err
-        entry["outcome"] = err.get("outcome") or "failed"
+        entry["outcome"] = err.get("status") or "failed"
     else:
         if isinstance(body, dict):
             body = {k: v for k, v in body.items() if k != "_png"}
