@@ -224,13 +224,13 @@ def problems(entry):
 
 
 def _expr_problems(entry):
-    """An option's expressions (args and choices: "=…") that the hub's
+    """An option's expressions (arguments and choices: "=…") that the hub's
     checked language does not read (agentlink/expr.py; never eval)."""
     from . import expr
 
     out = []
     for s in entry.get("suggest") or ():
-        for part in ("args", "choices"):
+        for part in ("arguments", "choices"):
             for k, v in (s.get(part) or {}).items():
                 if isinstance(v, str) and v.startswith("="):
                     bad = expr.check(v[1:])

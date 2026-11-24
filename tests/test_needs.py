@@ -394,7 +394,8 @@ class Census(unittest.TestCase):
 # 780 again: sketch_attach checks edge or repair before plane or face (bicycle L5 build, finding 3).
 # 781: window_snapshot checks its width first (efficiency design D1, 22 Nov).
 # 787: pd_datum_plane and pd_mirrored check plane or face (both; a face as plane; a plane as face) first (rename set 8, 24 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 787, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 784: object_set's three property/value refusals went with { property, value } (rename set 10, 24 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 784, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):
@@ -778,7 +779,7 @@ def _agree(suite):
     import _meant
 
     for tool, case, prepare, args in cm.cases(fc, tempfile.mkdtemp()):
-        args = _meant.args_as_meant(tool, args)  # the cases' arguments with renamed inputs given by their new names (tests/_meant.py RENAMES)
+        args = _meant.args_as_meant(tool, args)  # the snapshot's inputs by today's names: tests/_meant.py RENAMES
         fc.state["flags"] = {}
         s = fc.Session(tempfile.mkdtemp())
         prepare(s)

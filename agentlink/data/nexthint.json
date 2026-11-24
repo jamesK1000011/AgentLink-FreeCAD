@@ -2,7 +2,7 @@
  "$schema": "nexthint.schema.json",
  "dataVersion": "1.1.0",
  "licence": "CC-BY-4.0",
- "about": "The likely next tools by the document's own state, for the \"next\" hint of session_state and the health check and for tool_groups { now: true } (agentlink/nexthint.py). Each entry is a rule: when (facts that must all hold; a list means any of its values), unless (facts of which none may hold), suggest (up to four tools, likeliest first, each with a few words on why) and weight (0-100: the heaviest matching rules come first; a failing recompute 100, the selection 80-90, a sketch in edit 70-85, an assembly 45, or 72 in the Assembly workbench, a drawing page in front 75, the body's progress 30-66). The facts, read cheaply from the document and the window: document (empty | objects), failing (true | false), selection (edge | face | vertex | object), selectionIn (body: the picked object is a Part Design body or one of its features | other), editing (sketch | other), dof (free | full), page (true: a drawing page is in front), assembly (empty | unjointed | jointed), body (none | empty | sketch-empty | sketch-open | sketch-closed | features: its newest sketch that no feature uses has no geometry, open wires or only closed ones; else it has features), features (none | some), lastFeature (the tip's type in lower case: pad, pocket, fillet …), workbench (FreeCAD's class name). A tool that is not installed, or whose FreeCAD command is on the active workbench's toolbars and reports itself inactive, is passed over; at most three are said. An add-on adds rules for its own tools with NEXT on its family module ({ id: entry } of this same shape). A suggested tool with args is also an option (agentlink/options.py): a ready call whose arguments the state settles (args: values, or expressions of the hub's checked language read with facts, the real names facts() gives), its open inputs (ask: arg, unit mm or deg, a sample used only for the check, words that stand for it) and live choices (the real bodies, sketches and faces). Each option is checked with its filled arguments by the tool's own leading checks before it is shown; at most four are given, bound to the step; pick { option, fill } runs one.",
+ "about": "The likely next tools by the document's own state, for the \"next\" hint of session_state and the health check and for tool_groups { now: true } (agentlink/nexthint.py). Each entry is a rule: when (facts that must all hold; a list means any of its values), unless (facts of which none may hold), suggest (up to four tools, likeliest first, each with a few words on why) and weight (0-100: the heaviest matching rules come first; a failing recompute 100, the selection 80-90, a sketch in edit 70-85, an assembly 45, or 72 in the Assembly workbench, a drawing page in front 75, the body's progress 30-66). The facts, read cheaply from the document and the window: document (empty | objects), failing (true | false), selection (edge | face | vertex | object), selectionIn (body: the picked object is a Part Design body or one of its features | other), editing (sketch | other), dof (free | full), page (true: a drawing page is in front), assembly (empty | unjointed | jointed), body (none | empty | sketch-empty | sketch-open | sketch-closed | features: its newest sketch that no feature uses has no geometry, open wires or only closed ones; else it has features), features (none | some), lastFeature (the tip's type in lower case: pad, pocket, fillet …), workbench (FreeCAD's class name). A tool that is not installed, or whose FreeCAD command is on the active workbench's toolbars and reports itself inactive, is passed over; at most three are said. An add-on adds rules for its own tools with NEXT on its family module ({ id: entry } of this same shape). A suggested tool with arguments is also an option (agentlink/options.py): a ready call whose arguments the state settles (arguments: values, or expressions of the hub's checked language read with facts, the real names facts() gives), its open inputs (ask: arg, unit mm or deg, a sample used only for the check, words that stand for it) and live choices (the real bodies, sketches and faces). Each option is checked with its filled arguments by the tool's own leading checks before it is shown; at most four are given, bound to the step; pick { option, fill } runs one.",
  "entries": {
   "recompute-failing": {
    "when": {
@@ -12,12 +12,12 @@
     {
      "tool": "recompute",
      "why": "lists each failing object with FreeCAD's reason",
-     "args": {}
+     "arguments": {}
     },
     {
      "tool": "feature_list",
      "why": "which feature is invalid, and why",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName"
      },
      "choices": {
@@ -45,7 +45,7 @@
     {
      "tool": "pd_fillet",
      "why": "round the picked edge",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "edges": "=facts.pickedEdges"
      },
@@ -60,7 +60,7 @@
     {
      "tool": "pd_chamfer",
      "why": "bevel the picked edge",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "edges": "=facts.pickedEdges"
      },
@@ -93,7 +93,7 @@
     {
      "tool": "part_fillet",
      "why": "round the picked edge",
-     "args": {
+     "arguments": {
       "body": "=facts.picked",
       "edges": "=facts.pickedEdges"
      },
@@ -108,7 +108,7 @@
     {
      "tool": "part_chamfer",
      "why": "bevel the picked edge",
-     "args": {
+     "arguments": {
       "body": "=facts.picked",
       "edges": "=facts.pickedEdges"
      },
@@ -145,7 +145,7 @@
     {
      "tool": "pd_draft",
      "why": "draft angle on the picked face",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "faces": "=facts.pickedFaces"
      },
@@ -160,7 +160,7 @@
     {
      "tool": "pd_thickness",
      "why": "hollow the body, the picked face open",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "faces": "=facts.pickedFaces"
      },
@@ -189,7 +189,7 @@
     {
      "tool": "part_thickness",
      "why": "hollow the shape, the picked face open",
-     "args": {
+     "arguments": {
       "body": "=facts.picked",
       "open": "=facts.pickedFaces"
      },
@@ -208,7 +208,7 @@
     {
      "tool": "part_offset",
      "why": "offset the shape's faces",
-     "args": {
+     "arguments": {
       "body": "=facts.picked"
      },
      "ask": [
@@ -254,7 +254,7 @@
     {
      "tool": "sketch_constrain",
      "why": "the open sketch still has DoF",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch"
      },
      "ask": [
@@ -266,14 +266,14 @@
     {
      "tool": "sketch_state",
      "why": "which geometry is still free",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch"
      }
     },
     {
      "tool": "sketch_add",
      "why": "more geometry, if the outline is not done",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch"
      },
      "ask": [
@@ -296,14 +296,14 @@
     {
      "tool": "sketch_state",
      "why": "check closed wires before a feature",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch"
      }
     },
     {
      "tool": "pd_pad",
      "why": "the sketch is fully constrained",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch",
       "body": "=facts.bodyName"
      },
@@ -318,7 +318,7 @@
     {
      "tool": "pd_pocket",
      "why": "the sketch is fully constrained",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch",
       "body": "=facts.bodyName"
      },
@@ -354,14 +354,14 @@
     {
      "tool": "sketch_state",
      "why": "the open sketch's solver and DoF",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch"
      }
     },
     {
      "tool": "sketch_constrain",
      "why": "constrain the open sketch",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch"
      },
      "ask": [
@@ -373,7 +373,7 @@
     {
      "tool": "sketch_add",
      "why": "draw in the open sketch",
-     "args": {
+     "arguments": {
       "sketch": "=facts.editSketch"
      },
      "ask": [
@@ -403,7 +403,7 @@
     {
      "tool": "td_list",
      "why": "what the page holds",
-     "args": {}
+     "arguments": {}
     }
    ],
    "weight": 75,
@@ -423,7 +423,7 @@
     {
      "tool": "asm_ground",
      "why": "fix one part in place first",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      },
      "ask": [
@@ -435,7 +435,7 @@
     {
      "tool": "asm_add",
      "why": "bring another part in",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      },
      "ask": [
@@ -461,7 +461,7 @@
     {
      "tool": "asm_ground",
      "why": "fix one part in place first",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      },
      "ask": [
@@ -473,7 +473,7 @@
     {
      "tool": "asm_add",
      "why": "bring another part in",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      },
      "ask": [
@@ -496,7 +496,7 @@
     {
      "tool": "asm_check",
      "why": "do the joints solve, do parts collide",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      }
     },
@@ -507,7 +507,7 @@
     {
      "tool": "asm_bom",
      "why": "the parts list",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      }
     }
@@ -524,7 +524,7 @@
     {
      "tool": "asm_check",
      "why": "do the joints solve, do parts collide",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      }
     },
@@ -535,7 +535,7 @@
     {
      "tool": "asm_bom",
      "why": "the parts list",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      }
     }
@@ -553,7 +553,7 @@
     {
      "tool": "asm_add",
      "why": "the assembly holds no parts yet",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      },
      "ask": [
@@ -565,7 +565,7 @@
     {
      "tool": "asm_new_part",
      "why": "a new part in the assembly",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      }
     }
@@ -582,7 +582,7 @@
     {
      "tool": "asm_add",
      "why": "the assembly holds no parts yet",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      },
      "ask": [
@@ -594,7 +594,7 @@
     {
      "tool": "asm_new_part",
      "why": "a new part in the assembly",
-     "args": {
+     "arguments": {
       "assembly": "=facts.assemblyName"
      }
     }
@@ -611,7 +611,7 @@
     {
      "tool": "sketch_new",
      "why": "the body has no sketch yet",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "plane": "XY"
      },
@@ -627,7 +627,7 @@
     {
      "tool": "pd_primitive",
      "why": "or start from a box or cylinder",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName"
      },
      "ask": [
@@ -653,7 +653,7 @@
     {
      "tool": "sketch_add",
      "why": "the new sketch has no geometry yet",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName"
      },
      "ask": [
@@ -668,7 +668,7 @@
     {
      "tool": "sketch_external",
      "why": "or bring in edges to build on",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName"
      },
      "ask": [
@@ -693,7 +693,7 @@
     {
      "tool": "sketch_state",
      "why": "the sketch is not closed yet",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName"
      },
      "choices": {
@@ -703,7 +703,7 @@
     {
      "tool": "sketch_add",
      "why": "close the outline",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName"
      },
      "ask": [
@@ -718,7 +718,7 @@
     {
      "tool": "sketch_validate",
      "why": "find ends that do not meet",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName"
      },
      "choices": {
@@ -739,7 +739,7 @@
     {
      "tool": "pd_pad",
      "why": "a closed sketch no feature uses yet",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName",
       "body": "=facts.bodyName"
      },
@@ -758,7 +758,7 @@
     {
      "tool": "pd_revolution",
      "why": "or turn it about an axis",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName",
       "body": "=facts.bodyName"
      },
@@ -777,7 +777,7 @@
     {
      "tool": "sketch_constrain",
      "why": "or finish its dimensions first",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName"
      },
      "ask": [
@@ -803,7 +803,7 @@
     {
      "tool": "pd_pad",
      "why": "a closed sketch no feature uses yet",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName",
       "body": "=facts.bodyName"
      },
@@ -822,7 +822,7 @@
     {
      "tool": "pd_pocket",
      "why": "cut it out of the body",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName",
       "body": "=facts.bodyName"
      },
@@ -846,7 +846,7 @@
     {
      "tool": "pd_revolution",
      "why": "or turn it about an axis",
-     "args": {
+     "arguments": {
       "sketch": "=facts.sketchName",
       "body": "=facts.bodyName"
      },
@@ -889,7 +889,7 @@
     {
      "tool": "sketch_new",
      "why": "the next feature's sketch, on a stable plane",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "plane": "XY"
      },
@@ -909,7 +909,7 @@
     {
      "tool": "pd_polar_pattern",
      "why": "repeat a feature, not copies by hand",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "features": "=[facts.tipName] if facts.tipName else None"
      },
@@ -955,7 +955,7 @@
     {
      "tool": "sketch_new",
      "why": "a sketch keeps sizes as constraints",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "plane": "XY"
      },
@@ -975,7 +975,7 @@
     {
      "tool": "pd_polar_pattern",
      "why": "repeat a feature, not more primitives",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "features": "=[facts.tipName] if facts.tipName else None"
      },
@@ -1010,7 +1010,7 @@
     {
      "tool": "body_check",
      "why": "is the body one sound solid",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName"
      },
      "choices": {
@@ -1020,7 +1020,7 @@
     {
      "tool": "sketch_new",
      "why": "the next feature's sketch",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "plane": "XY"
      },
@@ -1050,7 +1050,7 @@
     {
      "tool": "body_check",
      "why": "is the body one sound solid",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName"
      },
      "choices": {
@@ -1064,7 +1064,7 @@
     {
      "tool": "sketch_new",
      "why": "the next feature's sketch",
-     "args": {
+     "arguments": {
       "body": "=facts.bodyName",
       "plane": "XY"
      },
@@ -1090,12 +1090,12 @@
     {
      "tool": "pd_body_new",
      "why": "nothing here yet: a body to build in",
-     "args": {}
+     "arguments": {}
     },
     {
      "tool": "part_primitive",
      "why": "or a plain box or cylinder",
-     "args": {},
+     "arguments": {},
      "ask": [
       {
        "arg": "kind",

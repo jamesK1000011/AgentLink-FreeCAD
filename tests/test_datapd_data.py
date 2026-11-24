@@ -116,7 +116,7 @@ class DatapdData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
-            c["old"] = _meant.case_as_meant(c["tool"], c["case"], _meant.renamed_words(c["tool"], c["old"]))  # renamed inputs (RENAMED) and meant changes (CASES): tests/_meant.py
+            c["old"] = _meant.case_as_meant(c["tool"], c["case"], _meant.old_as_renamed(c["tool"], _meant.renamed_words(c["tool"], c["old"])))  # renamed inputs and meant changes: tests/_meant.py RENAMED, RENAMES, CASES
             c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")

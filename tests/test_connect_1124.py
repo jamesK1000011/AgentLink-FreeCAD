@@ -147,12 +147,12 @@ class GuideFuzzy(unittest.TestCase):
 class PickAsBatch(unittest.TestCase):
     """Item 5: with the static list, pick is not listed: the example is a batch call."""
 
-    DOC_NEW = {"step": 0, "list": [{"n": 1, "tool": "doc_new", "args": {}, "ask": [{"arg": "name"}]}]}
+    DOC_NEW = {"step": 0, "list": [{"n": 1, "tool": "doc_new", "arguments": {}, "ask": [{"arg": "name"}]}]}
 
     def test_static_shows_a_batch_call(self):
         self.assertEqual(options.pick_how(self.DOC_NEW, static=True),
                          'batch { calls: [{ tool: "pick", arguments: { option: 1, fill: { name: "Part" } } }] } runs option 1; option: "1, Part" also works')
-        self.assertEqual(options.pick_how({"step": 1, "list": [{"n": 2, "tool": "body_check", "args": {}}]}, static=True),
+        self.assertEqual(options.pick_how({"step": 1, "list": [{"n": 2, "tool": "body_check", "arguments": {}}]}, static=True),
                          'batch { calls: [{ tool: "pick", arguments: { option: 2 } }] } runs option 2')
         self.assertTrue(options.pick_how(None, static=True).startswith('batch { calls: [{ tool: "pick", arguments: { option: 1, fill: { length: 4 } } }] }'))
 

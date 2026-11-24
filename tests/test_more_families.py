@@ -518,7 +518,7 @@ class MoreFamilies(Base):
                                                                  {"kind": "bspline", "points": [[0, 80], [20, 90], [40, 80], [60, 95]]}]})
         ov = r["state"]["openVertices"]
         self.assertIn([5.0, 50.0], ov)
-        b = self.ok("sketch_bspline", {"sketch": "Sm s1", "geo": 2, "op": "degree", "by": 1})
+        b = self.ok("sketch_bspline", {"sketch": "Sm s1", "geometry": 2, "op": "degree", "by": 1})
         self.assertEqual(b["degree"], 4)
         self.ok("sketch_new", {"body": "Sm body", "plane": "XY", "name": "Sm s2"})
         self.ok("sketch_add", {"sketch": "Sm s2", "items": [{"kind": "rectangle", "corner": [100, 0], "size": [20, 10]}]})
@@ -603,7 +603,7 @@ class MoreFamilies(Base):
         self.ok("asm_new", {"parts": ["Am plate", "Am post", "Am arm"], "name": "Am asm"})
         self.ok("asm_ground", {"assembly": "Am asm", "part": "Am post"})
         self.ok("asm_joint", {"assembly": "Am asm", "kind": "revolute", "name": "Am pivot", "a": {"part": "Am plate", "element": {"kind": "face", "normal": [0, 0, 1]}},
-                              "b": {"part": "Am arm", "element": {"kind": "face", "normal": [0, 0, -1]}}, "reverse": False})
+                              "b": {"part": "Am arm", "element": {"kind": "face", "normal": [0, 0, -1]}}, "reversed": False})
         self.ok("asm_motion", {"assembly": "Am asm", "action": "save", "name": "Am swing", "keys": [{"Am pivot": 30}, {"Am pivot": 150}]})
         p = self.ok("asm_motion", {"action": "play", "name": "Am swing", "steps": 4})
         self.assertEqual(p["frames"], 5)

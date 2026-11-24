@@ -147,7 +147,7 @@ class Assembly(unittest.TestCase):
         # joint would centre it on the plate).
         err, gnd = self.call("asm_ground", {"part": "Post"})
         self.assertFalse(err, gnd)
-        err, r = self.call("asm_joint", {"kind": "revolute", "name": "Pivot", "a": {"part": "Plate", "element": {"kind": "face", "normal": [0, 0, 1]}}, "b": {"part": "Arm", "element": {"kind": "face", "normal": [0, 0, -1]}}, "reverse": False})
+        err, r = self.call("asm_joint", {"kind": "revolute", "name": "Pivot", "a": {"part": "Plate", "element": {"kind": "face", "normal": [0, 0, 1]}}, "b": {"part": "Arm", "element": {"kind": "face", "normal": [0, 0, -1]}}, "reversed": False})
         self.assertFalse(err, r)
         before = self.session.body("Arm").Placement.copy()
         err, sw = self.call("asm_sweep", {"joint": "Pivot", "from": 0, "to": 180, "steps": 12})

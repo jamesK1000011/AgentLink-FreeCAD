@@ -58,8 +58,6 @@ DESCRIPTIONS = {
         "Again, renamed). Reply: deleted, errors, health. A container that only holds the object is not a user (a Body, an App::Part, a group): an unused sketch or the tip feature of a Body deletes without force, and the Body's tip moves back."),
     'object_get': ('— use it, a feature has dozens. Changes nothing.',
         '— use it, a feature has dozens. Changes nothing. Several words go in one filter with | between them ("Length|Width"): a property that has one of them matches.'),
-    'object_set': ('only Placement; Label is set with object_rename.',
-        'only Placement; Label is set with object_rename. For one property, property and value also work: { property: "Length", value: 20 }.'),
     'asm_joint': [
         # Test drive of 20 Nov (bicycle, findings 4, 3, 5): no flip by itself, keep, chain by teeth.
         ("gears and belt (radius1, radius2 — read off round edges when left out).",
@@ -118,6 +116,93 @@ def _ste():
     return _STE
 
 
+# Rename sets of 24 Nov (owner rule R5: a renamed input keeps no alias).
+# Per tool: "inputs" {old: new}, a dotted path for a key inside an object
+# input ("move.geo"); "answer" {old: new} for answer fields; "words" [(old,
+# new)], whole-word changes made to the snapshot's description and schema
+# words and to the old handler's answers and refusals. The data tests give a
+# case's inputs to the new entry by the new names (args_as_meant) and make
+# the word changes in the old run (old_as_renamed).
+_GEO = [("geo", "geometry"), ("geos", "geometry")]
+RENAMES = {
+    # Set 5: geo -> geometry (V.2), in sketch_extend, sketch_bspline and sketch_edit's keys; sketch_join's words.
+    "sketch_extend": {"inputs": {"geo": "geometry"}, "words": _GEO},
+    "sketch_bspline": {"inputs": {"geo": "geometry"}, "answer": {"geo": "geometry"}, "words": _GEO},
+    "sketch_edit": {"inputs": {**{f"{k}.geo": "geometry" for k in ("move", "construction", "trim", "split")},
+                               **{f"{k}.geos": "geometry" for k in ("fillet", "mirror")}}, "words": _GEO},
+    "sketch_join": {"words": _GEO},
+    # Set 6: flip and reverse -> reversed (V.2).
+    "sketch_new": {"inputs": {"flip": "reversed"}, "words": [("flip", "reversed")]},
+    "sketch_attach": {"inputs": {"flip": "reversed"}, "words": [("flip", "reversed")]},
+    "asm_joint": {"inputs": {"reverse": "reversed"}, "words": [("reverse", "reversed")]},
+    # Set 10: one property map, values (V.2). object_set's { property, value } (finding 12) went: values only.
+    "feature_edit": {"inputs": {"set": "values"}, "words": [("set", "values")]},
+    "varset_set": {"inputs": {"properties": "values"}, "words": [("properties", "values")]},
+    "varset_new": {"inputs": {"properties": "values"}, "words": [("properties", "values")]},
+    "pd_revolution": {"words": [("feature, set:", "feature, values:")]},
+    # Set 11: args -> arguments (V.2), a call's inputs.
+    "cookbook_run": {"inputs": {"args": "arguments"}, "words": [("args", "arguments")]},
+    # Sets 4, 7, 9 (their refusal words are in CASES; pd_boolean's answer field in ANSWER_RENAMES).
+    "pd_helix": {"inputs": {"profile": "sketch"}},
+    "pd_loft": {"inputs": {"profile": "sketch"}},
+    "pd_pipe": {"inputs": {"profile": "sketch"}},
+    "pd_linear_pattern": {"inputs": {"occurrences": "count"}},
+    "pd_polar_pattern": {"inputs": {"occurrences": "count"}},
+    "pd_boolean": {"inputs": {"with": "bodies"}},
+    "part_boolean": {"inputs": {"base": "body", "tools": "bodies"}},
+}
+
+
+def _rename_words(name, text):
+    import re
+
+    for was, now in RENAMES.get(name, {}).get("words", ()):
+        text = re.sub(r"(?<![\w])" + re.escape(was) + r"(?![\w])", lambda _m, now=now: now, text)
+    return text
+
+
+def args_as_meant(name, args):
+    """A case's inputs, as the snapshot gave them, by the new names."""
+    import copy
+
+    ren = RENAMES.get(name, {}).get("inputs")
+    if not ren or not isinstance(args, dict):
+        return args
+    args = copy.deepcopy(args)
+    for path, new in ren.items():
+        *outer, key = path.split(".")
+        at = args
+        for k in outer:
+            at = at.get(k) if isinstance(at, dict) else None
+        for d in (at if isinstance(at, list) else [at]):
+            if isinstance(d, dict) and key in d:
+                d[new] = d.pop(key)
+    return args
+
+
+def old_as_renamed(name, old):
+    """The old handler's run with the renamed answer fields and words."""
+    if name not in RENAMES:
+        return old
+    fields = RENAMES[name].get("answer", {})
+
+    def walk(x, top=False):
+        if isinstance(x, str):
+            return _rename_words(name, x)
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        if isinstance(x, dict):
+            return {(fields.get(k, k) if top else k): walk(v) for k, v in x.items()}
+        return x
+
+    res = old.get("result")
+    if isinstance(res, list) and res and res[0] == "ok" and isinstance(res[1], dict):
+        res = [res[0], walk(res[1], True)] + walk(res[2:])
+    elif isinstance(res, list):
+        res = walk(res)
+    return {**old, "result": res}
+
+
 def _meant_only(name, old):
     if name not in DESCRIPTIONS:
         return old
@@ -131,7 +216,7 @@ def _meant_only(name, old):
 def description(name, old):
     """The snapshot's description of a tool with its meant change made, and
     then the STE rewrite when the result is main's original word for word."""
-    text = _meant_only(name, old)
+    text = _rename_words(name, _meant_only(name, old))
     s = _ste()
     if name in s["now"] and s["orig"].get(name, {}).get("description") == text:
         return s["now"][name]
@@ -181,10 +266,6 @@ SCHEMAS = {
                   "after": [("offset", "gap", {"type": "number"}),
                             ("reverse", "autoFlip", {"type": "boolean"}), ("autoFlip", "keep", {"type": "boolean"}), ("keep", "teeth1", {"type": "integer"}),
                             ("teeth1", "teeth2", {"type": "integer"})]},
-    "object_set": {"why": "finding 12: { property, value } as well as { values }",
-                   "after": [("values", "property", {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}),
-                             ("property", "value", {})],
-                   "required": ["object"]},
     # 20 Nov, the skeleton workflow of the design kickoff: a datum on several references of any object,
     # its mode, its AttachmentOffset, and (part_datum) the Body or App::Part that holds it.
     "pd_datum": {"why": "skeleton workflow: refs, mode, offset",
@@ -247,6 +328,16 @@ SCHEMAS = {
     "pd_datum_plane": {"why": "face selectors; rename set 8",
                        "rename": {"on": ("plane", {"type": "string", "description": "XY (default), XZ, YZ or a datum plane's name."})},
                        "after": [("plane", "face", {"description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."})]},
+    # 24 Nov, local-model runs (a, b, kind sent for a constraint's fields): each constraint item typed on the card
+    "sketch_constrain": {"why": "local-model runs: a constraint item's fields typed",
+                         "replace": {"constraints": {
+                             "type": "array", "description": "One item for each constraint: { type, refs, value, name }.",
+                             "items": {"type": "object",
+                                       "properties": {"type": {"type": "string", "description": "coincident, tangent, distance, radius \u2026 (the card lists all)."},
+                                                      "refs": {"type": "array", "description": "Ids g or points [g, vertex]. Line 0 tangent to circle 1: [0, 1]."},
+                                                      "value": {"type": "number", "description": "A size: mm, or deg for angle."},
+                                                      "name": {"type": "string", "description": "A name for param_bind."}},
+                                       "required": ["type"], "additionalProperties": False}}}},
     "sketch_new": {"why": "face selectors", "replace": {"face": {
         "type": "object",
         "description": "{ side: \"+z\" | \"-z\" | \"+x\" | \"-x\" | \"+y\" | \"-y\", of: the feature that made it, largest: true } (one face only), "
@@ -286,11 +377,18 @@ def schema(name, old):
     new["properties"] = props
     if "required" in m:
         new["required"] = list(m["required"])
-    # Renamed fields last: same place, same schema, the new name (RENAMES).
-    names = RENAMES.get(name, ({}, ""))[0]
-    if names:
-        new["properties"] = {names.get(k, k): v for k, v in new["properties"].items()}
-        new["required"] = [names.get(k, k) for k in new.get("required", [])]
+    ren = {k: v for k, v in RENAMES.get(name, {}).get("inputs", {}).items() if "." not in k}
+    if ren:
+        new["properties"] = {ren.get(k, k): v for k, v in new["properties"].items()}
+        if "required" in new:
+            new["required"] = [ren.get(k, k) for k in new["required"]]
+    if name in RENAMES:  # the words of each description, not the schema's own keys
+        def words(x):
+            if isinstance(x, dict):
+                return {k: (_rename_words(name, v) if k == "description" and isinstance(v, str) else words(v)) for k, v in x.items()}
+            return [words(v) for v in x] if isinstance(x, list) else x
+
+        new = words(new)
     # the keys in the order the entry keeps them
     return {k: new[k] for k in old}
 
@@ -336,35 +434,11 @@ def renamed_words(tool, old):
     return old
 
 
-# Renamed inputs (vocabulary renames of 24 Nov, rule R5: no alias, the old
-# name is refused like any unknown field): per tool, {old: new} and why. The
-# snapshot's schema takes the new names in schema(); the data tests give the
-# new run its arguments with the new names (args_as_meant), the old handler
-# the old ones.
-RENAMES = {
-    "pd_helix": ({"profile": "sketch"}, "rename set 4: a PartDesign feature's sketch is sketch"),
-    "pd_loft": ({"profile": "sketch"}, "rename set 4: the first sketch is sketch; the others stay sections"),
-    "pd_pipe": ({"profile": "sketch"}, "rename set 4: sketch, a sketch or { circle: { d, wall } }"),
-    "pd_linear_pattern": ({"occurrences": "count"}, "rename set 7: how many, the original counted, is count"),
-    "pd_polar_pattern": ({"occurrences": "count"}, "rename set 7: how many, the original counted, is count"),
-    "pd_boolean": ({"with": "bodies"}, "rename set 9: the other bodies are bodies"),
-    "part_boolean": ({"base": "body", "tools": "bodies"}, "rename set 9: the body kept is body, the others bodies"),
-}
-
 # Renamed answer fields (rename set 9): per tool, {old: new}. case_as_meant
 # gives the old run's answer the new names.
 ANSWER_RENAMES = {
     "pd_boolean": {"with": "bodies"},
 }
-
-
-def args_as_meant(tool, args):
-    """A case's arguments with the renamed inputs (RENAMES) given by their
-    new names, for the new run."""
-    names = RENAMES.get(tool, ({}, ""))[0]
-    if not names or not isinstance(args, dict):
-        return args
-    return {names.get(k, k): v for k, v in args.items()}
 
 
 # Answer fields a converted tool now adds to what its handler answered (the
@@ -455,11 +529,11 @@ CASES = {
     ("asm_joint", "kept as FreeCAD put it, overlapping"): {
         "why": "bicycle finding 4: the warning names each overlap and its volume",
         "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³ — a face picked the wrong way round, or the parts do not fit. "
-                           "reverse: true flips the second part, or check the sizes."}},
+                           "reversed: true flips the second part, or check the sizes."}},
     ("asm_joint", "a ball joint is not turned over"): {
         "why": "bicycle finding 4: the warning names each overlap and its volume",
         "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³ — a face picked the wrong way round, or the parts do not fit. "
-                           "reverse: true flips the second part, or check the sizes."}},
+                           "reversed: true flips the second part, or check the sizes."}},
     ("asm_joint", "turned over to stop an overlap"): {
         "why": "bicycle finding 4: only autoFlip: true turns a part over; it reads the solve's state again first (one more solve)",
         "set": {"flipped": "turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)"},
@@ -467,14 +541,14 @@ CASES = {
                    ["solve(<Assembly>)", "solve(<Assembly>)", "common(Solid<Base>, [Solid<Lid>])", "flipOnePart(<Fixed>)"])]},
     ("asm_joint", "turning over does not help"): {
         "why": "bicycle finding 4: no part is turned over by itself; the warning says how to flip",
-        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over "
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reversed: true turns the moved part over "
                            "on the joint; autoFlip: true lets the tool try it; else check the sizes."},
         "trace": [(_TURN_OVER + ["recompute()", "solve(<Assembly>)", "common(Solid<Base>, [Solid<Lid>])",
                                  "Base.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))",
                                  "Lid.Placement = Placement(V(0, 0, -5), Rotation(V(0, 0, 1), 0))", "recompute()", "solve(<Assembly>)"], [])]},
     ("asm_joint", "turned over, it no longer solves"): {
         "why": "bicycle finding 4: no part is turned over by itself; the warning says how to flip",
-        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over "
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reversed: true turns the moved part over "
                            "on the joint; autoFlip: true lets the tool try it; else check the sizes."},
         "trace": [(_TURN_OVER + ["Lid.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))", "recompute()", "solve(<Assembly>)",
                                  "Base.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))",

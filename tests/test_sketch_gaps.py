@@ -97,18 +97,18 @@ class SketchHardening(Base):
             {"kind": "line", "from": [50, -5], "to": [50, 5]},
         ]})
         # A quarter of a 10 mm circle is 15.708 mm: as much again makes a half.
-        self.ok("sketch_extend", {"sketch": "H ext", "geo": 0, "end": 2, "by": 5 * math.pi})
+        self.ok("sketch_extend", {"sketch": "H ext", "geometry": 0, "end": 2, "by": 5 * math.pi})
         self.assertAlmostEqual(sk.Geometry[0].length(), 10 * math.pi, delta=1e-3)
-        r = self.ok("sketch_extend", {"sketch": "H ext", "geo": 1, "end": 2, "to": 2})
+        r = self.ok("sketch_extend", {"sketch": "H ext", "geometry": 1, "end": 2, "to": 2})
         self.assertAlmostEqual(r["by"], 10.0, places=3)
         self.assertAlmostEqual(sk.Geometry[1].EndPoint.x, 50.0, places=3)
-        e = self.refused("sketch_extend", {"sketch": "H ext", "geo": 0, "to": 2})
+        e = self.refused("sketch_extend", {"sketch": "H ext", "geometry": 0, "to": 2})
         self.assertIn("by", e["message"])
 
     def test_fillet_between_two_curves_by_near_points(self):
         sk = self.sketch("H fil")
         self.ok("sketch_add", {"sketch": "H fil", "items": [{"kind": "line", "from": [0, 0], "to": [20, 0]}, {"kind": "line", "from": [20, 0], "to": [20, 10]}]})
-        r = self.ok("sketch_edit", {"sketch": "H fil", "fillet": {"geos": [0, 1], "near": [[15, 0], [20, 5]], "radius": 3}})
+        r = self.ok("sketch_edit", {"sketch": "H fil", "fillet": {"geometry": [0, 1], "near": [[15, 0], [20, 5]], "radius": 3}})
         self.assertIn("fillet r3", r["done"][0])
         arcs = [g for g in sk.Geometry if type(g).__name__ == "ArcOfCircle"]
         self.assertEqual(len(arcs), 1)

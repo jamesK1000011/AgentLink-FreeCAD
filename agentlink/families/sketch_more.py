@@ -290,7 +290,7 @@ def _support_list(sk):
 def attach_edge(doc, sk, b, a):
     """sketch_attach { edge, mode, at } or { repair: true }: the sketch hung
     on the edge (or its support re-pointed) where it is in the body, its
-    offset and flip kept unless given. Refused, with the sketch as it was,
+    offset and reversed kept unless given. Refused, with the sketch as it was,
     when FreeCAD cannot attach it. The answer's extra."""
     prop = pc.support_prop(sk)
     off0 = sk.AttachmentOffset
@@ -340,8 +340,8 @@ def attach_edge(doc, sk, b, a):
     try:
         setattr(sk, prop, new)
         sk.MapMode = mode
-        if a.get("flip") is not None:
-            sk.MapReversed = bool(a.get("flip"))
+        if a.get("reversed") is not None:
+            sk.MapReversed = bool(a.get("reversed"))
         if a.get("at") is not None:
             t = float(a.get("at"))
             if not 0.0 <= t <= 1.0:

@@ -6806,7 +6806,7 @@
     {"let": {"angle": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
     {"let": {"side": "=a.sides or 'one'"}},
-    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, set: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, values: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
     {"let": {"f": "=new(b, 'PartDesign::Revolution', 'Revolution')"}},
     {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
     {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
@@ -6865,7 +6865,7 @@
     {"let": {"angle": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
     {"let": {"side": "=a.sides or 'one'"}},
-    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, set: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, values: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
     {"let": {"f": "=new(b, 'PartDesign::Groove', 'Groove')"}},
     {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
     {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
@@ -7705,7 +7705,7 @@
   },
   "feature_edit": {
    "group": "feature",
-   "description": "Change the properties of a feature by FreeCAD's names, then recompute. set: { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … }. feature_list shows them. A wrong enumeration value lists the correct values. The tool does not edit links (sketch, edges, axis): remove the feature and make it again. The tool refuses and undoes a change that breaks the feature or a later feature. The tool finds again the fillets whose edges the change renumbered (refsFound). Change a property bound to a parameter with param_set.",
+   "description": "Change the properties of a feature by FreeCAD's names, then recompute. values: { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … }. feature_list shows them. A wrong enumeration value lists the correct values. The tool does not edit links (sketch, edges, axis): remove the feature and make it again. The tool refuses and undoes a change that breaks the feature or a later feature. The tool finds again the fillets whose edges the change renumbered (refsFound). Change a property bound to a parameter with param_set.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7716,13 +7716,13 @@
      "feature": {
       "type": "string"
      },
-     "set": {
+     "values": {
       "type": "object"
      }
     },
     "required": [
      "feature",
-     "set"
+     "values"
     ],
     "additionalProperties": false
    },
@@ -7731,8 +7731,8 @@
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "f": "=in_body(b, a.feature, ['PartDesign::'])", "changes": "=a.set"}},
-    {"refuse": {"fmt": "set: {{ Property: value }} by FreeCAD's property names — {f.Label}'s: {own_keys(f)}."}, "when": "=not is_dict(changes) or not changes"},
+    {"let": {"b": "=body(a.body)", "f": "=in_body(b, a.feature, ['PartDesign::'])", "changes": "=a.values"}},
+    {"refuse": {"fmt": "values: {{ Property: value }} by FreeCAD's property names — {f.Label}'s: {own_keys(f)}."}, "when": "=not is_dict(changes) or not changes"},
     {"let": {"before": "=volume(b)", "refs": "=ref_snapshot(b)", "bound": "={p.lstrip('.'): e for p, e in get(f, 'ExpressionEngine', [])}", "done": "={}"}},
     {
      "each": "k, v",
@@ -8113,7 +8113,7 @@
   },
   "sketch_new": {
    "group": "sketch",
-   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal; flip reverses it. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world. On a face, face is the form that picks it again.",
+   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal. reversed: true reverses the normal. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world. On a face, face is the form that picks it again.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8166,7 +8166,7 @@
      "offset": {
       "type": "number"
      },
-     "flip": {
+     "reversed": {
       "type": "boolean"
      },
      "name": {
@@ -8189,7 +8189,7 @@
     {"let": {"sup": "=support_prop(sk)", "link, what": "=plane_ref(b, a.plane if 'plane' in a else a.face, 'plane')"}},
     {"do": "=setprop(sk, sup, [(link[0], link[1][0])])"},
     {"set": {"sk.MapMode": "=plane_mode(link, what)"}},
-    {"set": {"sk.MapReversed": true}, "when": "=a.flip"},
+    {"set": {"sk.MapReversed": true}, "when": "=a.reversed"},
     {"let": {"off": "=float(a.get('offset', 0))"}},
     {"do": "=doc().recompute()"},
     {
@@ -8455,7 +8455,7 @@
   },
   "sketch_constrain": {
    "group": "sketch",
-   "description": "Constrain a sketch with geometric and dimensional constraints. constraints: [{ type, refs, value, name }]. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex], or \"origin\". Vertex: 1 start, 2 end, 3 centre. -1 is the horizontal axis, -2 the vertical axis, -3 down are outside edges. Each type and its refs follow. coincident [p, p]. point_on_object [p, g]. horizontal | vertical [g] or [p, p]. parallel | perpendicular | equal [g, g]. tangent [g, g] or end points [p, p]. symmetric [p, p, g] (about a line) or [p, p, p]. distance [g] (length), [p, p] or [p, g]. distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first). radius | diameter [g]. All lengths are mm. angle [g] (from +x) or [g, g] (first to second, ccw), deg. fix [p]: holds a point where it is. fix [g]: blocked; add it last. name: lets you bind it to a parameter later. All or nothing: the tool refuses a constraint that conflicts or is redundant. It names what clashes, and adds nothing. Answer: added (constraint ids from 0) and state.",
+   "description": "Constrain a sketch with geometric and dimensional constraints. constraints: [{ type, refs, value, name }], one item for each constraint. Example: { type: \"tangent\", refs: [0, 1] } makes line 0 tangent to circle 1. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex], or \"origin\". Vertex: 1 start, 2 end, 3 centre. -1 is the horizontal axis, -2 the vertical axis, -3 down are outside edges. Each type and its refs follow. coincident [p, p]. point_on_object [p, g]. horizontal | vertical [g] or [p, p]. parallel | perpendicular | equal [g, g]. tangent [g, g] or end points [p, p]. symmetric [p, p, g] (about a line) or [p, p, p]. distance [g] (length), [p, p] or [p, g]. distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first). radius | diameter [g]. All lengths are mm. angle [g] (from +x) or [g, g] (first to second, ccw), deg. fix [p]: holds a point where it is. fix [g]: blocked; add it last. name: lets you bind it to a parameter later. All or nothing: the tool refuses a constraint that conflicts or is redundant. It names what clashes, and adds nothing. Answer: added (constraint ids from 0) and state.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8465,8 +8465,31 @@
      },
      "constraints": {
       "type": "array",
+      "description": "One item for each constraint: { type, refs, value, name }.",
       "items": {
-       "type": "object"
+       "type": "object",
+       "properties": {
+        "type": {
+         "type": "string",
+         "description": "coincident, tangent, distance, radius … (the card lists all)."
+        },
+        "refs": {
+         "type": "array",
+         "description": "Ids g or points [g, vertex]. Line 0 tangent to circle 1: [0, 1]."
+        },
+        "value": {
+         "type": "number",
+         "description": "A size: mm, or deg for angle."
+        },
+        "name": {
+         "type": "string",
+         "description": "A name for param_bind."
+        }
+       },
+       "required": [
+        "type"
+       ],
+       "additionalProperties": false
       }
      }
     },
@@ -8594,7 +8617,7 @@
   },
   "sketch_edit": {
    "group": "sketch",
-   "description": "Edit a sketch: move, set, delete, fillet, trim, split or mirror its geometry and constraints. One call can have several keys; the tool does them in this order. move { geo, vertex, to [x,y] }: vertex 0 is the whole curve, or 1/2/3. It drags as far as its constraints let it. set [{ constraint: id|name, value mm|deg }]. construction { geo, on }. rename { constraint, name }. deleteConstraints [id|name]. delete [geometry ids]: their constraints go too. fillet { at, geos, near, radius, chamfer }. at: [g, v], a corner. Or geos [g1, g2] near [[x,y],[x,y]]. chamfer: true cuts it straight. The tool trims the curves to the fillet. trim { geo, at [x,y] }: cuts off the piece there, between crossings. split { geo, at }. mirror { geos, about: \"x\" | \"y\" | \"origin\" | a line id }: free mirrored copies, no symmetric constraints added. group [geos]: held as one (FreeCAD 1.2). text { text, at, height, font, construction }: letters as geometry. exposeInternal [geos]: the axes of an ellipse or the poles of a B-spline, back as construction geometry. removeAxesAlignment [geos]. delete, fillet, trim and split renumber geometry. Read sketch_state before you use ids again. Answer: done, state, geometryCount, and bodyAfter when features are built on it. The tool refuses an edit that breaks a feature, with FreeCAD's error, and nothing is kept.",
+   "description": "Edit a sketch: move, set, delete, fillet, trim, split or mirror its geometry and constraints. One call can have several keys; the tool does them in this order. move { geometry, vertex, to [x,y] }: vertex 0 is the whole curve, or 1/2/3. It drags as far as its constraints let it. set [{ constraint: id|name, value mm|deg }]. construction { geometry, on }. rename { constraint, name }. deleteConstraints [id|name]. delete [geometry ids]: their constraints go too. fillet { at, geometry, near, radius, chamfer }. at: [g, v], a corner. Or geometry [g1, g2] near [[x,y],[x,y]]. chamfer: true cuts it straight. The tool trims the curves to the fillet. trim { geometry, at [x,y] }: cuts off the piece there, between crossings. split { geometry, at }. mirror { geometry, about: \"x\" | \"y\" | \"origin\" | a line id }: free mirrored copies, no symmetric constraints added. group [geometry]: held as one (FreeCAD 1.2). text { text, at, height, font, construction }: letters as geometry. exposeInternal [geometry]: the axes of an ellipse or the poles of a B-spline, back as construction geometry. removeAxesAlignment [geometry]. delete, fillet, trim and split renumber geometry. Read sketch_state before you use ids again. Answer: done, state, geometryCount, and bodyAfter when features are built on it. The tool refuses an edit that breaks a feature, with FreeCAD's error, and nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8670,7 +8693,7 @@
      "when": "='move' in a",
      "then": [
       {"let": {"m": "=a.move"}},
-      {"let": {"g": "=gid(sk, m.get('geo'))"}},
+      {"let": {"g": "=gid(sk, m.get('geometry'))"}},
       {"let": {"k": "=geo_kind(sk.Geometry[g])"}},
       {"let": {"p": "=m.get('vertex', 0 if k == 'Line' else 1 if k == 'Point' else 3)"}},
       {"refuse": "move.vertex: 0 the whole curve, 1 its start, 2 its end, 3 its centre.", "when": "=p not in (0, 1, 2, 3) or is_bool(p)"},
@@ -8718,7 +8741,7 @@
      "when": "='construction' in a",
      "then": [
       {"let": {"x": "=a.construction"}},
-      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"g": "=gid(sk, x.get('geometry'))"}},
       {"do": "=sk.setConstruction(g, bool(x.get('on', True)))"},
       {"push": {"done": {"fmt": "construction {g} {bool(x.get('on', True))}"}}}
      ]
@@ -8772,7 +8795,7 @@
             {"do": "=fillet(sk, x.get('chamfer'), gid(sk, g), int(v), r)"}
            ],
            "else": [
-            {"let": {"g1, g2": "=x.get('geos') or []", "q1, q2": "=x.get('near') or []"}},
+            {"let": {"g1, g2": "=x.get('geometry') or []", "q1, q2": "=x.get('near') or []"}},
             {"let": {"g1": "=gid(sk, g1)"}},
             {"let": {"g2": "=gid(sk, g2)"}},
             {"let": {"p1": "=vec2(q1, 'fillet.near')"}},
@@ -8784,7 +8807,7 @@
          "on": ["ValueError", "TypeError"],
          "except": [
           {"refuse": {"fmt": "No fillet of {r:g} mm fits there: {error} — a smaller radius, or a corner where exactly two curves meet (lines and arcs)."}, "code": "failed", "when": "='Not able to fillet' in str(error)"},
-          {"refuse": "fillet: at [geo, vertex] (a corner where two curves meet), or geos [g1, g2] with near [[x, y], [x, y]] (a point on each, on the side to keep), and radius."}
+          {"refuse": "fillet: at [geometry, vertex] (a corner where two curves meet), or geometry [g1, g2] with near [[x, y], [x, y]] (a point on each, on the side to keep), and radius."}
          ]
         }
        ],
@@ -8801,7 +8824,7 @@
      "when": "='trim' in a",
      "then": [
       {"let": {"x": "=a.trim"}},
-      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"g": "=gid(sk, x.get('geometry'))"}},
       {"let": {"at": "=vec2(x.get('at'), 'trim.at')", "n0": "=len(sk.Geometry)"}},
       {
        "try": [
@@ -8818,7 +8841,7 @@
      "when": "='split' in a",
      "then": [
       {"let": {"x": "=a.split"}},
-      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"g": "=gid(sk, x.get('geometry'))"}},
       {"let": {"at": "=vec2(x.get('at'), 'split.at')"}},
       {
        "try": [
@@ -8835,8 +8858,8 @@
      "when": "='mirror' in a",
      "then": [
       {"let": {"x": "=a.mirror"}},
-      {"let": {"geos": "=[gid(sk, g) for g in x.get('geos') or []]"}},
-      {"refuse": "mirror.geos: the geometry ids to mirror.", "when": "=not geos"},
+      {"let": {"geos": "=[gid(sk, g) for g in x.get('geometry') or []]"}},
+      {"refuse": "mirror.geometry: the geometry ids to mirror.", "when": "=not geos"},
       {"let": {"about": "=x.get('about', 'y')"}},
       {"let": {"ref": "={'x': (-1, None), 'y': (-2, None), 'origin': (-1, 1)}.get(about) if is_str(about) else (gid(sk, about), None)"}},
       {"refuse": "mirror.about: \"x\" (the horizontal axis), \"y\" (the vertical), \"origin\", or a line's id.", "when": "=ref is None"},
@@ -8934,7 +8957,7 @@
       {"push": {"done": {"fmt": "axes alignment of {geos} taken off: horizontal/vertical became parallel/perpendicular"}}}
      ]
     },
-    {"refuse": "Give one or more of: group [geos], text { text, at, height, font }, exposeInternal [geos], removeAxesAlignment [geos], move { geo, vertex, to }, set [{ constraint, value }], construction { geo, on }, rename { constraint, name }, deleteConstraints [ids|names], delete [geometry ids], fillet { at [g, v] | geos, near; radius }, trim { geo, at }, split { geo, at }, mirror { geos, about }.", "when": "=not done"},
+    {"refuse": "Give one or more of: group [geometry], text { text, at, height, font }, exposeInternal [geometry], removeAxesAlignment [geometry], move { geometry, vertex, to }, set [{ constraint, value }], construction { geometry, on }, rename { constraint, name }, deleteConstraints [ids|names], delete [geometry ids], fillet { at [g, v] | geometry, near; radius }, trim { geometry, at }, split { geometry, at }, mirror { geometry, about }.", "when": "=not done"},
     {"do": "=doc().recompute()"},
     {"let": {"st": "=state_of(sk)", "b": "=body_of(sk)", "bad": "=broken(doc())"}},
     {"refuse": {"fmt": "After the edit {bad[0]['object']} fails: {bad[0]['error']} — nothing was kept. A feature built on this sketch needs its profile closed and its referenced edges still there: make the edit another way, or change that feature first."}, "code": "failed", "when": "=bad"},
@@ -13869,7 +13892,7 @@
   },
   "asm_joint": {
    "group": "assembly",
-   "description": "Join two parts and solve; a part must be grounded. kind fixed: no motion. revolute: turns about the joint axis. cylindrical: turns and slides. slider: slides only. ball. distance: mm (round faces: from their surface). parallel, perpendicular. angle: degrees (90). Couplings drive one part by another in asm_sweep; each also needs its own revolute or slider. rackpinion: radius1, the pinion's pitch radius. screw: pitch mm a turn. gears, belt: radius1, radius2, else read from round edges, or teeth1, teeth2. chain: the belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125). Else teeth from a PartDesign Sprocket in each part. pitch: the chain pitch, mm (12.7). a, b: a part and a face, edge or datum on it. A flat face: joint at its middle, on its normal. A round edge or face: on its axis. A datum (LCS, plane, line, point): on its origin and z axis. Put joints on LCS markers, not on faces that a boolean makes. near: document coordinates; nearLocal: the part's own frame. When a query's face gets a new name, health picks it again (\"re-picked Face12 -> Face15\"). No face or two equal faces: broken. offset: mm along the joint normal of b; its direction depends on which part moves. gap: mm between the joined faces after the solve (negative: overlap); the tool finds the offset. Not with offset. rotate: degrees about it. reverse: true turns the moved part over; false keeps FreeCAD's direction. Omitted: no turn; a warning names each overlap. autoFlip: true turns it over if that stops the overlap. flipWarning, sideWarning (sideCheck): a part's centre crossed the joint's plane. keep: true finds the offset and turn that hold placed parts; not with offset, rotate, gap, reverse, autoFlip. The part not yet joined to a grounded part moves (a when neither is) with its joined parts. Grounded parts never move. Answer: joint, solve, moved { part: from, to, by }, flipped, overlaps (moved parts), otherPairs, warning, gap mm, at (picked centres), kept, ratio, ratioFrom, queryKept. The tool refuses an unsolved joint; nothing is kept. FreeCAD 1.1's solver does not say the freedom left or a repeated joint: asm_check and asm_sweep show them.",
+   "description": "Join two parts and solve; a part must be grounded. kind fixed: no motion. revolute: turns about the joint axis. cylindrical: turns and slides. slider: slides only. ball. distance: mm (round faces: from their surface). parallel, perpendicular. angle: degrees (90). Couplings drive one part by another in asm_sweep; each also needs its own revolute or slider. rackpinion: radius1, the pinion's pitch radius. screw: pitch mm a turn. gears, belt: radius1, radius2, else read from round edges, or teeth1, teeth2. chain: the belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125). Else teeth from a PartDesign Sprocket in each part. pitch: the chain pitch, mm (12.7). a, b: a part and a face, edge or datum on it. A flat face: joint at its middle, on its normal. A round edge or face: on its axis. A datum (LCS, plane, line, point): on its origin and z axis. Put joints on LCS markers, not on faces that a boolean makes. near: document coordinates; nearLocal: the part's own frame. When a query's face gets a new name, health picks it again (\"re-picked Face12 -> Face15\"). No face or two equal faces: broken. offset: mm along the joint normal of b; its direction depends on which part moves. gap: mm between the joined faces after the solve (negative: overlap); the tool finds the offset. Not with offset. rotate: degrees about it. reversed: true turns the moved part over; false keeps FreeCAD's way. Omitted: no turn; a warning names each overlap. autoFlip: true turns it over if that stops the overlap. flipWarning, sideWarning (sideCheck): a part's centre crossed the joint's plane. keep: true finds the offset and turn that hold placed parts; not with offset, rotate, gap, reversed, autoFlip. The part not yet joined to a grounded part moves (a when neither is) with its joined parts. Grounded parts never move. Answer: joint, solve, moved { part: from, to, by }, flipped, overlaps (moved parts), otherPairs, warning, gap mm, at (picked centres), kept, ratio, ratioFrom, queryKept. The tool refuses an unsolved joint; nothing is kept. FreeCAD 1.1's solver does not say the freedom left or a repeated joint: asm_check and asm_sweep show them.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -13928,7 +13951,7 @@
      "pitch": {
       "type": "number"
      },
-     "reverse": {
+     "reversed": {
       "type": "boolean"
      },
      "autoFlip": {
@@ -13967,9 +13990,9 @@
     {"refuse": {"fmt": "a and b are both on {ends[0][0].Label}: a joint is between two parts of the assembly (asm_list names them)."}, "when": "=ends[0][0] is ends[1][0]"},
     {"refuse": "gap or offset, not both: gap is the mm between the two joined faces after the solve (positive apart, negative overlapping), and the tool finds the offset for it.", "when": "=a.gap is not None and a.offset is not None"},
     {"let": {"want_gap": "=num(a.gap, 'gap') if a.gap is not None else None"}},
-    {"refuse": "keep turns no part over: not with reverse or autoFlip. keep holds the parts where they stand.", "when": "=a.keep and (a.reverse is not None or a.autoFlip)"},
+    {"refuse": "keep turns no part over: not with reversed or autoFlip. keep holds the parts where they stand.", "when": "=a.keep and (a.reversed is not None or a.autoFlip)"},
     {"refuse": "keep, or offset, rotate and gap: keep finds the offset that holds the parts where they stand.", "when": "=a.keep and (a.offset is not None or a.rotate is not None or a.gap is not None)"},
-    {"refuse": "autoFlip or reverse, not both: reverse says the way round, autoFlip lets the tool choose it.", "when": "=a.autoFlip and a.reverse is not None"},
+    {"refuse": "autoFlip or reversed, not both: reversed says the way round, autoFlip lets the tool choose it.", "when": "=a.autoFlip and a.reversed is not None"},
     {"refuse": "teeth1, teeth2: for kind chain, belt and gears only.", "when": "=(a.teeth1 is not None or a.teeth2 is not None) and kind not in ('gears', 'belt', 'chain')"},
     {"let": {"picked": "={'a': element_centre(ends[0][0], ends[0][1]), 'b': element_centre(ends[1][0], ends[1][1])}"}},
     {"let": {"before": "={o.Name: o.Placement.copy() for o in parts(asm)}"}},
@@ -13990,21 +14013,21 @@
     {"try": [{"do": "=asm.clearUndo()"}]},
     {"do": "=doc().recompute()"},
     {"let": {"code, said": "=status(asm)", "flipped": false, "crossed": [], "kept_by": null}},
-    {"when": "=code == 0 and a.reverse", "then": [{"let": {"code, said": "=turn_over(asm, j)", "flipped": true}}]},
-    {"when": "=code == 0 and a.autoFlip and a.reverse is None and kind in REVERSIBLE", "then": [{"let": {"code, said, flipped, crossed": "=auto_flip(asm, j, ends, before)"}}]},
+    {"when": "=code == 0 and a.reversed", "then": [{"let": {"code, said": "=turn_over(asm, j)", "flipped": true}}]},
+    {"when": "=code == 0 and a.autoFlip and a.reversed is None and kind in REVERSIBLE", "then": [{"let": {"code, said, flipped, crossed": "=auto_flip(asm, j, ends, before)"}}]},
     {"when": "=code == 0 and a.keep", "then": [{"let": {"code, said, kept_by": "=keep_offset(asm, j, ends, before) or (code, said, None)"}}, {"refuse": "keep: FreeCAD gave this joint no frames to read (Placement1, Placement2), so the tool cannot find its offset. Nothing was kept; offset and rotate set it by hand.", "when": "=code == 0 and kept_by is None"}]},
     {"when": "=code == 0 and want_gap is not None", "then": [{"let": {"code, said, gap_now, gap_off": "=gap_set(asm, j, ends, want_gap)"}}, {"refuse": {"fmt": "gap: the gap across this joint cannot be measured — a or b must be a flat face, or a round edge on a flat face ({ends[0][0].Label}.{ends[0][1]}, {ends[1][0].Label}.{ends[1][1]}). Nothing was kept; offset (mm along the joint normal of b) works on any element."}, "when": "=code == 0 and gap_now is None"}]},
     {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. asm_ground {{ part }} holds one part first."}, "code": "failed", "when": "=code == -6"},
-    {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. The solver could not put the parts where all the joints ask: this one fights another on the same parts (asm_list shows them; asm_joint_remove takes one out), or the elements cannot meet that way — pick other elements, or for parts far out of place try reverse: true."}, "code": "failed", "when": "=code != 0"},
+    {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. The solver could not put the parts where all the joints ask: this one fights another on the same parts (asm_list shows them; asm_joint_remove takes one out), or the elements cannot meet that way — pick other elements, or for parts far out of place try reversed: true."}, "code": "failed", "when": "=code != 0"},
     {"let": {"moved": "={o.Label: {'from': vec(b.Base), 'to': placement_of(o), 'by': round((o.Placement.Base - b.Base).Length, 4)} for o in parts(asm) for b in [before.get(o.Name)] if b is not None and not o.Placement.isSame(b, 1e-6)}"}},
     {"let": {"hits, ost": "=joint_overlaps(asm, ends, before)"}},
     {"let": {"sides": "=side_check(asm, j, ends, before) if not a.autoFlip else []"}},
-    {"let": {"sides_x": "=[x['part'] for x in sides if x['crossed']]", "side_how": "='reverse: false keeps it as FreeCAD put it.' if a.reverse else 'reverse: true turns it over to the other side.'"}},
+    {"let": {"sides_x": "=[x['part'] for x in sides if x['crossed']]", "side_how": "='reversed: false keeps it as FreeCAD put it.' if a.reversed else 'reversed: true turns it over to the other side.'"}},
     {"let": {"gap_end": "=joint_gap(ends)"}},
-    {"let": {"warn": "=('Parts overlap after the solve: ' + overlap_words(hits) + ('. The tool did not turn a part over. reverse: true turns the moved part over on the joint; autoFlip: true lets the tool try it; else check the sizes.' if not flipped and a.reverse is None and not a.autoFlip and not a.keep and kind in REVERSIBLE else ' — a face picked the wrong way round, or the parts do not fit. reverse: true flips the second part, or check the sizes.')) if hits else None"}},
+    {"let": {"warn": "=('Parts overlap after the solve: ' + overlap_words(hits) + ('. The tool did not turn a part over. reversed: true turns the moved part over on the joint; autoFlip: true lets the tool try it; else check the sizes.' if not flipped and a.reversed is None and not a.autoFlip and not a.keep and kind in REVERSIBLE else ' — a face picked the wrong way round, or the parts do not fit. reversed: true flips the second part, or check the sizes.')) if hits else None"}},
     {"let": {"kept_q": "=keep_notes(j, ends, notes)"}}
    ],
-   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "a": "=end_text(ends[0])", "b": "=end_text(ends[1])", "solve": "=said", "moved": "=moved", "flipped": {"when": "=flipped", "value": "=True if a.reverse else 'turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)'"}, "flipWarning": {"when": "=crossed", "value": {"fmt": "The flip put the centre of {', '.join(c['part'] for c in crossed)} on the other side of the joint's plane. A symmetric part can be the wrong way round now (a chainring on the wrong side): check it. Leave autoFlip out to keep it as FreeCAD put it."}}, "crossedPlane": {"when": "=crossed", "value": "=crossed"}, "sideCheck": {"when": "=sides", "value": "=sides"}, "sideWarning": {"when": "=sides_x", "value": {"fmt": "The solve put the centre of {', '.join(sides_x)} on the other side of the joint's plane (+z or -z of the joint; sideCheck: before, after mm). A part can be on the wrong side now (a drive side on the left): check it. {side_how}"}}, "overlaps": {"when": "=hits", "value": "=hits"}, "otherPairs": {"when": "=ost.get('notChecked')", "value": {"fmt": "{ost['notChecked']} pairs of parts that did not move have boxes that meet: not cut here. asm_check lists their overlaps."}}, "warning": {"when": "=hits", "value": "=warn"}, "kept": {"when": "=kept_by", "value": "=kept_by"}, "keepWarning": {"when": "=kept_by and (kept_by['moved']['mm'] > 0.001 or kept_by['moved']['degrees'] > 0.001)", "value": {"fmt": "keep: the solve still moved the parts {kept_by['moved']['mm']:g} mm and {kept_by['moved']['degrees']:g} degrees. The elements cannot meet as they stand (for a revolute, axes not in line)."}}, "ratio": {"when": "=ratio is not None", "value": "=ratio"}, "ratioFrom": {"when": "=ratio is not None", "value": "=ratio_from"}, "teeth": {"when": "=tt", "value": "=[tt['teeth1'], tt['teeth2']] if tt else None"}, "gap": {"when": "=gap_end is not None", "value": "=gap_end"}, "gapIs": {"when": "=gap_end is not None", "value": "mm between the two joined elements across the joint: positive apart, negative overlapping."}, "gapWarning": {"when": "=want_gap is not None and gap_end is not None and abs(gap_end - want_gap) > 0.001", "value": {"fmt": "gap {want_gap:g} mm was asked; the solver put the parts {gap_end:g} mm apart (another joint holds them)."}}, "offset": {"when": "=want_gap is not None and gap_end is not None", "value": "=round(float(j.Offset2.Base.z), 4)"}, "at": {"when": "=picked['a'] is not None or picked['b'] is not None", "value": "=picked"}, "queryKept": {"when": "=kept_q", "value": "=[('a' if k == 'Reference1' else 'b') for k in sorted(kept_q)]"}}}
+   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "a": "=end_text(ends[0])", "b": "=end_text(ends[1])", "solve": "=said", "moved": "=moved", "flipped": {"when": "=flipped", "value": "=True if a.reversed else 'turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)'"}, "flipWarning": {"when": "=crossed", "value": {"fmt": "The flip put the centre of {', '.join(c['part'] for c in crossed)} on the other side of the joint's plane. A symmetric part can be the wrong way round now (a chainring on the wrong side): check it. Leave autoFlip out to keep it as FreeCAD put it."}}, "crossedPlane": {"when": "=crossed", "value": "=crossed"}, "sideCheck": {"when": "=sides", "value": "=sides"}, "sideWarning": {"when": "=sides_x", "value": {"fmt": "The solve put the centre of {', '.join(sides_x)} on the other side of the joint's plane (+z or -z of the joint; sideCheck: before, after mm). A part can be on the wrong side now (a drive side on the left): check it. {side_how}"}}, "overlaps": {"when": "=hits", "value": "=hits"}, "otherPairs": {"when": "=ost.get('notChecked')", "value": {"fmt": "{ost['notChecked']} pairs of parts that did not move have boxes that meet: not cut here. asm_check lists their overlaps."}}, "warning": {"when": "=hits", "value": "=warn"}, "kept": {"when": "=kept_by", "value": "=kept_by"}, "keepWarning": {"when": "=kept_by and (kept_by['moved']['mm'] > 0.001 or kept_by['moved']['degrees'] > 0.001)", "value": {"fmt": "keep: the solve still moved the parts {kept_by['moved']['mm']:g} mm and {kept_by['moved']['degrees']:g} degrees. The elements cannot meet as they stand (for a revolute, axes not in line)."}}, "ratio": {"when": "=ratio is not None", "value": "=ratio"}, "ratioFrom": {"when": "=ratio is not None", "value": "=ratio_from"}, "teeth": {"when": "=tt", "value": "=[tt['teeth1'], tt['teeth2']] if tt else None"}, "gap": {"when": "=gap_end is not None", "value": "=gap_end"}, "gapIs": {"when": "=gap_end is not None", "value": "mm between the two joined elements across the joint: positive apart, negative overlapping."}, "gapWarning": {"when": "=want_gap is not None and gap_end is not None and abs(gap_end - want_gap) > 0.001", "value": {"fmt": "gap {want_gap:g} mm was asked; the solver put the parts {gap_end:g} mm apart (another joint holds them)."}}, "offset": {"when": "=want_gap is not None and gap_end is not None", "value": "=round(float(j.Offset2.Base.z), 4)"}, "at": {"when": "=picked['a'] is not None or picked['b'] is not None", "value": "=picked"}, "queryKept": {"when": "=kept_q", "value": "=[('a' if k == 'Reference1' else 'b') for k in sorted(kept_q)]"}}}
   },
   "asm_list": {
    "group": "assembly",
@@ -19915,14 +19938,14 @@
   },
   "varset_new": {
    "group": "param",
-   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 and later). name: its label. properties: its variables, for example { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" }. A variable name has letters, digits and _; it must not be a unit or a constant. group: the property group (Variables). Expressions read a variable as <object name>.size (refAs in the answer). param_bind { target, expression: \"Dims.size\" } also takes the label.",
+   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 and later). name: its label. values: its variables, for example { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" }. A variable name has letters, digits and _; it must not be a unit or a constant. group: the property group (Variables). Expressions read a variable as <object name>.size (refAs in the answer). param_bind { target, expression: \"Dims.size\" } also takes the label.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "name": {
       "type": "string"
      },
-     "properties": {
+     "values": {
       "type": "object"
      },
      "group": {
@@ -19946,7 +19969,7 @@
     {"try": [{"let": {"o": "=doc().addObject('App::VarSet', 'VarSet')"}}], "except": [{"refuse": {"fmt": "App::VarSet is FreeCAD 1.0's and later ({error}): param_set keeps parameters in a Params sheet instead."}, "code": "unavailable"}]},
     {"set": {"o.Label": "=name"}},
     {"let": {"done": "={}"}},
-    {"when": "=a.properties", "then": [{"try": [{"let": {"props": "=a.properties or {}"}}, {"refuse": {"fmt": "properties: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"}, {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "properties.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "properties.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "properties.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "properties.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "properties.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]}], "on": "refusal", "except": [{"do": "=doc().removeObject(o.Name)"}], "reraise": true}]},
+    {"when": "=a.values", "then": [{"try": [{"let": {"props": "=a.values or {}"}}, {"refuse": {"fmt": "values: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"}, {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "values.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "values.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "values.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "values.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "values.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]}], "on": "refusal", "except": [{"do": "=doc().removeObject(o.Name)"}], "reraise": true}]},
     {"do": "=doc().recompute()"},
     {"let": {"found": "=(repair_refs(doc(), refs) or {}) if refs and broken(doc()) else {}"}},
     {"let": {"bad": "=broken(doc())"}},
@@ -19957,14 +19980,14 @@
   },
   "varset_set": {
    "group": "param",
-   "description": "Set or add variables of a variable set. varset: its label (you can omit it when there is only one). properties: { name: value }, as varset_new takes them. An existing variable keeps its kind: a length takes \"60 mm\", not text. All objects bound to the variables recompute. The tool refuses a value that breaks a feature, and nothing is kept. Answer: variables, usedBy, bodies.",
+   "description": "Set or add variables of a variable set. varset: its label (you can omit it when there is only one). values: { name: value }, as varset_new takes them. An existing variable keeps its kind: a length takes \"60 mm\", not text. All objects bound to the variables recompute. The tool refuses a value that breaks a feature, and nothing is kept. Answer: variables, usedBy, bodies.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "varset": {
       "type": "string"
      },
-     "properties": {
+     "values": {
       "type": "object"
      },
      "group": {
@@ -19972,7 +19995,7 @@
      }
     },
     "required": [
-     "properties"
+     "values"
     ],
     "additionalProperties": false
    },
@@ -19982,12 +20005,12 @@
    "runner": "steps",
    "steps": [
     {"let": {"vs": "=varsets()", "ref": "=a.varset"}},
-    {"refuse": {"fmt": "No variable set here: varset_new {{ name, properties }} makes one."}, "code": "not_found", "when": "=not vs"},
+    {"refuse": {"fmt": "No variable set here: varset_new {{ name, values }} makes one."}, "code": "not_found", "when": "=not vs"},
     {"when": "=ref is None", "then": [{"refuse": {"fmt": "varset: say which — {', '.join([x.Label for x in vs])}."}, "when": "=len(vs) != 1"}, {"let": {"o": "=vs[0]"}}], "else": [{"let": {"o": "=first([x for x in vs if ref in (x.Label, x.Name)])"}}, {"refuse": {"fmt": "varset {ref!r}: the variable sets are {', '.join([x.Label for x in vs])}."}, "code": "not_found", "when": "=o is None"}]},
     {"let": {"refs": "=ref_snap()", "done": "={}"}},
-    {"let": {"props": "=a.properties"}},
-    {"refuse": {"fmt": "properties: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"},
-    {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "properties.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "properties.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "properties.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "properties.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "properties.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]},
+    {"let": {"props": "=a.values"}},
+    {"refuse": {"fmt": "values: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"},
+    {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "values.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "values.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "values.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "values.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "values.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]},
     {"do": "=doc().recompute()"},
     {"let": {"found": "=(repair_refs(doc(), refs) or {}) if refs and broken(doc()) else {}"}},
     {"let": {"bad": "=broken(doc())"}},
@@ -20691,7 +20714,7 @@
   },
   "sketch_extend": {
    "group": "sketch",
-   "description": "Make a line or arc of a circle longer (or shorter) at one end. geo: the curve. end: 1 | 2 (default 2). by: mm; negative makes it shorter. For an arc, by is along the arc. Or to: the id of another curve that a line must reach.",
+   "description": "Make a line or arc of a circle longer (or shorter) at one end. geometry: the curve. end: 1 | 2 (default 2). by: mm; negative makes it shorter. For an arc, by is along the arc. Or to: the id of another curve that a line must reach.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20699,7 +20722,7 @@
       "type": "string",
       "description": "The sketch's name; may be left out when there is one."
      },
-     "geo": {
+     "geometry": {
       "type": "integer"
      },
      "end": {
@@ -20713,7 +20736,7 @@
      }
     },
     "required": [
-     "geo"
+     "geometry"
     ],
     "additionalProperties": false
    },
@@ -20724,10 +20747,10 @@
    "runner": "steps",
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
-    {"let": {"g": "=a.geo", "n": "=len(sk.Geometry)"}},
-    {"refuse": {"fmt": "geo: the id of a line or an arc of a circle in {sk.Label} (0 to {n - 1}; sketch_state lists them)."}, "when": "=not is_int(g) or not 0 <= g < n"},
+    {"let": {"g": "=a.geometry", "n": "=len(sk.Geometry)"}},
+    {"refuse": {"fmt": "geometry: the id of a line or an arc of a circle in {sk.Label} (0 to {n - 1}; sketch_state lists them)."}, "when": "=not is_int(g) or not 0 <= g < n"},
     {"let": {"kind": "=kind_of(sk.Geometry[g])"}},
-    {"refuse": {"fmt": "geo {g} is a {kind}: FreeCAD extends lines and arcs of circles only. For another curve: sketch_edit move its end point, or sketch_edit split / trim."}, "when": "=kind not in ('LineSegment', 'ArcOfCircle')"},
+    {"refuse": {"fmt": "geometry {g} is a {kind}: FreeCAD extends lines and arcs of circles only. For another curve: sketch_edit move its end point, or sketch_edit split / trim."}, "when": "=kind not in ('LineSegment', 'ArcOfCircle')"},
     {"let": {"end": "=a.get('end', 2)"}},
     {"refuse": "end: 1 (the start) or 2 (the end) — sketch_state shows which is which (from/to, start/end).", "when": "=end not in (1, 2) or is_bool(end)"},
     {"when": "=a.to is not None", "then": [{"let": {"t": "=a.to"}}, {"refuse": "to: works for a line; for an arc give by, mm along the arc.", "when": "=kind != 'LineSegment'"}, {"refuse": {"fmt": "to: the id of another curve in {sk.Label} (0 to {n - 1}) for the line to reach."}, "when": "=not is_int(t) or not 0 <= t < n or t == g"}, {"let": {"gap, inc": "=reach(sk, g, end, t)"}}, {"refuse": {"fmt": "Line {g} does not meet geometry {t} going on from its {'start' if end == 1 else 'end'}: try the other end, or give by (mm)."}, "code": "not_found", "when": "=gap > 1e-6"}, {"refuse": {"fmt": "Line {g} already reaches geometry {t} at that end: nothing to extend."}, "code": "invalid_state", "when": "=inc < 1e-9"}, {"let": {"amount": "=inc"}}], "else": [{"let": {"by": "=a.get('by', 0)"}}, {"refuse": "Give by (mm to add at that end; negative shortens; along the arc for an arc) or to (the id of a curve a line should reach).", "when": "=not is_num(by) or by == 0"}, {"let": {"inc": "=float(by)"}}, {"let": {"amount": "=inc / sk.Geometry[g].Radius if kind == 'ArcOfCircle' else inc"}}]},
@@ -20741,7 +20764,7 @@
   },
   "sketch_join": {
    "group": "sketch",
-   "description": "Join the ends of two open curves into one B-spline. a: [geo, vertex]. b: [geo, vertex]. vertex: 1 | 2, on different curves. continuity: 0 (corner) or 1 (smooth). It replaces both, so ids change. Answer: bspline, its id.",
+   "description": "Join the ends of two open curves into one B-spline. a: [geometry, vertex]. b: [geometry, vertex]. vertex: 1 | 2, on different curves. continuity: 0 (corner) or 1 (smooth). It replaces both, so ids change. Answer: bspline, its id.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20775,9 +20798,9 @@
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
     {"let": {"x": "=a.a", "y": "=a.b"}},
-    {"refuse": "a and b: [geo, vertex] each, vertex 1 (start) or 2 (end) — the two ends, of two different curves, to join into one B-spline.", "when": "=not (is_list(x) and is_list(y) and len(x) == len(y) == 2)"},
+    {"refuse": "a and b: [geometry, vertex] each, vertex 1 (start) or 2 (end) — the two ends, of two different curves, to join into one B-spline.", "when": "=not (is_list(x) and is_list(y) and len(x) == len(y) == 2)"},
     {"let": {"n": "=len(sk.Geometry)"}},
-    {"refuse": {"fmt": "a and b: [geo, vertex] of two different curves in {sk.Label} (ids 0 to {n - 1}), vertex 1 (start) or 2 (end) — FreeCAD cannot join a curve to itself."}, "when": "=not all([is_int(v) for v in x + y]) or not (0 <= x[0] < n and 0 <= y[0] < n) or x[0] == y[0] or x[1] not in (1, 2) or y[1] not in (1, 2)"},
+    {"refuse": {"fmt": "a and b: [geometry, vertex] of two different curves in {sk.Label} (ids 0 to {n - 1}), vertex 1 (start) or 2 (end) — FreeCAD cannot join a curve to itself."}, "when": "=not all([is_int(v) for v in x + y]) or not (0 <= x[0] < n and 0 <= y[0] < n) or x[0] == y[0] or x[1] not in (1, 2) or y[1] not in (1, 2)"},
     {"let": {"cont": "=a.get('continuity', 0)"}},
     {"refuse": "continuity: 0 (the two meet at a corner) or 1 (smooth).", "when": "=cont not in (0, 1)"},
     {"try": [{"do": "=sk.join(x[0], x[1], y[0], y[1], cont)"}], "except": [{"refuse": {"fmt": "The join failed: {error} — nothing was changed. Both must be open curves (not circles, ellipses or closed B-splines), both construction or both not."}, "code": "failed"}]},
@@ -20916,14 +20939,14 @@
   },
   "sketch_bspline": {
    "group": "sketch",
-   "description": "Edit a B-spline in a sketch. geo: the B-spline. op degree: by +1 raises, -1 lowers. op knot: param inserts a knot there, with multiplicity. Or knot: its index from 1, with by to raise/lower its multiplicity. A multiplicity at 0 continuity makes a corner. Answer: degree, poles, knots, multiplicities.",
+   "description": "Edit a B-spline in a sketch. geometry: the B-spline. op degree: by +1 raises, -1 lowers. op knot: param inserts a knot there, with multiplicity. Or knot: its index from 1, with by to raise/lower its multiplicity. A multiplicity at 0 continuity makes a corner. Answer: degree, poles, knots, multiplicities.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "sketch": {
       "type": "string"
      },
-     "geo": {
+     "geometry": {
       "type": "integer"
      },
      "op": {
@@ -20947,7 +20970,7 @@
      }
     },
     "required": [
-     "geo",
+     "geometry",
      "op"
     ],
     "additionalProperties": false
@@ -20959,14 +20982,14 @@
    "runner": "steps",
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
-    {"let": {"g": "=a.geo"}},
-    {"refuse": "geo: the id of a B-spline in the sketch (sketch_state lists kinds; sketch_to_bspline converts other curves).", "when": "=not (is_number(g) and not is_float(g)) or not 0 <= g < len(sk.Geometry) or 'BSpline' not in kind_of(sk.Geometry[g])"},
+    {"let": {"g": "=a.geometry"}},
+    {"refuse": "geometry: the id of a B-spline in the sketch (sketch_state lists kinds; sketch_to_bspline converts other curves).", "when": "=not (is_number(g) and not is_float(g)) or not 0 <= g < len(sk.Geometry) or 'BSpline' not in kind_of(sk.Geometry[g])"},
     {"let": {"op": "=a.op", "snap": "=kept(sk)"}},
     {"try": [{"choose": "=op", "of": {"degree": [{"let": {"by": "=int(a.get('by', 1))"}}, {"when": "=by > 0", "then": [{"do": "=sk.increaseBSplineDegree(g, by)"}], "else": [{"refuse": "by: how many degrees to raise (+1) or lower (-1), not 0.", "when": "=by == 0"}, {"refuse": {"fmt": "This FreeCAD cannot lower a B-spline's degree: draw it again with sketch_add bspline {{ interpolate: false, degree }}."}, "code": "unavailable", "when": "=not has(sk, 'decreaseBSplineDegree')"}, {"do": "=lower_degree(sk, g, -by)"}]}], "knot": [{"when": "=a.param is not None", "then": [{"do": "=sk.insertBSplineKnot(g, float(a.param), int(a.get('multiplicity', 1)))"}], "else": [{"do": "=sk.modifyBSplineKnotMultiplicity(g, int(a.get('knot', 1)), int(a.get('by', 1)))"}]}]}, "else": [{"refuse": "op: degree (by +1 / -1) | knot (param: insert one there, multiplicity; or knot: its index from 1, by: its multiplicity up or down)."}]}], "on": "failure", "except": [{"do": "=restore(sk, snap)"}, {"refuse": {"fmt": "Sketcher refused: {error} — the B-spline is as it was. A knot's index runs from 1 to the count of knots, param lies inside its knot range, and a multiplicity cannot pass the degree (the reply of a successful call lists knots and multiplicities)."}, "code": "failed"}]},
     {"do": "=doc().recompute()"},
     {"let": {"bs": "=[x for x in sk.Geometry if 'BSpline' in kind_of(x)]"}},
-    {"let": {"geo": "=sk.Geometry[g] if g < len(sk.Geometry) and 'BSpline' in kind_of(sk.Geometry[g]) else bs[-1]"}},
-    {"let": {"extra": "={'geo': g, 'degree': int(geo.Degree), 'poles': int(geo.NbPoles), 'knots': [round(k, 4) for k in geo.getKnots()], 'multiplicities': list(geo.getMultiplicities())}"}},
+    {"let": {"bsp": "=sk.Geometry[g] if g < len(sk.Geometry) and 'BSpline' in kind_of(sk.Geometry[g]) else bs[-1]"}},
+    {"let": {"extra": "={'geometry': g, 'degree': int(bsp.Degree), 'poles': int(bsp.NbPoles), 'knots': [round(k, 4) for k in bsp.getKnots()], 'multiplicities': list(bsp.getMultiplicities())}"}},
     {"do": "=doc().recompute()"},
     {"let": {"bad": "=broken(doc())"}},
     {"refuse": {"fmt": "That breaks {bad[0]['object']}: {bad[0]['error']} — nothing was kept. sketch_state reads the sketch as it is; a feature built on it needs its profile closed."}, "code": "failed", "when": "=bad"}
@@ -21067,7 +21090,7 @@
   },
   "sketch_attach": {
    "group": "sketch",
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. flip. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and flip stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. reversed: true reverses the normal. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and reversed stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21086,7 +21109,7 @@
      "rotate": {
       "type": "number"
      },
-     "flip": {
+     "reversed": {
       "type": "boolean"
      },
      "edge": {
@@ -21123,7 +21146,7 @@
     {"let": {"owner": "=link[0]", "moved": "=False", "order": "=list(b.Group)"}},
     {"when": "=has(owner, 'isDerivedFrom') and owner.isDerivedFrom('PartDesign::Feature') and sk in order and owner in order and order.index(owner) >= order.index(sk)", "then": [{"let": {"built": "=[o for o in sk.InList if o is not b and o is not owner and b.hasObject(o) and o.isDerivedFrom('PartDesign::Feature')]"}}, {"refuse": {"fmt": "{owner.Label} (whose face it is) is built after {sk.Label}{', and ' + ', '.join([u.Label for u in built]) + ' is built from ' + sk.Label if built else ''}: attaching would make the sketch hang on a later feature (a cyclic support). Attach to an earlier face or plane, or make a new sketch on that face (sketch_new {{ face }})."}, "code": "invalid_state", "when": "=built or owner in sk.InListRecursive"}, {"try": [{"do": ["=b.removeObject(sk)", "=b.insertObject(sk, owner, True)"]}], "except": [{"refuse": {"fmt": "{sk.Label} comes before {owner.Label} in {b.Label} and could not be moved after it ({error}): make a new sketch on that face (sketch_new {{ face }})."}, "code": "failed"}]}, {"let": {"moved": "=True"}}]},
     {"do": "=setprop(sk, support_prop(sk), [(link[0], link[1][0])])"},
-    {"set": {"sk.MapMode": "FlatFace", "sk.MapReversed": "=bool(a.get('flip', False))"}},
+    {"set": {"sk.MapMode": "FlatFace", "sk.MapReversed": "=bool(a.get('reversed', False))"}},
     {"let": {"off": "=float(a.get('offset', 0))", "rot": "=float(a.get('rotate', 0))"}},
     {"set": {"sk.AttachmentOffset": "=placement(V(0, 0, off), rotation(V(0, 0, 1), rot))"}},
     {"do": "=doc().recompute()"},
@@ -21458,18 +21481,14 @@
   },
   "object_set": {
    "group": "doc",
-   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. For one property, property and value also work: { property: \"Length\", value: 20 }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. On an attached object, Placement sets the AttachmentOffset (redirected). Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename. Prefer attachment and expressions to a typed Placement for a part's position. Attach to the skeleton or a datum, and bind the offset to a parameter.",
-   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "values": {"type": "object"}, "property": {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}, "value": {}}, "required": ["object"], "additionalProperties": false},
+   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. On an attached object, Placement sets the AttachmentOffset (redirected). Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename. Prefer attachment and expressions to a typed Placement for a part's position. Attach to the skeleton or a datum, and bind the offset to a parameter.",
+   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "values": {"type": "object"}}, "required": ["object", "values"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
     {"let": {"o": "=find(a.get('object'))", "vals": "=a.get('values')"}},
-    {"refuse": "values or property with value, not both: values { Property: value, … } sets several, property and value set one.", "when": "=vals is not None and (a.get('property') is not None or 'value' in a)"},
-    {"refuse": "value: the new value of property (property and value go together; values { Property: value } is the other way).", "when": "=a.get('property') is not None and 'value' not in a"},
-    {"refuse": "property: the name of the property that value sets (property and value go together; values { Property: value } is the other way).", "when": "='value' in a and not (is_str(a.get('property')) and a.get('property').strip())"},
-    {"let": {"vals": "=dict([(a.get('property').strip(), a.get('value'))])"}, "when": "=vals is None and is_str(a.get('property')) and a.get('property').strip()"},
     {"refuse": "values: { Property: value, … } — object_get gives the names and types.", "when": "=not is_dict(vals) or not vals"},
     {"let": {"vals, redirected": "=attach_redirect(o, vals)"}},
     {"let": {"props": "=set(o.PropertiesList)"}},
@@ -21926,6 +21945,6 @@
   "cookbook_export": {"group": "porting", "description": "Write one installed cookbook to a .json file, with its script files put in the file as calls. name: the cookbook. path: the file to write. A person who imports it gives their own OK. Changes nothing in the document.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "path": {"type": "string"}}, "required": ["name", "path"], "additionalProperties": false}, "changes": false, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=export_cookbook(a.name, a.path)"}}},
   "cookbook_approve": {"group": "porting", "description": "Ask for the person's approval to run a cookbook. name: the cookbook. A cookbook runs code with the full reach of the Mac. Show cookbook_show to the person first. The tool never approves by itself. The first call answers pending with the approve_code arguments: name, source, version (the sha256) and author. Call approve_code with them. The person sets approve_code in the client's tool permissions: with \"ask first\", the client asks the person before the call. A typed confirm is not taken. Answer: pending, with approve, next, scan and risk. scan: what the static scan of the add-on's code found. After the approval, cookbook_list shows the cookbook approved. sha256: the hash that cookbook_show gave. A file that changed since then is refused. The approval holds until the file or one of its script files changes. Then it needs a new approval.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "sha256": {"type": "string"}}, "required": ["name"], "additionalProperties": false}, "changes": false, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=approve_cookbook(a.name, a.sha256)"}}},
   "cookbook_unapprove": {"group": "porting", "description": "Take a cookbook off the approved list. cookbook_run then refuses its entries until the person approves it again.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}, "changes": false, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=unapprove_cookbook(a.name)"}}},
-  "cookbook_run": {"group": "porting", "description": "Run one entry of an approved cookbook. name: the cookbook. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. If the command is not loaded, the add-on's workbench is activated first, and workbench in the answer says so. A python entry calls its function with args, checked against its args schema. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, workbench, result.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "entry": {"type": "string"}, "args": {"type": "object"}}, "required": ["name", "entry"], "additionalProperties": false}, "changes": true, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=run_entry(a.name, a.entry, a.get('args'))"}}}
+  "cookbook_run": {"group": "porting", "description": "Run one entry of an approved cookbook. name: the cookbook. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. If the command is not loaded, the add-on's workbench is activated first, and workbench in the answer says so. A python entry calls its function with arguments, checked against the arguments that cookbook_show gives. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, workbench, result.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "entry": {"type": "string"}, "arguments": {"type": "object"}}, "required": ["name", "entry"], "additionalProperties": false}, "changes": true, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=run_entry(a.name, a.entry, a.get('arguments'))"}}}
  }
 }

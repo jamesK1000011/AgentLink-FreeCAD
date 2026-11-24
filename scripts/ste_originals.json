@@ -108,7 +108,7 @@
    "kind": "data"
   },
   "asm_joint": {
-   "description": "Join two parts and solve (needs a grounded part): kind fixed (no motion), revolute (turns about the joint's axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between the elements; round faces count from their surface), parallel, perpendicular, angle (angle degrees, 90); couplings, which tie one motion to another for asm_sweep and need each part's own revolute or slider too: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out); chain, FreeCAD's belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125): the teeth given, or read from a PartDesign Sprocket (NumberOfTeeth) in each part, pitch the chain pitch mm (12.7); gears and belt take teeth1, teeth2 too; reply ratio and ratioFrom. a and b each a part and a face or edge on it — a flat face puts the joint at its middle along its normal; a round edge or cylindrical face, on its axis. offset mm along b's joint normal and rotate degrees about it; reverse: true turns the moved part over (false keeps FreeCAD's way; left out, no part is turned over by itself: parts that overlap after the solve get a warning naming them, with how to flip; autoFlip: true turns the moved part over when that stops the overlap, the old way, and flipWarning says when the flip put a part's centre on the other side of the joint's plane). keep: true, for parts already placed: the offset (and the turn about the joint) that holds them where they stand, so nothing moves — reply kept { property, at, axis, angle, moved }; not with offset, rotate, gap, reverse or autoFlip. Which part moves: the one not yet joined to a grounded part (a when neither is), with what is joined to it; a grounded part never. Reply: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. Unsolved is refused, nothing kept. FreeCAD 1.1's solver answers only solved or solver error — not freedom left, nor a joint that repeats another: asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates). a or b may be a datum inside the part — an LCS, datum plane, line or point (element: its name or label, or { datum }): the joint sits on its origin along its z axis, and stays on through booleans and edits; put joints on LCS markers, not on faces a boolean makes. An end picked by a query keeps the query (queryKept): when a later change renumbers that face, the health check runs it again and re-points the joint (\"re-picked Face12 -> Face15\"), or leaves it broken and says why (nothing found, or two equal matches).",
+   "description": "Join two parts and solve (needs a grounded part): kind fixed (no motion), revolute (turns about the joint's axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between the elements; round faces count from their surface), parallel, perpendicular, angle (angle degrees, 90); couplings, which tie one motion to another for asm_sweep and need each part's own revolute or slider too: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out); chain, FreeCAD's belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125): the teeth given, or read from a PartDesign Sprocket (NumberOfTeeth) in each part, pitch the chain pitch mm (12.7); gears and belt take teeth1, teeth2 too; reply ratio and ratioFrom. a and b each a part and a face or edge on it — a flat face puts the joint at its middle along its normal; a round edge or cylindrical face, on its axis. offset mm along b's joint normal and rotate degrees about it; reversed: true turns the moved part over (false keeps FreeCAD's way; left out, no part is turned over by itself: parts that overlap after the solve get a warning naming them, with how to flip; autoFlip: true turns the moved part over when that stops the overlap, the old way, and flipWarning says when the flip put a part's centre on the other side of the joint's plane). keep: true, for parts already placed: the offset (and the turn about the joint) that holds them where they stand, so nothing moves — reply kept { property, at, axis, angle, moved }; not with offset, rotate, gap, reversed or autoFlip. Which part moves: the one not yet joined to a grounded part (a when neither is), with what is joined to it; a grounded part never. Reply: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. Unsolved is refused, nothing kept. FreeCAD 1.1's solver answers only solved or solver error — not freedom left, nor a joint that repeats another: asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates). a or b may be a datum inside the part — an LCS, datum plane, line or point (element: its name or label, or { datum }): the joint sits on its origin along its z axis, and stays on through booleans and edits; put joints on LCS markers, not on faces a boolean makes. An end picked by a query keeps the query (queryKept): when a later change renumbers that face, the health check runs it again and re-points the joint (\"re-picked Face12 -> Face15\"), or leaves it broken and says why (nothing found, or two equal matches).",
    "inputs": [
     "a",
     "angle",
@@ -123,7 +123,7 @@
     "pitch",
     "radius1",
     "radius2",
-    "reverse",
+    "reversed",
     "rotate",
     "teeth1",
     "teeth2"
@@ -1000,9 +1000,9 @@
    "kind": "data"
   },
   "cookbook_run": {
-   "description": "Run one entry of an approved cookbook. cookbook: its name. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. A python entry calls its function with args, checked against its args schema. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, result.",
+   "description": "Run one entry of an approved cookbook. cookbook: its name. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. A python entry calls its function with arguments, checked against its arguments schema. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, result.",
    "inputs": [
-    "args",
+    "arguments",
     "cookbook",
     "entry"
    ],
@@ -1559,11 +1559,11 @@
    "kind": "data"
   },
   "feature_edit": {
-   "description": "Change a feature's properties by FreeCAD's names: set { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … } (feature_list shows them; a wrong enumeration value lists the right ones); recomputes. Links (sketch, edges, axis) are not edited: remove and remake. A change that breaks it or a later feature is refused and undone; fillets whose edges it renumbered are found again (refsFound). A property bound to a parameter is changed with param_set.",
+   "description": "Change a feature's properties by FreeCAD's names: values { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … } (feature_list shows them; a wrong enumeration value lists the right ones); recomputes. Links (sketch, edges, axis) are not edited: remove and remake. A change that breaks it or a later feature is refused and undone; fillets whose edges it renumbered are found again (refsFound). A property bound to a parameter is changed with param_set.",
    "inputs": [
     "body",
     "feature",
-    "set"
+    "values"
    ],
    "kind": "data"
   },
@@ -2269,7 +2269,7 @@
    "kind": "data"
   },
   "object_set": {
-   "description": "Set properties of an object: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\" (a link, by name or label; null clears), Mode: \"…\" } — each converted to its type: numbers are mm and degrees, or a string with a unit (\"1 in\", \"30 deg\") for lengths, angles and other quantities (not plain floats); whole numbers for integers and percents; enumerations checked against their choices; vectors [x,y,z]. Read-only properties, links to faces or edges and property names it does not have are refused (object_get lists names, types, choices). Recomputes the object and what is built from it; refused with nothing kept when that fails. Reply: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement; Label is set with object_rename. For one property, property and value also work: { property: \"Length\", value: 20 }.",
+   "description": "Set properties of an object: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\" (a link, by name or label; null clears), Mode: \"…\" } — each converted to its type: numbers are mm and degrees, or a string with a unit (\"1 in\", \"30 deg\") for lengths, angles and other quantities (not plain floats); whole numbers for integers and percents; enumerations checked against their choices; vectors [x,y,z]. Read-only properties, links to faces or edges and property names it does not have are refused (object_get lists names, types, choices). Recomputes the object and what is built from it; refused with nothing kept when that fails. Reply: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement; Label is set with object_rename.",
    "inputs": [
     "object",
     "values"
@@ -3532,22 +3532,22 @@
    "kind": "data"
   },
   "sketch_attach": {
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient): plane XY | XZ | YZ | a datum plane | \"Pad.Face3\", or face { at, normal, feature? }; offset mm along its normal, rotate deg in it, flip. A face is bound to the feature that made it (the earliest in the body that has it, or feature), not the tip; a sketch that sits before that feature is moved after it (refused when a feature is built from it).",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient): plane XY | XZ | YZ | a datum plane | \"Pad.Face3\", or face { at, normal, feature? }; offset mm along its normal, rotate deg in it, reversed. A face is bound to the feature that made it (the earliest in the body that has it, or feature), not the tip; a sketch that sits before that feature is moved after it (refused when a feature is built from it).",
    "inputs": [
     "face",
-    "flip",
     "offset",
     "plane",
+    "reversed",
     "rotate",
     "sketch"
    ],
    "kind": "data"
   },
   "sketch_bspline": {
-   "description": "Edit a B-spline in a sketch: geo, op degree (by: +1 raises, -1 lowers) | knot (param: insert a knot there, multiplicity; or knot: its index from 1 and by: raise/lower its multiplicity — a corner at 0 continuity). Answers degree, poles, knots, multiplicities.",
+   "description": "Edit a B-spline in a sketch: geometry, op degree (by: +1 raises, -1 lowers) | knot (param: insert a knot there, multiplicity; or knot: its index from 1 and by: raise/lower its multiplicity — a corner at 0 continuity). Answers degree, poles, knots, multiplicities.",
    "inputs": [
     "by",
-    "geo",
+    "geometry",
     "knot",
     "multiplicity",
     "op",
@@ -3587,7 +3587,7 @@
    "kind": "data"
   },
   "sketch_edit": {
-   "description": "Edit a sketch; several keys may go in one call, done in this order: move { geo, vertex (0 the whole curve, 1/2/3), to [x,y] } (drags it as far as its constraints let it), set [{ constraint: id|name, value mm|deg }], construction { geo, on }, rename { constraint, name }, deleteConstraints [id|name], delete [geometry ids — their constraints go too], fillet { at: [g, v] a corner, or geos [g1, g2] near [[x,y],[x,y]]; radius; chamfer: true cuts it straight } (the curves trimmed to it), trim { geo, at [x,y] } (cuts off the piece there, between crossings), split { geo, at }, mirror { geos, about: \"x\" | \"y\" | \"origin\" | a line id } (free mirrored copies: no symmetric constraints are added), group [geos] (held as one, FreeCAD 1.2), text { text, at, height, font, construction } (letters as geometry), exposeInternal [geos] (an ellipse's axes or a B-spline's poles back as construction geometry), removeAxesAlignment [geos]. delete, fillet, trim and split renumber geometry: read sketch_state before using ids again. Answers done, state, geometryCount, and bodyAfter when features are built on it; an edit that breaks one is refused with FreeCAD's error and nothing kept.",
+   "description": "Edit a sketch; several keys may go in one call, done in this order: move { geometry, vertex (0 the whole curve, 1/2/3), to [x,y] } (drags it as far as its constraints let it), set [{ constraint: id|name, value mm|deg }], construction { geometry, on }, rename { constraint, name }, deleteConstraints [id|name], delete [geometry ids — their constraints go too], fillet { at: [g, v] a corner, or geometry [g1, g2] near [[x,y],[x,y]]; radius; chamfer: true cuts it straight } (the curves trimmed to it), trim { geometry, at [x,y] } (cuts off the piece there, between crossings), split { geometry, at }, mirror { geometry, about: \"x\" | \"y\" | \"origin\" | a line id } (free mirrored copies: no symmetric constraints are added), group [geometry] (held as one, FreeCAD 1.2), text { text, at, height, font, construction } (letters as geometry), exposeInternal [geometry] (an ellipse's axes or a B-spline's poles back as construction geometry), removeAxesAlignment [geometry]. delete, fillet, trim and split renumber geometry: read sketch_state before using ids again. Answers done, state, geometryCount, and bodyAfter when features are built on it; an edit that breaks one is refused with FreeCAD's error and nothing kept.",
    "inputs": [
     "construction",
     "delete",
@@ -3608,11 +3608,11 @@
    "kind": "data"
   },
   "sketch_extend": {
-   "description": "Lengthen (or shorten) a line or arc of a circle at one end: geo, end 1 | 2 (default 2), by mm (negative shortens; along the arc for an arc), or to: another curve's id a line should reach.",
+   "description": "Lengthen (or shorten) a line or arc of a circle at one end: geometry, end 1 | 2 (default 2), by mm (negative shortens; along the arc for an arc), or to: another curve's id a line should reach.",
    "inputs": [
     "by",
     "end",
-    "geo",
+    "geometry",
     "sketch",
     "to"
    ],
@@ -3627,7 +3627,7 @@
    "kind": "data"
   },
   "sketch_join": {
-   "description": "Join two open curves' ends into one B-spline: a [geo, vertex], b [geo, vertex] (vertex 1 | 2, different curves), continuity 0 (corner) or 1 (smooth). It replaces both: ids change; answers bspline, its id.",
+   "description": "Join two open curves' ends into one B-spline: a [geometry, vertex], b [geometry, vertex] (vertex 1 | 2, different curves), continuity 0 (corner) or 1 (smooth). It replaces both: ids change; answers bspline, its id.",
    "inputs": [
     "a",
     "b",
@@ -3655,16 +3655,16 @@
    "kind": "data"
   },
   "sketch_new": {
-   "description": "A new sketch in a body, on plane XY | XZ | YZ | a datum plane's name | \"Pad.Face3\", or on a face of the solid found by face { at: a point on it, normal: its outward normal } — never by face index, which changes after edits. One of plane or face. offset mm along the normal; flip reverses it. A face sketch is lined up with the world: its x along the world axis that lies most in the face. Answers sketch (its label) and frame: where sketch x/y and its origin lie in the world.",
+   "description": "A new sketch in a body, on plane XY | XZ | YZ | a datum plane's name | \"Pad.Face3\", or on a face of the solid found by face { at: a point on it, normal: its outward normal } — never by face index, which changes after edits. One of plane or face. offset mm along the normal; reversed reverses it. A face sketch is lined up with the world: its x along the world axis that lies most in the face. Answers sketch (its label) and frame: where sketch x/y and its origin lie in the world.",
    "inputs": [
     "at",
     "body",
     "face",
-    "flip",
     "name",
     "normal",
     "offset",
     "plane",
+    "reversed",
     "tol"
    ],
    "kind": "data"
@@ -4287,19 +4287,19 @@
    "kind": "coded"
   },
   "varset_new": {
-   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 on): name (its label), properties { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" } as its variables (names: letters, digits, _; not a unit or constant), group (Variables). Expressions read them as <object name>.size (the reply's refAs) — param_bind { target, expression: \"Dims.size\" } takes the label too.",
+   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 on): name (its label), values { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" } as its variables (names: letters, digits, _; not a unit or constant), group (Variables). Expressions read them as <object name>.size (the reply's refAs) — param_bind { target, expression: \"Dims.size\" } takes the label too.",
    "inputs": [
     "group",
     "name",
-    "properties"
+    "values"
    ],
    "kind": "data"
   },
   "varset_set": {
-   "description": "Set or add variables of a variable set: varset (its label; may be left out when there is one), properties { name: value } as varset_new takes them (an existing one keeps its kind: a length takes \"60 mm\", not text). Everything bound to them recomputes; a value that breaks a feature is refused and nothing kept. Reply: variables, usedBy, bodies.",
+   "description": "Set or add variables of a variable set: varset (its label; may be left out when there is one), values { name: value } as varset_new takes them (an existing one keeps its kind: a length takes \"60 mm\", not text). Everything bound to them recomputes; a value that breaks a feature is refused and nothing kept. Reply: variables, usedBy, bodies.",
    "inputs": [
     "group",
-    "properties",
+    "values",
     "varset"
    ],
    "kind": "data"

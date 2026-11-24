@@ -395,9 +395,9 @@ def _special(name, args, body):
         return f"Closed {what}" + (" (not saved)" if a.get("discard") else "")
     if name == "object_set":
         return _object_set(a, b)
-    if name == "feature_edit" and isinstance(a.get("set"), dict) and a["set"]:
+    if name == "feature_edit" and isinstance(a.get("values"), dict) and a["values"]:
         # What was changed, not only which feature ("Set Pocket 2 Refine to on").
-        return _object_set({"object": a.get("feature") or b.get("feature") or "a feature", "values": a["set"]}, b)
+        return _object_set({"object": a.get("feature") or b.get("feature") or "a feature", "values": a["values"]}, b)
     if name == "sketch_edit" and a.get("set"):
         # set: [{ constraint, value }] (or { name: value }): the dimension and
         # its new value ("Set plate_width to 70 in PlateSketch").

@@ -562,7 +562,7 @@ SUBS_MOST = 60
 
 # Sketch tools that change geometry already there: what they changed is
 # named in their arguments (ids stay).
-SUB_ARGS = {"sketch_extend": ("geo",), "sketch_bspline": ("geo",), "sketch_to_bspline": ("geometry",)}
+SUB_ARGS = {"sketch_extend": ("geometry",), "sketch_bspline": ("geometry",), "sketch_to_bspline": ("geometry",)}
 
 
 def sub_names(name, body, args=None):

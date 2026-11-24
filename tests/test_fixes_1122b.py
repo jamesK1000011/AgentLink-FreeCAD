@@ -181,7 +181,7 @@ class Stubbed(unittest.TestCase):
         m = e.exception.message
         self.assertIn("constraints[2]: kind, point: not fields", m)
         self.assertIn("goes in type", m)
-        self.assertIn('"type": "fix"', m)
+        self.assertIn('"type": "tangent"', m)
         with self.assertRaises(self.sk.ToolError):
             self.sk.con_keys({"refs": [0]}, 0)
 

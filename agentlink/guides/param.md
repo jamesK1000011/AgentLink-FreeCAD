@@ -8,8 +8,8 @@
 
 ## variable sets
 FreeCAD 1.0 and later also keeps named values in a variable set (App::VarSet), an object whose properties are the variables.
-- `varset_new { name: "Dims", properties: { size: "55 mm", angle: "30 deg", count: 3 } }` makes one. `"55 mm"` becomes a length and `"30 deg"` an angle; plain numbers, true/false and text keep their kind.
-- `varset_set { varset: "Dims", properties: { size: "60 mm" } }` changes a value or adds a variable. Everything bound to it recomputes.
+- `varset_new { name: "Dims", values: { size: "55 mm", angle: "30 deg", count: 3 } }` makes one. `"55 mm"` becomes a length and `"30 deg"` an angle; plain numbers, true/false and text keep their kind.
+- `varset_set { varset: "Dims", values: { size: "60 mm" } }` changes a value or adds a variable. Everything bound to it recomputes.
 - Bind to one with `param_bind { target: "Pad.Length", expression: "Dims.size" }`. The label works as well as the object's name (`VarSet.size`). `param_list` lists the variable sets under `varsets`.
 
 ## traps

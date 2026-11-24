@@ -522,14 +522,17 @@ def _ref(r, what):
 
 
 CON_FIELDS = ("type", "refs", "value", "name")
-CON_EXAMPLE = ('{ "type": "fix", "refs": [[0, 1]] } holds line 0\'s start; '
-               '{ "type": "distance", "refs": [0], "value": 40 } makes line 0 40 mm long')
+CON_EXAMPLE = '{ "type": "tangent", "refs": [0, 1] } makes line 0 tangent to circle 1'
+# Fields models wrote for refs (local-model runs, 24 Nov: a, b).
+CON_REF_WORDS = ("a", "b", "c", "point", "points", "geometry", "geometries", "geo", "ref", "first", "second", "line", "circle", "edges", "ids")
+CON_VALUE_WORDS = ("length", "distance", "radius", "diameter", "angle", "size", "mm", "deg")
 
 
 def con_keys(c, i):
     """One constraint checked for its fields: { type, refs, value, name }.
-    A field written another way (kind, point …) is refused by name, with
-    two worked constraints; nothing is guessed (owner, 22 Nov). A reader."""
+    A field written another way (kind, a, b, point …) is refused by name,
+    with the right fields and one worked constraint; nothing is guessed
+    (owner, 22 Nov; no aliases, 24 Nov). A reader."""
     if not isinstance(c, dict):
         return c
     extra = [k for k in c if k not in CON_FIELDS]
@@ -537,12 +540,14 @@ def con_keys(c, i):
         hint = ""
         if "kind" in extra or "constraint" in extra:
             hint = " The constraint's kind goes in type."
-        if any(k in extra for k in ("point", "points", "geometry", "geometries", "ref")):
-            hint += " Its geometry and points go in refs, a list."
+        if any(k in extra for k in CON_REF_WORDS):
+            hint += " Its geometry ids and points go in refs, one list, in order."
+        if any(k in extra for k in CON_VALUE_WORDS):
+            hint += " A size goes in value (mm or deg)."
         raise ToolError("invalid_input", f"constraints[{i}]: {', '.join(extra)}: not {'a field' if len(extra) == 1 else 'fields'} of a constraint.{hint} "
-                                         f"A constraint is {{ type, refs, value, name }}: {CON_EXAMPLE}.")
+                                         f"A constraint has only type, refs, value and name. Example: {CON_EXAMPLE}.")
     if not c.get("type"):
-        raise ToolError("invalid_input", f"constraints[{i}]: type is missing. {CON_EXAMPLE}.")
+        raise ToolError("invalid_input", f"constraints[{i}]: type is missing. Example: {CON_EXAMPLE}.")
     return c
 
 

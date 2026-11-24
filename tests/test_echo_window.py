@@ -145,7 +145,7 @@ class Buttons(unittest.TestCase):
         with open(os.path.join(HERE, "..", "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             entries = json.load(f)["entries"]
         examples = {"sketch_add": {"items": [{"kind": "line"}]}, "sketch_constrain": {"constraints": [{"type": "horizontal"}]},
-                    "sketch_edit": {"trim": {"geo": 1}}}
+                    "sketch_edit": {"trim": {"geometry": 1}}}
         missing = [n for n, t in entries.items() if n.startswith("sketch_") and t.get("changes")
                    and not echo.command_for(n, examples.get(n, {}))]
         self.assertEqual(missing, [])
@@ -470,7 +470,7 @@ class Selected(unittest.TestCase):
 
     def test_sub_names(self):
         self.assertEqual(echo.sub_names("sketch_join", {"bspline": 4}), ["Edge5"])
-        self.assertEqual(echo.sub_names("sketch_extend", {}, {"geo": 2}), ["Edge3"])
+        self.assertEqual(echo.sub_names("sketch_extend", {}, {"geometry": 2}), ["Edge3"])
         self.assertEqual(echo.sub_names("sketch_to_bspline", {}, {"geometry": [0, 1]}), ["Edge1", "Edge2"])
         self.assertEqual(echo.sub_names("sketch_add", {"added": [{"ids": [0, 1]}]}), ["Edge1", "Edge2"])
         self.assertEqual(echo.sub_names("sketch_constrain", {"added": [3]}), ["Constraint4"])
@@ -490,7 +490,7 @@ class Words(unittest.TestCase):
         self.assertEqual(activity.did("asm_ground", {"part": "Base"}), "Fixed Base in place")
         self.assertEqual(activity.did("pd_tip", {"body": "Hist"}), "Read Hist's tip")
         self.assertEqual(activity.did("pd_tip", {"body": "Hist", "feature": "H1"}), "Set Hist's tip to H1")
-        self.assertEqual(activity.did("feature_edit", {"feature": "Pocket 2", "set": {"Refine": True}}), "Set Pocket 2 Refine to on")
+        self.assertEqual(activity.did("feature_edit", {"feature": "Pocket 2", "values": {"Refine": True}}), "Set Pocket 2 Refine to on")
         self.assertEqual(activity.did("sketch_edit", {"sketch": "PlateSketch", "set": [{"constraint": "plate_width", "value": 70}]}),
                          "Set plate_width to 70 in PlateSketch")
         self.assertEqual(activity.did("sketch_merge", {"sketches": ["A", "B"], "name": "TourBoth"}), "Merged A and B into TourBoth")

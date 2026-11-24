@@ -96,11 +96,12 @@ class AnswerFields(unittest.TestCase):
         self.assertIn("not a known field", r["error"]["message"])
 
     def test_alias_and_ignored_together(self):
-        a = {"set": {"Length": 2}, "ms": 0}
-        said = check_input(obj({"values": {"type": "object"}}), a, "object_set")
-        self.assertEqual(a, {"values": {"Length": 2}})
-        self.assertEqual(protocol.read_as_words(said), "read set as values; ignored ms (an answer field)")
-        self.assertEqual(protocol.read_as_words(["set as values"]), "read set as values")
+        # object_set's set alias went with rename set 10 (24 Nov); shape_query's object stays.
+        a = {"object": "Box", "ms": 0}
+        said = check_input(obj({"body": {"type": "string"}}), a, "shape_query")
+        self.assertEqual(a, {"body": "Box"})
+        self.assertEqual(protocol.read_as_words(said), "read object as body; ignored ms (an answer field)")
+        self.assertEqual(protocol.read_as_words(["object as body"]), "read object as body")
 
     def test_empty_text_for_tool_find_is_left_out(self):
         schema = obj({"words": {"type": "string"}, "group": {"type": "string"}, "tool": {"anyOf": [{"type": "string"}]}})

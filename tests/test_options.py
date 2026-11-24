@@ -2,7 +2,7 @@
 # State -> options -> checked run (agentlink/options.py; efficiency design A):
 # the likely next steps as numbered, ready calls bound to the step, their
 # arguments filled from the document's real names by the rules' data
-# (data/nexthint.json "args", "ask", "choices"), each one checked by the
+# (data/nexthint.json "arguments", "ask", "choices"), each one checked by the
 # tool's own schema and leading checks before it is shown; pick runs one
 # through the normal call path; a stale step is refused with the new
 # options; the switch turns it all off; the static tool list never changes.
@@ -125,10 +125,10 @@ class Data(Base):
     def test_every_option_names_inputs_its_tool_has(self):
         for rid, rule in nexthint.load().items():
             for s in rule["suggest"]:
-                if "args" not in s:
+                if "arguments" not in s:
                     continue
                 props = schema_of(s["tool"]).get("properties") or {}
-                for k in list(s["args"]) + [a["arg"] for a in s.get("ask") or ()] + list(s.get("choices") or {}):
+                for k in list(s["arguments"]) + [a["arg"] for a in s.get("ask") or ()] + list(s.get("choices") or {}):
                     self.assertIn(k, props, f"{rid}: {s['tool']} has no input {k}")
                 for a in s.get("ask") or ():
                     for word, more in (a.get("or") or {}).items():
@@ -139,7 +139,7 @@ class Data(Base):
         n = 0
         for rid, rule in nexthint.load().items():
             for s in rule["suggest"]:
-                for part in ("args", "choices"):
+                for part in ("arguments", "choices"):
                     for k, v in (s.get(part) or {}).items():
                         if isinstance(v, str) and v.startswith("="):
                             self.assertIsNone(expr.check(v[1:]), rid)
@@ -148,7 +148,7 @@ class Data(Base):
         self.assertGreater(n, 40)
 
     def test_a_bad_expression_leaves_the_rule_out(self):
-        bad = {"when": {"body": "empty"}, "suggest": [{"tool": "sketch_new", "why": "why not", "args": {"body": "=__import__('os')"}}],
+        bad = {"when": {"body": "empty"}, "suggest": [{"tool": "sketch_new", "why": "why not", "arguments": {"body": "=__import__('os')"}}],
                "weight": 1, "source": "test", "date": "2026-11-22"}
         self.assertTrue(nexthint.problems(bad))
         self.assertTrue(nexthint.declare({"bad": bad}, "test"))
@@ -166,17 +166,17 @@ class Build(Base):
     def test_empty_body(self):
         o, _s, _ = self.opts(doc_of(body_with("Body")))
         first = o["list"][0]
-        self.assertEqual((first["n"], first["tool"], first["args"]), (1, "sketch_new", {"body": "Body", "plane": "XY"}))
+        self.assertEqual((first["n"], first["tool"], first["arguments"]), (1, "sketch_new", {"body": "Body", "plane": "XY"}))
         self.assertEqual(first["choices"], {"plane": ["XY", "XZ", "YZ"]})
         self.assertNotIn("ask", first)
         prim = next(x for x in o["list"] if x["tool"] == "pd_primitive")
-        self.assertEqual((prim["args"], prim["ask"][0]["arg"]), ({"body": "Body"}, "kind"))
+        self.assertEqual((prim["arguments"], prim["ask"][0]["arg"]), ({"body": "Body"}, "kind"))
 
     def test_closed_sketch_without_feature(self):
         old, new = sketch("Sketch"), sketch("Sketch001")
         o, _s, _ = self.opts(doc_of(body_with("Body", old, new), old, new))
         pad = o["list"][0]
-        self.assertEqual((pad["tool"], pad["args"]), ("pd_pad", {"sketch": "Sketch001", "body": "Body"}))
+        self.assertEqual((pad["tool"], pad["arguments"]), ("pd_pad", {"sketch": "Sketch001", "body": "Body"}))
         self.assertEqual(options.ask_words(pad["ask"][0]), "length mm")
         self.assertEqual(pad["choices"], {"sketch": ["Sketch001", "Sketch"]})  # live choices, the newest first
         self.assertLessEqual(len(o["list"]), options.MAX_OPTIONS)
@@ -188,15 +188,15 @@ class Build(Base):
         tools = [x["tool"] for x in o["list"]]
         self.assertEqual(tools[0], "sketch_new")
         pp = next(x for x in o["list"] if x["tool"] == "pd_polar_pattern")
-        self.assertEqual(pp["args"], {"body": "Body", "features": ["Pad"]})
+        self.assertEqual(pp["arguments"], {"body": "Body", "features": ["Pad"]})
 
     def test_sketch_open_in_edit(self):
         sk = sketch("Sketch")
         b = body_with("Body", sk)
         o, _s, _ = self.opts(doc_of(b, sk), {"editing": "sketch", "sketch": {"name": "Sketch", "obj": "Sketch", "dof": 0}})
-        self.assertEqual(o["list"][0], {"n": 1, "tool": "sketch_state", "args": {"sketch": "Sketch"}, "why": o["list"][0]["why"]})
+        self.assertEqual(o["list"][0], {"n": 1, "tool": "sketch_state", "arguments": {"sketch": "Sketch"}, "why": o["list"][0]["why"]})
         pad = next(x for x in o["list"] if x["tool"] == "pd_pad")
-        self.assertEqual(pad["args"], {"sketch": "Sketch", "body": "Body"})
+        self.assertEqual(pad["arguments"], {"sketch": "Sketch", "body": "Body"})
         o, _s, _ = self.opts(doc_of(b, sk), {"editing": "sketch", "sketch": {"name": "Sketch", "obj": "Sketch", "dof": 3}})
         self.assertEqual(o["list"][0]["tool"], "sketch_constrain")
         self.assertEqual(o["list"][0]["ask"], [{"arg": "constraints"}])
@@ -209,7 +209,7 @@ class Build(Base):
         f = nexthint.facts(s.doc, {"selSubs": {"edge"}, "selected": 1})
         f.update({"selectionIn": "body", "picked": "Pad", "pickedEdges": ["Edge3", "Edge7"]})
         o = options.build(s, facts=f, state={})
-        self.assertEqual(o["list"][0]["args"], {"body": "Body", "edges": ["Edge3", "Edge7"]})
+        self.assertEqual(o["list"][0]["arguments"], {"body": "Body", "edges": ["Edge3", "Edge7"]})
 
     def test_the_needs_check_drops_an_option_that_would_refuse(self):
         sk, used = sketch("Sketch001"), sketch("Sketch")
@@ -267,7 +267,7 @@ class Words(Base):
         self.assertIn("ask length mm|through_all", ln)
         self.assertLessEqual(len(ln), options.MAX_LINE)
         print(f"\n  options line, closed sketch: {len(ln)} chars: {ln}")
-        many = {"step": 7, "list": [{"n": i, "tool": "x" * 30, "args": {"a": "y" * 30, "b": "z" * 30}} for i in range(1, 5)]}
+        many = {"step": 7, "list": [{"n": i, "tool": "x" * 30, "arguments": {"a": "y" * 30, "b": "z" * 30}} for i in range(1, 5)]}
         self.assertLessEqual(len(options.line(many)), options.MAX_LINE)
 
     def test_public_form(self):

@@ -107,7 +107,7 @@ class SideCheck(unittest.TestCase):
         self.assertEqual(r[1]["sideCheck"], [{"part": "Lid", "before": 11.0, "after": -19.0, "crossed": True}])
         w = r[1]["sideWarning"]
         self.assertIn("Lid on the other side of the joint's plane", w)
-        self.assertIn("reverse: true", w)
+        self.assertIn("reversed: true", w)
 
     def test_the_same_side_gives_no_warning(self):
         r = self.run_case([0, 0, 2])
@@ -115,9 +115,9 @@ class SideCheck(unittest.TestCase):
         self.assertNotIn("sideWarning", r[1])
 
     def test_with_reverse_the_warning_names_reverse_false(self):
-        r = self.run_case([0, 0, -30], {"reverse": True})
+        r = self.run_case([0, 0, -30], {"reversed": True})
         if "sideWarning" in r[1]:
-            self.assertIn("reverse: false", r[1]["sideWarning"])
+            self.assertIn("reversed: false", r[1]["sideWarning"])
 
     def test_no_side_check_with_auto_flip(self):
         r = self.run_case([0, 0, -30], {"autoFlip": True})

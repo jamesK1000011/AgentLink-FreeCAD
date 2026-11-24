@@ -10,7 +10,7 @@ as numbered options: ready calls, bound to the step number.
 
 Each option has the tool, the arguments the document's state settles, the
 open inputs (ask) and why. They come from the same rules as the "next"
-hint (data/nexthint.json): a suggested tool with "args" is an option. Its
+hint (data/nexthint.json): a suggested tool with "arguments" is an option. Its
 arguments are filled from the real names the state gives (nexthint.facts():
 bodyName, sketchName, editSketch, pickedEdges …) by the hub's checked
 expression language (agentlink/expr.py; never eval). The live choices (the
@@ -131,13 +131,13 @@ def _value(v, facts):
 
 def suggestions(facts, table=None):
     """[(pick, item)]: the ranked suggestions (nexthint.rank) whose rule item
-    has args, likeliest first."""
+    has arguments, likeliest first."""
     table = nexthint.rules() if table is None else table
     out = []
     for p in nexthint.rank(facts, table, limit=nexthint.MAX_PICKS):
         rule = table.get(p["rule"]) or {}
         item = next((s for s in rule.get("suggest") or () if s.get("tool") == p["tool"]), None)
-        if isinstance(item, dict) and isinstance(item.get("args"), dict):
+        if isinstance(item, dict) and isinstance(item.get("arguments"), dict):
             out.append((p, item))
     return out
 
@@ -146,7 +146,7 @@ def fill(item, facts):
     """(args, ask, choices) of one suggestion against the facts. An
     argument that comes out None is left out (the tool's own default)."""
     args = {}
-    for k, v in item["args"].items():
+    for k, v in item["arguments"].items():
         got = _value(v, facts)
         if got is not None and got != []:
             args[k] = got
@@ -203,14 +203,14 @@ def theirs_first(session, server):
         doc = getattr(session, "doc", None)
         if doc is None or "doc_new" not in server.tools or doc.Name in (getattr(session, "agent_docs", None) or ()):
             return None
-        return {"n": 1, "tool": "doc_new", "args": {}, "ask": [{"arg": "name"}],
+        return {"n": 1, "tool": "doc_new", "arguments": {}, "ask": [{"arg": "name"}],
                 "why": f"new work in a document of its own: {doc.Label} is the person's"}
     except Exception:  # noqa: BLE001
         return None
 
 
 def build(session, facts=None, state=None, table=None):
-    """{ step, key, list: [{ n, tool, args, ask, choices, why }] } — at most
+    """{ step, key, list: [{ n, tool, arguments, ask, choices, why }] } — at most
     MAX_OPTIONS, every one checked — or None (switched off, a dialog in
     front, nothing to offer, or any error). Never raises."""
     try:
@@ -253,7 +253,7 @@ def build(session, facts=None, state=None, table=None):
                     continue
             except Exception:  # noqa: BLE001 - one bad option never stops the others
                 continue
-            opt = {"n": len(out) + 1, "tool": p["tool"], "args": args, "why": p.get("why") or ""}
+            opt = {"n": len(out) + 1, "tool": p["tool"], "arguments": args, "why": p.get("why") or ""}
             if ask:
                 opt["ask"] = ask
             if choices:
@@ -293,13 +293,13 @@ def option_words(o):
     """"1 pd_pad sketch=Sketch001 body=Body ask length mm"."""
     parts = [str(o["n"]), o["tool"]]
     choices = o.get("choices") or {}
-    for k, v in o["args"].items():
+    for k, v in o["arguments"].items():
         w = _val(v)
         if k in choices:
             w += "".join(f" or {_val(x)}" for x in choices[k][1:])
         parts.append(f"{k}={w[:MAX_VALUE]}")
     for k, v in choices.items():
-        if k not in o["args"]:
+        if k not in o["arguments"]:
             parts.append(f"{k}={' or '.join(_val(x) for x in v)}"[:MAX_VALUE])
     if o.get("ask"):
         parts.append("ask " + ", ".join(ask_words(a) for a in o["ask"]))
@@ -326,7 +326,7 @@ def public(opts):
         return None
     rows = []
     for o in opts["list"]:
-        r = {"n": o["n"], "tool": o["tool"], "args": o["args"]}
+        r = {"n": o["n"], "tool": o["tool"], "arguments": o["arguments"]}
         if o.get("ask"):
             r["ask"] = [ask_words(a) for a in o["ask"]]
         if o.get("choices"):
@@ -510,7 +510,7 @@ def resolve(session, a):
     o = next((x for x in opts["list"] if x["n"] == n), None)
     if o is None:
         raise ToolError("invalid_input", f"option {n}: step {opts['step']} has options 1 to {len(opts['list'])}.")
-    args = copy.deepcopy(o["args"])
+    args = copy.deepcopy(o["arguments"])
     asks = o.get("ask") or []
     by = {x["arg"]: x for x in asks}
     filled = set()
@@ -561,7 +561,7 @@ def pick_call(server, params):
         c = result["content"][0]
         body = json.loads(c["text"])
         if isinstance(body, dict):
-            c["text"] = compact({"picked": option_words({"n": o["n"], "tool": o["tool"], "args": args}), **body})
+            c["text"] = compact({"picked": option_words({"n": o["n"], "tool": o["tool"], "arguments": args}), **body})
     except Exception:  # noqa: BLE001 - the answer stays as the tool gave it
         pass
     return result

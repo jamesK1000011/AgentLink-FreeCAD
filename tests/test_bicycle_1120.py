@@ -138,7 +138,7 @@ class Keep(unittest.TestCase):
             solver(asm)
             out["plain"] = run("asm_joint", J)
             out["with offset"] = run("asm_joint", dict(J, keep=True, offset=1))
-            out["with reverse"] = run("asm_joint", dict(J, keep=True, reverse=True))
+            out["with reversed"] = run("asm_joint", dict(J, keep=True, reversed=True))
             print(json.dumps(out, default=str))
         ''')
         for side in ("2", "inverse"):
@@ -158,8 +158,8 @@ class Keep(unittest.TestCase):
         self.assertNotIn("kept", got["plain"][1])
         self.assertEqual(got["with offset"][:2], ["refused", "invalid_input"])
         self.assertIn("keep, or offset, rotate and gap", got["with offset"][2])
-        self.assertEqual(got["with reverse"][:2], ["refused", "invalid_input"])
-        self.assertIn("keep turns no part over", got["with reverse"][2])
+        self.assertEqual(got["with reversed"][:2], ["refused", "invalid_input"])
+        self.assertIn("keep turns no part over", got["with reversed"][2])
 
 
 class NoFlipByItself(unittest.TestCase):
@@ -183,7 +183,7 @@ class NoFlipByItself(unittest.TestCase):
         self.assertTrue(w.startswith("Parts overlap after the solve: Base/Lid "), w)
         self.assertIn("mm³", w)
         self.assertIn("did not turn a part over", w)
-        self.assertIn("reverse: true", w)
+        self.assertIn("reversed: true", w)
         self.assertIn("autoFlip: true", w)
 
     def test_auto_flip_is_the_old_way(self):
@@ -207,11 +207,11 @@ class NoFlipByItself(unittest.TestCase):
         self.assertLess(c["after"], 0)
 
     def test_auto_flip_and_reverse_not_both(self):
-        r, _ = self.run_case(dict(J, autoFlip=True, reverse=False), [0, 0, 0])
+        r, _ = self.run_case(dict(J, autoFlip=True, reversed=False), [0, 0, 0])
         self.assertEqual(r[:2], ["refused", "invalid_input"])
 
     def test_explicit_reverse_still_flips(self):
-        r, at = self.run_case(dict(J, reverse=True), [0, 0, 0])
+        r, at = self.run_case(dict(J, reversed=True), [0, 0, 0])
         self.assertIs(r[1]["flipped"], True)
 
 

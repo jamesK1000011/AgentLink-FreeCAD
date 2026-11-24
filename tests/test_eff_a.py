@@ -69,15 +69,18 @@ class Aliases(unittest.TestCase):
     def schema(self, name):
         return entries()[name]["inputSchema"]
 
-    def test_object_set_values(self):
-        args = {"object": "Box", "set": {"Length": 5}}
-        self.assertEqual(check_input(self.schema("object_set"), args, "object_set"), ["set as values"])
-        self.assertEqual(args, {"object": "Box", "values": {"Length": 5}})
+    def test_object_set_values_only(self):
+        # Rename set 10 (24 Nov, rule R5): values is the one property map; the old aliases are refused by name.
+        for old in ("set", "properties", "props", "property"):
+            with self.assertRaises(ToolError) as e:
+                check_input(self.schema("object_set"), {"object": "Box", old: {"Length": 5}}, "object_set")
+            self.assertIn(f"input.{old}: not a known field — the fields here: object, values", e.exception.message)
 
     def test_varset_and_doc_close(self):
         args = {"values": {"W": 2}}
-        self.assertEqual(check_input(self.schema("varset_set"), args, "varset_set"), ["values as properties"])
-        self.assertEqual(args, {"properties": {"W": 2}})
+        self.assertEqual(check_input(self.schema("varset_set"), args, "varset_set"), [])
+        with self.assertRaises(ToolError):
+            check_input(self.schema("varset_set"), {"properties": {"W": 2}}, "varset_set")
         args = {"document": "Part1"}
         self.assertEqual(check_input(self.schema("doc_close"), args, "doc_close"), ["document as documents"])
         self.assertEqual(args, {"documents": ["Part1"]})
@@ -156,8 +159,9 @@ class OnFreeCAD(unittest.TestCase):
     def test_read_as(self):
         self.call("part_primitive", self.box("Box")["arguments"])
         err, r = self.call("object_set", {"object": "Box", "set": {"Length": 7}})
+        self.assertTrue(err, r)  # rename set 10: values only
+        err, r = self.call("object_set", {"object": "Box", "values": {"Length": 7}})
         self.assertFalse(err, r)
-        self.assertEqual(r.get("readAs"), "read set as values")
 
 
 if __name__ == "__main__":
