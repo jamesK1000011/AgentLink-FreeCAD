@@ -74,8 +74,8 @@ class PartData(unittest.TestCase):
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
             self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes and the STE rewrite: tests/_meant.py
-            self.assertEqual(t.schema, b["inputSchema"], name)
-            self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
+            self.assertEqual(t.schema, _meant.schema(name, b["inputSchema"]), name)  # meant changes: tests/_meant.py SCHEMAS, RENAMES
+            self.assertEqual(json.dumps(t.schema), json.dumps(_meant.schema(name, b["inputSchema"])), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
             self.assertEqual(t.reads, b["reads"], name)
             self.assertEqual(t.group, b["group"], name)
@@ -119,6 +119,7 @@ class PartData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c["old"] = _meant.case_as_meant(c["tool"], c["case"], c["old"])  # the handler's way changed on purpose since: tests/_meant.py CASES
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             # Meant difference, compound_filter: a filter that keeps nothing is refused before it is
             # made (its recompute raised "Nothing passes through the filter", a red traceback in the

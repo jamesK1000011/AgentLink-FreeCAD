@@ -348,16 +348,16 @@ def overlap_pairs(base_shape, tool_shapes, gap=1e-3):
 
 def boolean_parts(session, args):
     """A part_boolean call's size and its parts: {size, pairs (face pairs
-    whose boxes meet, or None), base, tools (faces)}, or None when its
-    bodies cannot be read."""
+    whose boxes meet, or None), base, tools (faces of body and of bodies)},
+    or None when its bodies cannot be read."""
     doc = session.doc
-    names = args.get("tools")
+    names = args.get("bodies")
     names = names if isinstance(names, list) else [names]
     tools = [_obj(doc, n) for n in names]
     tf = [_faces(t) for t in tools if t is not None]
-    base = _obj(doc, args.get("base"))
+    base = _obj(doc, args.get("body"))
     if base is None:
-        # base left out: the one other solid body there is.
+        # body left out: the one other solid body there is.
         rest = [o for o in doc.Objects if o not in tools and getattr(o, "Shape", None) is not None and _faces(o) and not o.InList]
         base = max(rest, key=_faces) if rest else None
     if base is None or not tf:

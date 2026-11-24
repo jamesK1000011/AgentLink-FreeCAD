@@ -38,7 +38,7 @@ class FeatureMore(Base):
         self.ok("pd_primitive", {"body": "Cutter", "kind": "cylinder", "size": {"radius": 6, "height": 20}, "at": [20, 15, 5]})
         self.ok("pd_body_new", {"name": "Sheet"})
         self.ok("pd_primitive", {"body": "Sheet", "kind": "box", "size": {"length": 50, "width": 50, "height": 3}, "at": [0, 0, 8]})
-        c = self.ok("pd_boolean", {"body": "Sheet", "op": "cut", "with": ["Cutter"]})
+        c = self.ok("pd_boolean", {"body": "Sheet", "op": "cut", "bodies": ["Cutter"]})
         self.assertAlmostEqual(c["volumeChange"], -math.pi * 36 * 3, delta=0.5)
 
     # ---- the hardening pass (16 Nov 2026) ----

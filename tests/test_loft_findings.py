@@ -79,7 +79,7 @@ class LoftFindings(unittest.TestCase):
         self.assertAlmostEqual(out["volume"], mean * 80, delta=0.15 * mean * 80)
         # And a fuse with it adds to the body.
         self.ok("part_primitive", {"kind": "box", "size": [10, 10, 10], "at": [-5, -5, 75], "name": "Cap"})
-        f = self.ok("part_boolean", {"op": "fuse", "base": "Grip", "tools": ["Cap"]})
+        f = self.ok("part_boolean", {"op": "fuse", "body": "Grip", "bodies": ["Cap"]})
         self.assertGreater(f["volumeChange"], 10)
 
     def test_loft_of_an_open_profile_is_refused(self):
@@ -150,13 +150,13 @@ class LoftFindings(unittest.TestCase):
         bad.reverse()
         if bad.Volume <= 0:
             add_body(self.session, "Flipped", bad)
-            e = self.no("part_boolean", {"op": "fuse", "base": "Base", "tools": ["Flipped"]})
+            e = self.no("part_boolean", {"op": "fuse", "body": "Base", "bodies": ["Flipped"]})
             self.assertIn("not a sound solid", e["message"])
             self.assertIn("Flipped", self.bodies())
         # An open shell is no solid tool at all.
         shell = Part.makeBox(10, 10, 10, FreeCAD.Vector(15, 5, 5)).Faces[:5]
         add_body(self.session, "Open", Part.Shell(shell))
-        self.no("part_boolean", {"op": "fuse", "base": "Base", "tools": ["Open"]})
+        self.no("part_boolean", {"op": "fuse", "body": "Base", "bodies": ["Open"]})
         self.assertTrue(self.session.doc.getObjectsByLabel("Open"))  # a shell: kept, though no body
 
     def test_fuse_dropped_is_seen(self):
@@ -244,15 +244,15 @@ class SizedGate(unittest.TestCase):
                 os.environ[k] = v
 
     def test_size_is_face_pairs(self):
-        s = self.heavy.sized_size(self.gate.s, "part_boolean", {"op": "fuse", "base": "Grip", "tools": ["Guard", "Pin"]})
+        s = self.heavy.sized_size(self.gate.s, "part_boolean", {"op": "fuse", "body": "Grip", "bodies": ["Guard", "Pin"]})
         self.assertEqual(s, 2119 * (1282 + 54))
         # base left out: the biggest other body.
-        self.assertEqual(self.heavy.sized_size(self.gate.s, "part_boolean", {"tools": "Peg"}), 2119 * 6)
-        self.assertIsNone(self.heavy.sized_size(self.gate.s, "part_boolean", {"base": "Grip", "tools": ["Nope"]}))
+        self.assertEqual(self.heavy.sized_size(self.gate.s, "part_boolean", {"bodies": "Peg"}), 2119 * 6)
+        self.assertIsNone(self.heavy.sized_size(self.gate.s, "part_boolean", {"body": "Grip", "bodies": ["Nope"]}))
 
     def test_heavy_fuse_runs_at_once_and_is_timed(self):
         # No prejudging (18 Nov): a big estimate neither refuses nor marks.
-        args = {"op": "fuse", "base": "Grip", "tools": ["Guard", "Pin"]}
+        args = {"op": "fuse", "body": "Grip", "bodies": ["Guard", "Pin"]}
         t = Tool("part_boolean")
         est = self.keep.sized_estimate({}, "part_boolean", 2119 * 1336)
         self.assertGreater(est, 60)
@@ -264,7 +264,7 @@ class SizedGate(unittest.TestCase):
         self.assertIn("part_boolean boxes", self.keep.queue_state().get("timings") or {})
 
     def test_small_boolean_is_left_alone(self):
-        self.gate.before(Tool("part_boolean"), {"op": "cut", "base": "Peg", "tools": ["Pin"]})
+        self.gate.before(Tool("part_boolean"), {"op": "cut", "body": "Peg", "bodies": ["Pin"]})
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
         self.gate.after(Tool("part_boolean"), {}, True)
 

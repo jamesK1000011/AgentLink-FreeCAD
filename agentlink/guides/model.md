@@ -9,16 +9,16 @@ A map of this guide. `guide_read { topic: "model", section: [...] }` reads the s
 
 ## workflow
 1. Block the part out with `part_primitive` (box, cylinder …; `at` and `rotate` place it; `direction [x,y,z]` points the axis of a cylinder, cone, prism or tube) or `part_extrude` / `part_revolve` a profile (`{ points }`, `{ circle }`, a sketch, or a body's face "Box.Face6").
-2. Add and remove material: `part_boolean { op, base, tools }`, or in one call `part_extrude { profile, into, op: "cut" }` for a pocket or `op: "fuse"` for a boss.
+2. Add and remove material: `part_boolean { op, body, bodies }`, or in one call `part_extrude { profile, into, op: "cut" }` for a pocket or `op: "fuse"` for a boss.
 3. Repeat and mirror with `part_transform` (linear, polar, mirror { fuse: true }).
 4. Shell with `part_thickness`, then round and bevel last: `part_fillet` / `part_chamfer` with edges picked by `shape_query` or a `query`.
 5. `body_check` after each change; `history_diff` says what it did.
 
 ## traps
 - Face and edge numbers change after every modelling step: query again (`shape_query`) rather than reuse old references.
-- A result keeps the base body's label, so setups and specs follow it; the tools are removed (keep: true hides them, and a hidden body is still listed).
+- A result keeps the label of `body`, so setups and specs follow it; `bodies` are removed (keep: true hides them, and a hidden body is still listed).
 - A refusal for "changed nothing" means the pieces do not overlap: move them (`part_transform move`) and try again.
-- `part_boolean` `common` with several tools keeps what the base shares with any of them (base ∩ the tools together), as FreeCAD's own common does; for the part shared by all, run `common` once a tool.
+- `part_boolean` `common` with several `bodies` keeps what `body` shares with any of them (body ∩ bodies together), as FreeCAD's own common does; for the part shared by all, run `common` once for each of `bodies`.
 - Fillets bigger than a face beside the edge, or shells thinner than a fillet, fail: smaller sizes, or the shell before the fillet.
 - Loft profiles with different edge counts twist; start each at the matching corner. `part_loft` turns each profile to run the same way round and starts each at the point nearest the one before (`aligned` says what it changed). It keeps no loft that is invalid, open, inside out or bulges more than 15% beyond its profiles (measured on the surface itself, not its control points); the refusal gives the reason and names the spans that bulge (`profiles 11–12 by 37% along y`).
 - A smooth loft through many real sections (a scan's, with local notches) can overshoot between them. `part_loft` tries again by itself: the profiles rebuilt as B-splines through the same points with one set of knots, then `maxDegree` 3 and 2 (stiffer), then span by span with the bulging spans ruled and sewn into one (kept only if sound; `segments: false` turns that off). `route` says what it did. Give `maxDegree: 3` up front for long runs of uneven sections.

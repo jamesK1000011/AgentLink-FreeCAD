@@ -61,7 +61,7 @@ Order that keeps a model stable (FreeCAD's own advice): sketches on the body's p
 - `pd_primitive { kind: "cylinder", size: { radius, height }, at, rotate }` adds a box, cylinder, sphere, cone, ellipsoid, torus, prism or wedge without a sketch. `at` is a box's corner, a cylinder's or cone's base centre, a sphere's or torus's centre. `subtractive: true` cuts it out instead: a quick bore or slot.
 - `pd_helix { sketch, axis, pitch, height }` makes a spring or a coil; `subtractive: true` cuts a thread or a groove. Give two of pitch, height and turns. The sketch must not cross the axis, and its height should be under the pitch.
 - `pd_datum` makes a line, point or coordinate system: placed from the origin, or `on: { near }` a round edge (its axis or centre), which then follows the model. A datum line serves as an axis by name. `pd_datum_plane` makes a plane to sketch on.
-- `pd_binder { from: "Other body", faces }` brings another body's faces in to sketch on (`sketch_external`). `pd_boolean { op, with }` fuses, cuts or keeps the common part of other bodies.
+- `pd_binder { from: "Other body", faces }` brings another body's faces in to sketch on (`sketch_external`). `pd_boolean { op, bodies }` fuses, cuts or keeps the common part of other bodies.
 - `pd_loft { sketch, sections }` needs each section on its own plane, one closed wire each, the same number of edges. `pd_pipe { sketch, path }` sweeps a sketch along a path; `feature_edit` sets its `Mode` (Standard, Fixed, Frenet, Auxiliary, Binormal) and `Transition` (Transformed, Right corner, Round corner).
 
 ## gears and sprockets

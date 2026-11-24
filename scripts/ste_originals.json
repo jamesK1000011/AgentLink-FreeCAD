@@ -2325,11 +2325,11 @@
   "part_boolean": {
    "description": "fuse, cut or common base with tools (solid bodies by name; base is the one kept, and must be named when more than one body is shown). common with several tools keeps what base shares with any of them. Done on the shapes, not as a Part::Cut feature: the result keeps base's label (name: a new one) as a plain shape with coplanar faces merged; the tools are removed (keep: true hides them; a hidden body is still a body to other tools). A PartDesign Body base gives a new Body on the result and the old one is hidden. Trap: faces and edges are renumbered; shape_query again. Refused, with the tools kept, when nothing would change (apart, or inside for fuse), common has no overlap, a tool is not a sound solid (invalid, open, inside out), or OCC drops a tool or makes an invalid result. Heavy with many faces (meshes made solids): past an estimated minute the first call answers with the time and runs nothing, the same call again runs it, and the window is frozen meanwhile. Reply: body, volume, box, sound (problems when not), op, volumeChange, removed or kept, hidden + hiddenNote (object_delete of the result shows the inputs again).",
    "inputs": [
-    "base",
+    "bodies",
+    "body",
     "keep",
     "name",
-    "op",
-    "tools"
+    "op"
    ],
    "kind": "data"
   },
@@ -2711,10 +2711,10 @@
   "pd_boolean": {
    "description": "A boolean inside a body with other PartDesign bodies: op fuse (default) | cut | common, with [body names]. The tool bodies move inside the boolean, stay editable and are followed; a fuse or cut that changes nothing is refused.",
    "inputs": [
+    "bodies",
     "body",
     "name",
-    "op",
-    "with"
+    "op"
    ],
    "kind": "data"
   },

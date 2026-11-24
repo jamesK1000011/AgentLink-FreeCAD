@@ -290,6 +290,14 @@ RENAMES = {
     "pd_pipe": ({"profile": "sketch"}, "rename set 4: sketch, a sketch or { circle: { d, wall } }"),
     "pd_linear_pattern": ({"occurrences": "count"}, "rename set 7: how many, the original counted, is count"),
     "pd_polar_pattern": ({"occurrences": "count"}, "rename set 7: how many, the original counted, is count"),
+    "pd_boolean": ({"with": "bodies"}, "rename set 9: the other bodies are bodies"),
+    "part_boolean": ({"base": "body", "tools": "bodies"}, "rename set 9: the body kept is body, the others bodies"),
+}
+
+# Renamed answer fields (rename set 9): per tool, {old: new}. case_as_meant
+# gives the old run's answer the new names.
+ANSWER_RENAMES = {
+    "pd_boolean": {"with": "bodies"},
 }
 
 
@@ -454,10 +462,30 @@ CASES.update({(t, c): {"why": "rename set 7: count in the words", "message": _CO
                            ("pd_linear_pattern", "occurrences a boolean"), ("pd_polar_pattern", "occurrences one"))})
 
 
+# Rename set 9 (24 Nov): pd_boolean takes bodies, not with; part_boolean body and bodies, not base and tools.
+_PD_WITH = {"why": "rename set 9: bodies in the words", "message": ("with: ", "bodies: ")}
+_PART_TOOLS = {"why": "rename set 9: body and bodies in the words",
+               "message": ("tools: the bodies to fuse, cut away or keep in common with base.", "bodies: the bodies to fuse, cut away or keep in common with body.")}
+CASES.update({
+    ("pd_boolean", "with nothing"): _PD_WITH,
+    ("pd_boolean", "with itself"): _PD_WITH,
+    ("part_boolean", "no tools"): _PART_TOOLS,
+    ("part_boolean", "tools left out"): _PART_TOOLS,
+    ("part_boolean", "base among the tools"): {
+        "why": "rename set 9: body and bodies in the words",
+        "message": ("tools: base (Block) is among them — a body with itself changes nothing. tools: the other bodies; base: the one that is kept.",
+                    "bodies: body (Block) is among them — a body with itself changes nothing. bodies: the other bodies; body: the one that is kept.")},
+})
+
+
 def case_as_meant(tool, case, old):
     """A case's run at BASE with the meant changes CASES names for it."""
     import copy
 
+    names = ANSWER_RENAMES.get(tool)
+    res = old.get("result")
+    if names and isinstance(res, list) and res and res[0] == "ok" and isinstance(res[1], dict):
+        old = {**old, "result": [res[0], {names.get(k, k): v for k, v in res[1].items()}] + res[2:]}
     m = CASES.get((tool, case))
     if not m:
         return old

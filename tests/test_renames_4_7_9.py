@@ -7,6 +7,7 @@
 # process each: the stand-in must not be seen by the other tests).
 #   set 4  pd_helix, pd_loft, pd_pipe: profile -> sketch
 #   set 7  pd_linear_pattern, pd_polar_pattern: occurrences -> count
+#   set 9  pd_boolean: with -> bodies; part_boolean: base -> body, tools -> bodies
 import json
 import os
 import subprocess
@@ -26,6 +27,9 @@ RENAMED = [
     ("pd_pipe", "profile", "sketch"),
     ("pd_linear_pattern", "occurrences", "count"),
     ("pd_polar_pattern", "occurrences", "count"),
+    ("pd_boolean", "with", "bodies"),
+    ("part_boolean", "base", "body"),
+    ("part_boolean", "tools", "bodies"),
 ]
 
 # One case of each tool that answers, from the data tests' cases: (stand-in
@@ -36,6 +40,8 @@ RUNS = {
     "pd_pipe": ("pd", "model call 89"),
     "pd_linear_pattern": ("pd", "model call 26"),
     "pd_polar_pattern": ("pd", "model call 57"),
+    "pd_boolean": ("sk2", "model call 96"),
+    "part_boolean": ("part", "a cut"),
 }
 
 
@@ -52,6 +58,9 @@ def _valid_args(schema, new):
     for k in schema.get("required") or []:
         t = (props.get(k) or {}).get("type")
         t = t[0] if isinstance(t, list) else t
+        if (props.get(k) or {}).get("enum"):
+            out[k] = props[k]["enum"][0]
+            continue
         out[k] = {"array": ["A"], "integer": 2, "number": 1.0, "boolean": True, "object": {}}.get(t, "A")
     return out
 
@@ -110,7 +119,8 @@ standin = importlib.import_module(f"_data{prefix}_standin")
 cases = importlib.import_module(f"_data{prefix}_cases")
 fc = standin.install()
 from agentlink.protocol import ToolError
-fc.patch()
+if hasattr(fc, "patch"):
+    fc.patch()
 mods = {m: importlib.import_module(f"agentlink.families.{m}") for m in files}
 try:
     cs = cases.cases(fc, tempfile.mkdtemp(), mods, mods)

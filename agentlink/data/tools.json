@@ -5452,7 +5452,7 @@
   },
   "part_boolean": {
    "group": "model",
-   "description": "Do a fuse, cut or common of base with tools. tools: solid bodies by name. base: the body that is kept. You must name it when more than one body shows. common with several tools keeps what base shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. The result keeps the label of base (name: a new label). It is a plain shape, with coplanar faces merged. The tool removes the tools (keep: true hides them). A hidden body is still a body to other tools. A PartDesign Body base gives a new Body on the result, and the tool hides the old one. Trap: faces and edges get new numbers; use shape_query again. The tool refuses, and keeps the tools, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, hidden + hiddenNote. object_delete of the result shows the inputs again. Prefer pockets, pads and holes in one PartDesign body to a chain of booleans. A boolean gives a plain shape with no history. Its faces get new names.",
+   "description": "Do a fuse, cut or common of body with bodies. bodies: solid bodies by name (the tools). body: the body that is kept. You must name it when more than one body shows. common with several bodies keeps what body shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. The result keeps the label of body (name: a new label). It is a plain shape, with coplanar faces merged. The tool removes bodies (keep: true hides them). A hidden body is still a body to other tools. A PartDesign Body as body gives a new Body on the result, and the tool hides the old one. Trap: faces and edges get new numbers; use shape_query again. The tool refuses, and keeps bodies, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, hidden + hiddenNote. object_delete of the result shows the inputs again. Prefer pockets, pads and holes in one PartDesign body to a chain of booleans. A boolean gives a plain shape with no history. Its faces get new names.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -5464,11 +5464,11 @@
        "common"
       ]
      },
-     "base": {
+     "body": {
       "type": "string",
       "description": "A body's name or label; may be left out when there is one."
      },
-     "tools": {
+     "bodies": {
       "description": "A body or a list of them."
      },
      "keep": {
@@ -5480,7 +5480,7 @@
     },
     "required": [
      "op",
-     "tools"
+     "bodies"
     ],
     "additionalProperties": false
    },
@@ -5490,10 +5490,10 @@
    "runner": "steps",
    "steps": [
     {"refuse": "op: fuse, cut or common.", "when": "=a.op not in ('fuse', 'cut', 'common')"},
-    {"let": {"op": "=a.op", "base": "=solid_body(a.base)", "names": "=ref_list(a.tools)"}},
-    {"refuse": "tools: the bodies to fuse, cut away or keep in common with base.", "when": "=not names"},
+    {"let": {"op": "=a.op", "base": "=solid_body(a.body)", "names": "=ref_list(a.bodies)"}},
+    {"refuse": "bodies: the bodies to fuse, cut away or keep in common with body.", "when": "=not names"},
     {"let": {"tl": "=[solid_body(n) for n in names]"}},
-    {"refuse": {"fmt": "tools: base ({base.Label}) is among them — a body with itself changes nothing. tools: the other bodies; base: the one that is kept."}, "when": "=any(t is base for t in tl)"},
+    {"refuse": {"fmt": "bodies: body ({base.Label}) is among them — a body with itself changes nothing. bodies: the other bodies; body: the one that is kept."}, "when": "=any(t is base for t in tl)"},
     {"let": {"bs": "=base.Shape", "shapes": "=[t.Shape for t in tl]"}},
     {"each": "t", "in": "=tl", "steps": [{"let": {"why": "=unsound_tool(t.Shape)"}}, {"refuse": {"fmt": "{op}: the tool {t.Label} is not a sound solid ({why}), so OCC would drop it and leave {base.Label} as it was. Nothing was changed; {t.Label} is kept. body_check {t.Label} says more; part_fix or part_refine {{ fix: true }} may repair it, else rebuild it."}, "code": "failed", "when": "=why"}]},
     {"let": {"res": "=clean(boolean(bs, op, shapes))"}},
@@ -20512,7 +20512,7 @@
   },
   "pd_boolean": {
    "group": "feature",
-   "description": "Do a boolean inside a body with other PartDesign bodies. op: fuse (default) | cut | common. with: [body names]. The tool bodies move inside the boolean, stay editable, and the boolean follows them. The tool refuses a fuse or cut that changes nothing.",
+   "description": "Do a boolean inside a body with other PartDesign bodies. op: fuse (default) | cut | common. bodies: [body names]. The tool bodies move inside the boolean, stay editable, and the boolean follows them. The tool refuses a fuse or cut that changes nothing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20527,7 +20527,7 @@
        "common"
       ]
      },
-     "with": {
+     "bodies": {
       "type": "array",
       "items": {
        "type": "string"
@@ -20538,7 +20538,7 @@
      }
     },
     "required": [
-     "with"
+     "bodies"
     ],
     "additionalProperties": false
    },
@@ -20553,14 +20553,14 @@
     {"let": {"before": "=volume(b)", "op": "={'fuse': 'Fuse', 'cut': 'Cut', 'common': 'Common'}.get(a.get('op', 'fuse'))"}},
     {"refuse": "op: fuse, cut or common.", "when": "=op is None"},
     {"let": {"others": "=[]"}},
-    {"each": "r", "in": "=ref_list(a.get('with')) or []", "steps": [{"let": {"o": "=body(r)"}}, {"refuse": {"fmt": "with: other bodies than {b.Label} itself."}, "when": "=o is b"}, {"push": {"others": "=o"}}]},
-    {"refuse": "with: [body names] — the other PartDesign bodies to fuse with, cut away or keep the common part of (a plain Part solid first becomes a body with pd_clone).", "when": "=not others"},
+    {"each": "r", "in": "=ref_list(a.bodies) or []", "steps": [{"let": {"o": "=body(r)"}}, {"refuse": {"fmt": "bodies: other bodies than {b.Label} itself."}, "when": "=o is b"}, {"push": {"others": "=o"}}]},
+    {"refuse": "bodies: [body names] — the other PartDesign bodies to fuse with, cut away or keep the common part of (a plain Part solid first becomes a body with pd_clone).", "when": "=not others"},
     {"let": {"f": "=new(b, 'PartDesign::Boolean', a.name or op)"}},
     {"set": {"f.Type": "=op"}},
     {"do": "=f.addObjects(others)"},
     {"set": {"b.Tip": "=f"}, "when": "=b.Tip != f"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_boolean", "=before", "={'Fuse': 'add', 'Cut': 'cut'}.get(op)", "The bodies must overlap this one as they stand in the document; they move inside the boolean and follow their own edits."], "then": [{"put": {"with": "=[o.Label for o in others]"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_boolean", "=before", "={'Fuse': 'add', 'Cut': 'cut'}.get(op)", "The bodies must overlap this one as they stand in the document; they move inside the boolean and follow their own edits."], "then": [{"put": {"bodies": "=[o.Label for o in others]"}}]}
   },
   "sketch_copy": {
    "group": "sketch",
