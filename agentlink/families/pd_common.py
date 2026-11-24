@@ -707,6 +707,14 @@ def _edges_legacy(shape, q, names=()):
     """The older edge forms: { near } the edge nearest a point (within 1
     mm), { face: { at, normal } } every edge of a face, { all: true };
     kind: line | circle filters any of them."""
+    unknown = sorted(k for k in q if k not in EDGE_KEYS) if isinstance(q, dict) else []
+    if unknown:
+        # 24 Nov QA: an unknown key (position) was dropped without a word,
+        # and the wrong edges were rounded. No key is guessed or left out.
+        from .refs import FILTER_KEYS
+
+        raise ToolError("invalid_input", f"edges: {', '.join(unknown)} is not a key of an edge query. Keys: {', '.join(EDGE_KEYS)}; "
+                                         f"or shape_query's filters ({', '.join(sorted(FILTER_KEYS))}). Nothing was changed.")
     edges = shape.Edges
     if q.get("all"):
         idx = list(range(len(edges)))
@@ -891,15 +899,19 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
     if before is not None and "volume" in out:
         delta = out["volume"] - before
         out["volumeChange"] = round(delta, 2)
-        if must_change == "add" and delta <= 1e-6:
+        # No change within the noise of FreeCAD's volume on a curved body
+        # (24 Nov QA: five cuts that removed nothing came back ok with
+        # volumeChange -0.0, as the test of 1e-6 let the noise through).
+        tol = max(0.01, 1e-7 * max(abs(before), abs(out["volume"])))
+        if must_change == "add" and delta <= tol:
             raise ToolError("failed", f"{feat.Label} added no material — it lies inside the body already. Nothing was kept. {hint}".strip())
         dress = feat is not None and getattr(feat, "TypeId", "") in DRESSUPS
-        if must_change == "cut" and delta >= -1e-6:
+        if must_change == "cut" and delta >= -tol:
             what = ("removed no material — the wall did not hollow the body" if dress
                     else "cut nothing — the profile does not meet the body that way")
             side = "" if dress else cut_side_words(feat, body)
             raise ToolError("failed", f"{feat.Label} {what}.{(' ' + side) if side else ''} Nothing was kept. {hint}".strip())
-        if must_change == "changed" and abs(delta) <= 1e-6:
+        if must_change == "changed" and abs(delta) <= tol:
             # A fillet or chamfer may add material (an inside corner, concave)
             # or take it away (an outside one): only no change at all is wrong.
             raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())

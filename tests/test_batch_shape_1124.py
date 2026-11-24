@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # One shape (24 Nov): the batch answer's result and each call's status (1f),
 # next-step words that list the calls to send (1g), and the batch call form.
+import json
 import os
 import sys
 import unittest
@@ -293,3 +294,56 @@ class CascadeNotCounted(unittest.TestCase):
         self.assertEqual(got[0], list(range(7)))
         self.assertEqual(got[1], 1)
         self.assertEqual(got[2], [None] * 7)
+
+
+class QA1125Words(unittest.TestCase):
+    """24 Nov blind QA of series 1125: four refusals that were missing or
+    sent the model the wrong way. Read from the data and the source (the
+    tools need FreeCAD to run)."""
+
+    def setUp(self):
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink")
+        with open(os.path.join(here, "data", "tools.json"), encoding="utf-8") as f:
+            self.tools = json.load(f)["entries"]
+        with open(os.path.join(here, "families", "pd_common.py"), encoding="utf-8") as f:
+            self.pd = f.read()
+        with open(os.path.join(here, "fastpath.py"), encoding="utf-8") as f:
+            self.fast = f.read()
+
+    def test_face_with_length_is_refused(self):
+        for n in ("pd_pad", "pd_pocket"):
+            steps = json.dumps(self.tools[n]["steps"])
+            i, j = steps.find("face is the face to go up to"), steps.find('"types"')
+            self.assertTrue(0 < i < j, n)  # refused before the extent is chosen
+            self.assertIn("a.face is not None and not a.extent and a.get('length') is not None", steps, n)
+
+    def test_no_change_uses_a_tolerance(self):
+        self.assertIn("tol = max(0.01, 1e-7 * max(abs(before), abs(out[\"volume\"])))", self.pd)
+        for k in ('must_change == "add" and delta <= tol', 'must_change == "cut" and delta >= -tol', 'must_change == "changed" and abs(delta) <= tol'):
+            self.assertIn(k, self.pd)
+        self.assertNotIn("delta >= -1e-6", self.pd)
+
+    def test_unknown_edge_key_is_named(self):
+        self.assertIn('is not a key of an edge query. Keys: {', self.pd)
+
+    def test_get_names_real_objects(self):
+        self.assertNotIn("Name it: \\\"{parts[0].capitalize()}", self.fast)
+        self.assertIn("Name the {parts[0]} by its label, then the property", self.fast)
+
+
+class EdgeKeys(unittest.TestCase):
+    """The unknown key refusal, run (a stand-in shape)."""
+
+    def test_position_is_refused(self):
+        got = run('''
+    from agentlink.families import pd_common
+    from agentlink.protocol import ToolError
+    try:
+        pd_common._edges_legacy(None, {"face": {"side": "-z"}, "kind": "line", "position": "outer"})
+        print(json.dumps("no refusal"))
+    except ToolError as e:
+        print(json.dumps([e.code, e.message]))
+''')
+        self.assertEqual(got[0], "invalid_input")
+        self.assertTrue(got[1].startswith("edges: position is not a key of an edge query."), got[1])
+        self.assertIn("Nothing was changed.", got[1])

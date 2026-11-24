@@ -395,7 +395,7 @@ class Census(unittest.TestCase):
 # 781: window_snapshot checks its width first (efficiency design D1, 22 Nov).
 # 787: pd_datum_plane and pd_mirrored check plane or face (both; a face as plane; a plane as face) first (rename set 8, 24 Nov).
 # 784: object_set's three property/value refusals went with { property, value } (rename set 10, 24 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 784, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 786, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

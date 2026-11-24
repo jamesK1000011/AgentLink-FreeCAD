@@ -408,7 +408,17 @@ def read(server, session, what):
     if parts[0] in ("body", "sketch") and _doc_object(doc, parts[0]) is None:
         label = current(session, parts[0])
         if label is None:
-            raise ToolError("not_found", f"{w}: no current {parts[0]} (none made or named by a block, none active, not just one in the document). Name it: \"{parts[0].capitalize()}.{'.'.join(parts[1:])}\".")
+            # Name real ones, never the request turned round (24 Nov QA: it
+            # answered Name it: "Sketch.dof,HollowSketch" to "sketch.dof,HollowSketch").
+            try:
+                have = ([o.Label for o in session.bodies()] if parts[0] == "body" else
+                        [o.Label for o in getattr(doc, "Objects", ()) if getattr(o, "TypeId", "") == "Sketcher::SketchObject"])
+            except Exception:  # noqa: BLE001
+                have = []
+            prop = re.split(r"[^A-Za-z0-9_]", parts[1])[0] if len(parts) > 1 and parts[1] else ""
+            named = ", ".join(f"{x}.{prop}" if prop else x for x in have[-4:][::-1])
+            raise ToolError("not_found", f"{w}: no current {parts[0]} (none made or named by a block, none active, not just one in the document). "
+                                         + (f"Name the {parts[0]} by its label, then the property: {named}." if have else f"There is no {parts[0]} in the document."))
         o, rest = _doc_object(doc, label), parts[1:]
     else:
         for i in range(len(parts) - 1, 0, -1):
