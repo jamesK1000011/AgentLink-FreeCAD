@@ -165,6 +165,67 @@ class TheSameCallAgain(unittest.TestCase):
         self.assertIn("doc_close", got["docNewAgain"])
         self.assertEqual(got["docs"], 2)
 
+    def test_the_same_arguments_on_another_sketch_or_body_are_no_repeat(self):
+        # Coordinator, 24 Nov: sketch_new (Sketch 3), sketch_add with no sketch named; later sketch_new (Sketch 4) and
+        # the same sketch_add: a normal step on another sketch. Also pd_pad { length } and a new body with no names.
+        got = in_a_process(SERVER + '''
+    from agentlink.families import pd_common as pc
+    ASCH = {"type": "object", "properties": {"sketch": {"type": "string"}, "items": {"type": "array"}, "length": {"type": "number"}}, "additionalProperties": False}
+    def sk_new(a):
+        o = Sk(D, "Sketch%03d" % len(D.Objects))
+        o.Label, o.Geometry = "Sketch %d" % (len([x for x in D.Objects if x.TypeId == "Sketcher::SketchObject"]) + 2), []
+        D.Objects.append(o)
+        pc.note_made_sketch(s, o)
+        return {"sketch": o.Label}
+    def sk_add(a):
+        o = pc.sketch_of(s.doc, a.get("sketch"), None, s)
+        n = len(o.Geometry)
+        o.Geometry = o.Geometry + ["circle"]
+        return {"sketch": o.Label, "added": [{"kind": "circle", "ids": [n]}]}
+    def pad(a):
+        o = pc.sketch_of(s.doc, a.get("sketch"), None, s)
+        f = Obj(D, "Pad%03d" % len(D.Objects))
+        D.Objects.append(f)
+        return {"feature": f.Label, "sketch": o.Label}
+    srv.tools["sketch_new"] = Tool("sketch_new", "New sketch.", SCH, sk_new, changes=True, group="sketch")
+    srv.tools["sketch_add"] = Tool("sketch_add", "Add geometry.", ASCH, sk_add, changes=True, group="sketch")
+    srv.tools["probe_pad"] = Tool("probe_pad", "Pad.", ASCH, pad, changes=True)
+    srv.tools["probe_body"] = Tool("probe_body", "New body.", SCH, make, changes=True)
+    C = {"items": [{"kind": "circle", "center": [0, 0], "radius": 2.5}]}
+    out = {}
+    call("sketch_new", {})
+    out["add3"] = call("sketch_add", C)
+    out["add3Again"] = msg(call("sketch_add", C))           # the same current sketch: refused
+    call("sketch_new", {})
+    out["add4"] = call("sketch_add", C)                     # another current sketch: not a repeat
+    out["named"] = call("sketch_add", dict(C, sketch="Sketch 3"))[0]
+    out["namedAgain"] = msg(call("sketch_add", dict(C, sketch="Sketch 3")))
+    out["pad"] = call("probe_pad", {"length": 5})
+    out["padAgain"] = msg(call("probe_pad", {"length": 5}))
+    call("sketch_new", {})
+    out["padNew"] = call("probe_pad", {"length": 5})[0]
+    out["body"] = call("probe_body", {})[0]
+    out["bodyAgain"] = msg(call("probe_body", {}))
+    call("probe_make", {"x": 99})
+    out["bodyLater"] = call("probe_body", {})[0]
+    out["geometry"] = {o.Label: len(o.Geometry) for o in D.Objects if o.TypeId == "Sketcher::SketchObject"}
+    print(json.dumps(out))
+''')
+        self.assertFalse(got["add3"][0])
+        self.assertEqual(got["add3"][1]["sketch"], "Sketch 3")
+        self.assertIn("(made: Sketch 3 geometry 0;", got["add3Again"])
+        self.assertFalse(got["add4"][0], got["add4"])
+        self.assertEqual(got["add4"][1]["sketch"], "Sketch 4")
+        self.assertFalse(got["named"])
+        self.assertIn("(made: Sketch 3 geometry 1;", got["namedAgain"])
+        self.assertFalse(got["pad"][0])
+        self.assertIsNotNone(got["padAgain"])
+        self.assertFalse(got["padNew"])  # a new sketch is the default now: another pad, not a repeat
+        self.assertFalse(got["body"])
+        self.assertIsNotNone(got["bodyAgain"])  # nothing made since: the same call again
+        self.assertFalse(got["bodyLater"])  # something made since: another step
+        self.assertEqual(got["geometry"], {"Sketch": 0, "Sketch 3": 2, "Sketch 4": 1, "Sketch 5": 0})
+
     def test_a_rollback_clears_the_record(self):
         from agentlink import protocol
 

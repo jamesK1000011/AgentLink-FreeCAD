@@ -501,6 +501,7 @@ tests/test_porting.py
 tests/test_practice_warnings.py
 tests/test_pref_import.py
 tests/test_protocol.py
+tests/test_qa_sketch_1124.py
 tests/test_quiet_reads.py
 tests/test_quit_guard.py
 tests/test_red_team.py

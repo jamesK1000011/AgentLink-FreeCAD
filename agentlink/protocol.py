@@ -1328,6 +1328,7 @@ class Server:
             if s is not None:
                 got, sk = s.filled_now, s.sketch_now
                 s.filled_now, s.sketch_now = held
+                self._acted = (list(got or ()), sk)  # what the call acted on, for again_after
         if s is not None:
             try:
                 self._sketch_words(params, result, got, sk)
@@ -1686,6 +1687,9 @@ class Server:
 # restore, a rollback, a removal or another document (AGAIN_CLEARS) clears the
 # record, as does a new conversation. A record whose objects are gone counts
 # no more. The person's calls (session.by "person") are not looked at.
+# The same arguments are the same call only on the same thing (_same_target):
+# the same document; the sketch the call took (named, or the default it would
+# take now); with no sketch, nothing new made in the document since.
 
 AGAIN_WINDOW = 10
 # The same call again is normal: the history (undo, redo …), recompute, saves,
@@ -1771,6 +1775,48 @@ def _remove_words(made):
     return " or ".join(out) or "history_undo"
 
 
+def _token(doc):
+    """What tells a document's objects apart from a later state: how many,
+    and the newest one's name."""
+    try:
+        objs = list(doc.Objects)
+        return [len(objs), objs[-1].Name if objs else None]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _default_sketch(s, doc):
+    """The sketch a call that names none would take now (pd_common.sketch_of:
+    the one open in edit, the one the agent made last, the only one), or None."""
+    try:
+        from .families import pd_common as pc
+
+        sk = [o for o in doc.Objects if getattr(o, "TypeId", "") == "Sketcher::SketchObject"]
+        for o in (pc.sketch_in_edit(doc), pc.made_sketch(s, doc)):
+            if o is not None and any(o is x for x in sk):
+                return o
+        return sk[0] if len(sk) == 1 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _same_target(s, rec):
+    """Whether a call with a recorded call's arguments acts on the same thing
+    now: the same document; the same sketch (the named one, or the one it
+    takes when none is named); else nothing made in the document since it."""
+    if rec["name"] in AGAIN_ALSO:
+        return True
+    doc = getattr(s, "doc", None)
+    if doc is None or getattr(doc, "Name", None) != rec.get("doc"):
+        return False
+    if rec.get("sketch"):
+        if not rec.get("filled"):
+            return True  # named in the arguments: the same sketch
+        now = _default_sketch(s, doc)
+        return now is not None and now.Name == rec["sketch"]
+    return rec.get("token") is not None and _token(doc) == rec["token"]
+
+
 def again_before(server, params):
     """Before a call: the refusal of a changing call sent again exactly
     (refusal), or what again_after needs to record it. None when the call
@@ -1786,7 +1832,7 @@ def again_before(server, params):
     call = canonical_call(args)
     ran = getattr(server, "_ran", None) or []
     for rec in reversed(ran):
-        if rec["name"] == name and rec["call"] == call and rec["made"] and _still_there(rec["made"]):
+        if rec["name"] == name and rec["call"] == call and rec["made"] and _same_target(s, rec) and _still_there(rec["made"]):
             ago = server._seq - rec["seq"]
             msg = (f"This call ran before with the same tool and arguments, and answered ok (made: {_made_words(rec['made'])}; "
                    f"calls since then: {ago - 1}). If it runs again, it adds the same again. Nothing was done. "
@@ -1841,7 +1887,10 @@ def again_after(server, params, result, seen):
         ids = [i for r in body["added"] if isinstance(r, dict) for i in (r.get("ids") or []) if isinstance(i, int)]
         if sk is not None and ids:
             made.append(("geometry", doc.Name, sk.Name, sk.Label, ids))
-    ran.append({"name": name, "call": seen["call"], "seq": seen["seq"], "made": made})
+    filled, sk = getattr(server, "_acted", None) or ([], None)
+    now = getattr(s, "doc", None)
+    ran.append({"name": name, "call": seen["call"], "seq": seen["seq"], "made": made, "doc": getattr(now, "Name", None),
+                "sketch": getattr(sk, "Name", None) if sk is not None else None, "filled": bool(filled), "token": _token(now) if now is not None else None})
     del ran[:-AGAIN_WINDOW]
 
 
