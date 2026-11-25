@@ -196,24 +196,45 @@ def clashing(sk, cap=150):
 # a gap to close (a coincident constraint); farther from every other end,
 # and on no other curve, it is a loose end (a stray line, or a side left out).
 NEAR_GAP = 0.1
+# Heuristic (blind QA, 26 Nov: round ends drawn as full circles plus lines):
+# an open end this near a full circle's edge (a share of the outline's size,
+# at least ROUND_NEAR_MM, never past the NEAR_GAP distance) is a line meant to
+# meet a round end there. Such ends are not paired to each other: joining
+# them collapses the outline. The words say to use an arc in its place.
+ROUND_NEAR = 0.05
+ROUND_NEAR_MM = 3.0
 
 
-def open_end_words(ends, curves, size, dist):
+def _at(p):
+    return f"({geo.r3(p[0]):g}, {geo.r3(p[1]):g})"
+
+
+def open_end_words(ends, curves, size, dist, rounds=()):
     """The todo words for the open ends of a sketch's outline, one phrase
     each (a curve with both ends loose: one phrase). ends: [(gid, kind,
     pos, (x, y))], pos 1 start / 2 end; curves: the ids of the outline's
     curves; size: the outline's size (its box's diagonal, mm); dist(gid,
-    (x, y)): mm from that curve to the point. [] when an end is on another
-    curve (a branch: no words here fit it)."""
+    (x, y)): mm from that curve to the point; rounds: the ids of its full
+    circles. [] when an end is on another curve (a branch: branch_words
+    says it)."""
     tol = 1e-6 * max(size, 1.0)
     gap = max(NEAR_GAP * size, tol)
+    rgap = min(max(ROUND_NEAR * size, ROUND_NEAR_MM), gap)
+    at = _at
 
-    def at(p):
-        return f"({geo.r3(p[0]):g}, {geo.r3(p[1]):g})"
+    def round_of(gid, p):
+        near_ = [(dist(c, p), c) for c in rounds if c != gid]
+        return min(near_) if near_ else (math.inf, None)
 
-    near, loose, pairs = [], {}, set()
+    by_round = {(gid, pos): round_of(gid, p) for gid, _k, pos, p in ends}
+    near, rnd, loose, pairs = [], [], {}, set()
     for gid, kind, pos, p in ends:
-        others = [(math.dist(p, q), g2, k2, s2, q) for g2, k2, s2, q in ends if g2 != gid]
+        rd, rc = by_round[(gid, pos)]
+        if rd <= rgap:
+            if rd > tol:
+                rnd.append(f"{kind} {gid} ends at {at(p)}, {geo.r3(rd):g} mm from circle {rc}: an outline uses an arc there, not a full circle")
+            continue  # on the circle: a branch, which branch_words says
+        others = [(math.dist(p, q), g2, k2, s2, q) for g2, k2, s2, q in ends if g2 != gid and by_round[(g2, s2)][0] > rgap]
         d, g2, k2, s2, q = min(others) if others else (math.inf, None, None, None, None)
         if d <= gap:
             key = tuple(sorted(((gid, pos), (g2, s2))))
@@ -223,9 +244,9 @@ def open_end_words(ends, curves, size, dist):
                             "sketch_constrain coincident joins them")
             continue
         if any(dist(g, p) <= tol for g in curves if g != gid):
-            continue  # on another curve: a branch, which the other words cover
+            continue  # on another curve: a branch, which branch_words says
         loose.setdefault((gid, kind), []).append(p)
-    words = []
+    words = rnd
     for (gid, kind), ps in loose.items():
         if len(ps) > 1:
             words.append(f"{kind} {gid} touches nothing at {' or '.join(at(p) for p in ps)}: remove it (sketch_edit {{ delete: [{gid}] }}) or join its ends")
@@ -235,6 +256,153 @@ def open_end_words(ends, curves, size, dist):
     if len(words) > 4:
         words = words[:4] + [f"and {len(words) - 4} more open ends (openVertices)"]
     return words
+
+
+def _names(items):
+    """(kind, gid) pairs in words, by kind: "lines 2 and 4, circle 0"."""
+    groups = {}
+    for k, g in items:
+        if g not in groups.setdefault(k, []):
+            groups[k].append(g)
+    out = []
+    for k, gs in groups.items():
+        ids = [str(g) for g in gs]
+        out.append(f"{k} {ids[0]}" if len(ids) == 1 else f"{k}s {', '.join(ids[:-1])} and {ids[-1]}")
+    return ", ".join(out)
+
+
+def branch_words(ends, curves, size, dist, rounds=()):
+    """The todo words for each point where a wire branches: three or more
+    edges meet there (an outline has two at each joint), as the ends of
+    curves and the curves that pass through it. ends: [(gid, kind, pos,
+    (x, y))], every end of the open curves; curves: {gid: kind}; size and
+    dist as open_end_words; rounds: the ids of the full circles."""
+    tol = 1e-6 * max(size, 1.0)
+    spots = []
+    for gid, kind, _pos, p in ends:
+        for q, at_ in spots:
+            if math.dist(q, p) <= tol:
+                at_.append((kind, gid))
+                break
+        else:
+            spots.append((p, [(kind, gid)]))
+    words, round_ = [], False
+    for p, at_ in spots:
+        mine = {g for _k, g in at_}
+        through = [(curves[g], g) for g in curves if g not in mine and dist(g, p) <= tol]
+        if len(at_) + 2 * len(through) < 3:
+            continue
+        who = _names(at_)
+        if through:
+            words.append(f"{who} {'meets' if len(at_) == 1 else 'meet'} {_names(through)} at {_at(p)}")
+            round_ = round_ or any(g in rounds for _k, g in through)
+        else:
+            words.append(f"{who} meet at {_at(p)}")
+    if not words:
+        return []
+    if len(words) > 4:
+        words = words[:4] + [f"and {len(words) - 4} more points where a wire branches"]
+    # The why, once: on the first point.
+    words[0] += ": a wire branches there; an outline has two edges at each joint" + (", so use an arc there, not a full circle" if round_ else "")
+    return words
+
+
+def cross_words(loops, meet):
+    """The todo words for closed loops that cross or touch each other (a
+    loop inside another, apart from it, is a hole: no words). loops: their
+    names; meet(i, j): (x, y) where loops i and j meet, or None."""
+    words = []
+    for i in range(len(loops)):
+        for j in range(i + 1, len(loops)):
+            p = meet(i, j)
+            if p is not None:
+                words.append(f"{loops[i]} meets {loops[j]} at {_at(p)}")
+    if not words:
+        return []
+    if len(words) > 4:
+        words = words[:4] + [f"and {len(words) - 4} more loops that meet"]
+    words[0] += ": a pad or pocket uses only loops that do not cross or touch; make one outline"
+    return words
+
+
+def _outline(sk):
+    """The outline curves of sketch sk (not construction, not points):
+    {gid: kind}, the ends of the open ones [(gid, kind, pos, (x, y))], the
+    ids of its full circles, its size (mm) and dist(gid, (x, y))."""
+    curves, ends, rounds = {}, [], []
+    for i, g in enumerate(sk.Geometry):
+        k = _geo_kind(g)
+        if k == "Point" or sk.getConstruction(i):
+            continue
+        curves[i] = k.lower()
+        if k in ("Circle", "Ellipse"):
+            if k == "Circle":
+                rounds.append(i)
+            continue
+        for pos, q in ((1, getattr(g, "StartPoint", None)), (2, getattr(g, "EndPoint", None))):
+            if q is not None:
+                ends.append((i, k.lower(), pos, (q.x, q.y)))
+    try:
+        size = sk.Shape.BoundBox.DiagonalLength
+    except Exception:  # noqa: BLE001
+        size = 0.0
+
+    def dist(i, p):
+        return sk.Geometry[i].toShape().distToShape(Part.Vertex(V(p[0], p[1], 0)))[0]
+
+    return curves, ends, rounds, size, dist
+
+
+def _branch_words(sk):
+    """branch_words for sketch sk; [] when it cannot be read."""
+    try:
+        curves, ends, rounds, size, dist = _outline(sk)
+        return branch_words(ends, curves, size, dist, rounds)
+    except Exception:  # noqa: BLE001 - no reading: the general todo stays
+        return []
+
+
+MAX_LOOPS = 40   # closed wires past which the crossing test is not run
+
+
+def _cross_words(sk, wires):
+    """cross_words for the closed wires of sketch sk (its Shape's, in the
+    world: read back into the sketch's own x/y); [] when it cannot be read."""
+    try:
+        loops = [w for w in wires if w.isClosed()]
+        if len(loops) < 2 or len(loops) > MAX_LOOPS:
+            return []
+        curves, _ends, _rounds, size, dist = _outline(sk)
+        tol = 1e-6 * max(size, 1.0)
+        inv = sk.Placement.inverse()
+
+        def name(w):
+            ids = []
+            for e in w.Edges:
+                m = inv.multVec(e.valueAt((e.FirstParameter + e.LastParameter) / 2))
+                d, g = min(((dist(g, (m.x, m.y)), g) for g in curves), default=(math.inf, None))
+                if g is not None and d <= max(tol, 1e-4) and g not in ids:
+                    ids.append(g)
+            if len(ids) == 1:
+                return f"{curves[ids[0]]} {ids[0]}"
+            return f"the loop of {_names([(curves[g], g) for g in ids])}" if ids else "a loop"
+
+        def meet(i, j):
+            a, b = loops[i], loops[j]
+            try:
+                if not a.BoundBox.intersect(b.BoundBox):
+                    return None
+            except Exception:  # noqa: BLE001
+                pass
+            d, pts, _info = a.distToShape(b)
+            if d > tol:
+                return None
+            q = inv.multVec(pts[0][0])
+            return (q.x, q.y)
+
+        return cross_words([name(w) for w in loops], meet)
+    except Exception:  # noqa: BLE001 - no reading: nothing said
+        return []
 
 
 def _open_end_words(sk, openv):
@@ -263,7 +431,8 @@ def _open_end_words(sk, openv):
     def dist(i, p):
         return sk.Geometry[i].toShape().distToShape(Part.Vertex(V(p[0], p[1], 0)))[0]
 
-    return open_end_words(ends, curves, size, dist)
+    rounds = [i for i in curves if _geo_kind(sk.Geometry[i]) == "Circle"]
+    return open_end_words(ends, curves, size, dist, rounds)
 
 
 def state_of(sk):
@@ -298,15 +467,21 @@ def state_of(sk):
     for k, v in (("conflicting", conflicting), ("redundant", redundant), ("partiallyRedundant", partial), ("malformed", malformed)):
         if v:
             out[k] = v
-    ready = code == 0 and not conflicting and not redundant and not malformed and closed > 0 and not openv
+    # Ready only when every wire is closed (open wires with T-junctions have
+    # no one-edge end) and no two closed wires cross or touch: FreeCAD makes
+    # a face of loops apart or one inside another (a hole), not of loops
+    # that meet.
+    cross = _cross_words(sk, wires) if wires and closed == len(wires) else []
+    ready = code == 0 and not conflicting and not redundant and not malformed and bool(wires) and closed == len(wires) and not cross
     out["readyForFeature"] = ready
     if not ready:
         why = []
         if conflicting or redundant or malformed or code != 0:
             why.append("fix the constraints named (sketch_edit deleteConstraints)")
         if openv or (wires and closed < len(wires)):
-            said = _open_end_words(sk, openv)
+            said = _branch_words(sk) + _open_end_words(sk, openv)
             why += said or ["close the open wires: coincident constraints at the open vertices"]
+        why += cross
         if not wires:
             why.append("no profile yet: sketch_add")
         out["todo"] = "; ".join(why) or "the sketch has no closed wire"

@@ -6,9 +6,10 @@
 # on a shape that isValid() calls invalid, so no call pays for it otherwise.
 #
 # It names the step (the Body's tip when that is a pad, pipe, revolution,
-# loft or other additive feature; a Part fuse itself), gives the design rule,
-# and, in a short time, finds the tube bores (inner cylinder faces) of one
-# input whose open ends lie inside another input: the case that broke.
+# loft or other additive feature; a Part fuse itself) and, in a short time,
+# finds the tube bores (inner cylinder faces) of one input whose open ends
+# lie inside another input: the case that broke. It gives the design rule
+# only when it finds such bores; else the plain cause (plain_todo).
 # Duck-typed (Shape, Face, Surface as FreeCAD gives them): no FreeCAD import.
 
 import re
@@ -144,10 +145,34 @@ def todo(feature, k, body):
             f"history_undo, change it, then {check} to confirm")
 
 
+# The steps whose new solid comes from a sketch's loops.
+FROM_SKETCH = ("pad", "revolution", "helix")
+
+
+def plain_todo(feature, k, body, solids=0):
+    """The todo for an invalid result with no tube bore found (blind QA,
+    26 Nov: the tube rule was said for a crank with no tubes): the plain
+    cause, without the tube rule."""
+    check = f'body_check {{ body: "{body}" }}' if body else "body_check"
+    made = f"{feature} made {solids} solids" if solids > 1 else f"{feature} ({k}) left the shape invalid"
+    if k in FROM_SKETCH:
+        return (f"{made}: the sketch can have loops that cross or touch (sketch_state names them); "
+                f"history_undo, change the sketch, then {check} to confirm")
+    return f"{made}: history_undo, change it, then {check} says where the shape is broken"
+
+
+def _solids(o):
+    try:
+        return len(o.Shape.Solids)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def for_invalid(o):
     """For a part (a Body or a Part fuse) whose shape is invalid: the step
     that made it and what to do, or None when that step is not additive.
-    {feature, kind, bores, line, todo}."""
+    {feature, kind, bores, line, todo}. The tube rule only when tube bores
+    end inside the new solid; else the plain cause."""
     if o is None:
         return None
     f, k = _step(o)
@@ -159,22 +184,32 @@ def for_invalid(o):
     except Exception:
         found = []
     line = f"after {label} ({k})"
+    body = getattr(o, "Label", "")
     if found:
         groups = {}
         for b in found:
             groups.setdefault(b["of"], []).append(b["face"])
         where = "; ".join(f"{of} {', '.join(fs)}" for of, fs in groups.items())
         line += f": {len(found)} tube bore{'s' if len(found) != 1 else ''} ({where}) end inside the new solid of {label}"
-    return {"feature": label, "kind": k, "bores": found, "line": line, "todo": todo(label, k, getattr(o, "Label", ""))}
+        told = todo(label, k, body)
+    else:
+        told = plain_todo(label, k, body, _solids(o))
+    return {"feature": label, "kind": k, "bores": found, "line": line, "todo": told}
 
 
 def for_error(feature, error):
-    """The rule for a failed additive step whose error says the result is
-    not a valid solid; else None."""
+    """The todo for a failed additive step whose error says the result is
+    not a valid solid: the tube rule when tube bores end inside its new
+    solid, else the plain cause; else None."""
     k = kind(feature)
     if not k or not ERROR_WORDS.search(error or ""):
         return None
-    return todo(getattr(feature, "Label", "?"), k, "")
+    label = getattr(feature, "Label", "?")
+    try:
+        found = bores_inside(_inputs(feature, k), time.time() + BUDGET_S)
+    except Exception:
+        found = []
+    return todo(label, k, "") if found else plain_todo(label, k, "")
 
 
 # Bicycle L5 build (21 Nov, finding 4): PartDesign Refine on every feature
