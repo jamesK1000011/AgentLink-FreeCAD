@@ -203,8 +203,17 @@ def theirs_first(session, server):
         doc = getattr(session, "doc", None)
         if doc is None or "doc_new" not in server.tools or doc.Name in (getattr(session, "agent_docs", None) or ()):
             return None
+        # Agent Link's empty start document is not the person's (26 Nov QA:
+        # this said so while session_state's note said the opposite).
+        try:
+            from .tools import is_start_doc
+
+            start = is_start_doc(doc)
+        except Exception:  # noqa: BLE001 - no FreeCAD: not known, the person's
+            start = False
+        whose = "an empty start document that Agent Link made" if start else "the person's"
         return {"n": 1, "tool": "doc_new", "arguments": {}, "ask": [{"arg": "name"}],
-                "why": f"new work in a document of its own: {doc.Label} is the person's"}
+                "why": f"new work in a document of its own: {doc.Label} is {whose}"}
     except Exception:  # noqa: BLE001
         return None
 

@@ -181,6 +181,12 @@
    "date": "2026-11-22"
   },
   "pd_fillet": {
+   "forms": {
+    "edges": {
+     "type": "line",
+     "axis": "z"
+    }
+   },
    "arguments": {
     "body": "=facts.bodyName",
     "edges": "=facts.pickedEdges"
@@ -200,6 +206,12 @@
    "date": "2026-11-22"
   },
   "pd_chamfer": {
+   "forms": {
+    "edges": {
+     "type": "line",
+     "axis": "z"
+    }
+   },
    "arguments": {
     "body": "=facts.bodyName",
     "edges": "=facts.pickedEdges"

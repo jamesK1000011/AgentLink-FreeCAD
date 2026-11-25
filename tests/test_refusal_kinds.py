@@ -26,7 +26,7 @@ def call(srv, name, args):
 
 class Kinds(unittest.TestCase):
     def test_words_are_fixed(self):
-        self.assertEqual(FIX, "This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.")
+        self.assertEqual(FIX, "Change what the error names and call again.")
         self.assertEqual(RETRY, "Retrying the same call is expected to succeed.")
         self.assertEqual(STOP, "Do not call it again. Report what happened.")
 

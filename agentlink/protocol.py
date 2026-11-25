@@ -90,7 +90,7 @@ class ToolError(Exception):
 # the message. The code and the status stay as they are.
 
 KIND_WORDS = {
-    "fixable": "This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.",
+    "fixable": "Change what the error names and call again.",
     "retry": "Retrying the same call is expected to succeed.",
     "stop": "Do not call it again. Report what happened.",
 }
@@ -98,6 +98,8 @@ KIND_WORDS = {
 # command not done" came back with "The error says what to change"). A
 # message that carries this line keeps kind fixable, without that sentence.
 NAMES_NOTHING = "FreeCAD's error does not say which input to change."
+# The fixable sentence before 26 Nov: taken out of a message that carries it.
+OLD_KIND_WORDS = ("This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.",)
 # The person's to say or to set: an approval, a hold, a refusal by rule.
 STOP_CODES = frozenset(("held_person_editing", "not_allowed", "refused", "denied", "declined", "stopped",
                         "pending_approval", "approval_pending", "unsupported", "unavailable"))
@@ -126,9 +128,18 @@ def strip_kind(message):
     """The message without the kind sentences it carries (a refusal that
     wraps another one's words, a ladder that adds its own)."""
     m = str(message or "")
-    for w in KIND_WORDS.values():
+    for w in (*KIND_WORDS.values(), *OLD_KIND_WORDS):
         m = m.replace(" " + w, "").replace(w, "")
     return m.strip()
+
+
+def names_input(message):
+    """Whether a refusal's words name an input to change: a place
+    (input.depth, calls.2, constraints[1]) or a field they start with
+    ("edges: …"). The fixable sentence goes only on these (26 Nov QA: it
+    ended every refusal, also those that named nothing to change)."""
+    m = str(message or "")
+    return bool(_PLACES.search(m) or _LEAD.match(m))
 
 
 def set_kind(err, kind=None):
@@ -141,8 +152,8 @@ def set_kind(err, kind=None):
     err["kind"] = kind
     if kind == "stop" and STOP_MARK in msg:
         err["message"] = msg  # the stop line says it already
-    elif kind == "fixable" and NAMES_NOTHING in msg:
-        err["message"] = msg  # nothing named to change: the line says so
+    elif kind == "fixable" and (NAMES_NOTHING in msg or not names_input(msg)):
+        err["message"] = msg  # nothing named to change: the sentence would point nowhere
     else:
         err["message"] = (msg + " " + KIND_WORDS[kind]).strip()
     return err
@@ -713,9 +724,7 @@ def check_input(schema, args, tool=None):
     required = set(schema.get("required", []))
     empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
     for k in empty:
-        args.pop(k)
-    if empty:
-        read_as.append(f"ignored {', '.join(empty)} (empty: read as left out)")
+        args.pop(k)  # read as left out, and not said: an empty value carries nothing (26 Nov QA: noise on every tool_find)
     answer_only = [k for k in args if k in ANSWER_FIELDS and k not in props]
     for k in answer_only:
         args.pop(k)
@@ -1109,6 +1118,7 @@ class Server:
                         pass
                 self._oriented = False
                 self._ran = []  # a new conversation: no call of it ran yet (again_before)
+                self._batch_kept = []  # nor a batch (tools.ran_before)
                 now = getattr(self, "instructions_now", None)
                 if now is not None:
                     # Made again at each connect: the guide list is read from
@@ -1577,7 +1587,12 @@ class Server:
                 from . import staticbase
 
                 return self.refusal(e.code, staticbase.batch_hint(e.message), outcome=_outcome(tool, e), kind=getattr(e, "kind", None))
-            return self.refusal(e.code, e.message, outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None), kind=getattr(e, "kind", None))
+            msg = e.message
+            try:
+                msg = msg + example_words(tool, e.code, msg) + restart_words(self, e.code, args, msg)
+            except Exception:  # noqa: BLE001 - words only
+                pass
+            return self.refusal(e.code, msg, outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None), kind=getattr(e, "kind", None))
         except ValueError as e:
             return self.refusal("invalid_input", str(e), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
         except (SystemExit, KeyboardInterrupt) as e:
@@ -1698,6 +1713,8 @@ class Server:
 # take now); with no sketch, nothing new made in the document since.
 
 AGAIN_WINDOW = 10
+# How the refusal of a call sent again starts (a batch's note reads it: tools.ran_before).
+AGAIN_WORDS = "This call ran before with the same tool and arguments"
 # The same call again is normal: the history (undo, redo …), recompute, saves,
 # the view and the window, toggles and settings, runners of other calls (each
 # of their calls is looked at itself), and a new sketch (a second sketch on
@@ -1840,7 +1857,7 @@ def again_before(server, params):
     for rec in reversed(ran):
         if rec["name"] == name and rec["call"] == call and rec["made"] and _same_target(s, rec) and _still_there(rec["made"]):
             ago = server._seq - rec["seq"]
-            msg = (f"This call ran before with the same tool and arguments, and answered ok (made: {_made_words(rec['made'])}; "
+            msg = (f"{AGAIN_WORDS}, and answered ok (made: {_made_words(rec['made'])}; "
                    f"calls since then: {ago - 1}). If it runs again, it adds the same again. Nothing was done. "
                    f"Change it, or remove what you do not want: {_remove_words(rec['made'])}.")
             return {"refusal": server.refusal("invalid_state", msg, outcome="not_started")}
@@ -1875,6 +1892,7 @@ def again_after(server, params, result, seen):
     body = _answer_body(result) if name in AGAIN_ALSO or seen.get("looked") else None
     if name in AGAIN_CLEARS or name.startswith("history_"):
         del ran[:]
+        server._batch_kept = []
     if not seen.get("looked"):
         return
     s = server.session
@@ -1904,6 +1922,8 @@ def again_clear(server):
     """The record cleared: a batch's or a block's rollback took calls back."""
     if server is not None and getattr(server, "_ran", None):
         del server._ran[:]
+    if server is not None:
+        server._batch_kept = []
 
 
 # ---- the same refusal again: a stop by progress ----------------------------
@@ -1958,6 +1978,76 @@ def _first_sentence(message):
     got = re.match(r"(.+?[.!?])(\s|$)", m, re.S)
     first = (got.group(1) if got else m).strip()
     return first if len(first) <= 200 else first[:197] + "…"
+
+
+def example_words(tool, code, message):
+    """" Example: edges: {…}." for a refusal of a bad input, when the tool's
+    card data has a ready value of that input (examples.field_example), once;
+    else "" (26 Nov QA: a refusal listed filter names, and the model did not
+    find the card's ready form)."""
+    if code != "invalid_input" or tool is None or "Example: " in str(message or ""):
+        return ""
+    props = (getattr(tool, "schema", None) or {}).get("properties") or {}
+    field = None
+    for k in failing_keys(message):
+        got = re.match(r"(?:input\.)?([A-Za-z_]\w*)", k)
+        if got and got.group(1) in props:
+            field = got.group(1)
+            break
+    if field is None:
+        return ""
+    from . import examples
+
+    val = examples.field_example(getattr(tool, "name", None), field)
+    if val is None:
+        return ""
+    shown = compact(val)
+    if len(shown) > 160 and isinstance(val, list) and val:
+        shown = "[" + compact(val[0]) + ", …]"
+    if len(shown) > 160 or shown in str(message):
+        return ""
+    return f" Example: {field}: {shown}."
+
+
+# ---- FreeCAD started again (26 Nov QA) ---------------------------------------
+#
+# A client that goes on after the server (and its FreeCAD) started again
+# names documents and objects that are gone: "no object 'LidBody'" did not
+# say why. The process cannot know the conversation before it; it can know
+# that it started a short time ago and that no open document has anything
+# in it yet.
+
+STARTED = time.time()
+RESTART_WINDOW = 300.0  # seconds after the start that a missing name is read as from before it
+NAME_FIELDS = ("document", "doc", "body", "sketch", "object", "feature", "objects", "what", "of")
+
+
+def restart_words(server, code, args, message=""):
+    """" FreeCAD started at HH:MM and nothing is made in it yet: documents
+    and objects from before then are not open." for a refusal that names a
+    document or an object the call gave, while this FreeCAD started less
+    than RESTART_WINDOW ago and no open document has an object; else ""."""
+    if code not in ("not_found", "invalid_input", "invalid_state") or time.time() - STARTED > RESTART_WINDOW:
+        return ""
+    if not isinstance(args, dict):
+        return ""
+    names = []
+    for k in NAME_FIELDS:
+        v = args.get(k)
+        names += [x for x in (v if isinstance(v, list) else [v]) if isinstance(x, str) and x.strip()]
+    # The refusal names one of them: it is that name that is not there.
+    if not any(n.split(".")[0] in str(message or "") for n in names):
+        return ""
+    try:
+        import FreeCAD as _fc
+
+        if any(list(d.Objects) for d in _fc.listDocuments().values()):
+            return ""
+    except Exception:  # noqa: BLE001 - not known: no words
+        return ""
+    # True also on a first start: the words say when it started, not that it started again.
+    return (f" FreeCAD started at {time.strftime('%H:%M', time.localtime(STARTED))} and nothing is made in it yet: "
+            "documents and objects from before then are not open (session_state lists what is open).")
 
 
 def _field(keys):

@@ -38,6 +38,10 @@
     }
    }
   },
+  "forms": {
+   "type": "object",
+   "description": "A ready value for one input, taken from the tool's own card: a refusal of that input shows it once (Example: …)."
+  },
   "source": {
    "type": "string",
    "minLength": 1

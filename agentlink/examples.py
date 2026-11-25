@@ -85,3 +85,22 @@ def to_give(name):
     if not isinstance(e, dict):
         return {}
     return {f["arg"]: f.get("what", "") for f in e.get("fill") or () if not f.get("keep") and f.get("arg")}
+
+
+def field_example(name, field):
+    """A ready value of one input of the tool, from its card's data: the
+    entry's forms (a value its card gives), else its example's worked value
+    (not one filled from the document, not one the agent must give). None
+    when there is none."""
+    if not enabled() or not isinstance(field, str):
+        return None
+    e = load().get(name)
+    if not isinstance(e, dict):
+        return None
+    forms = e.get("forms") or {}
+    if field in forms:
+        return copy.deepcopy(forms[field])
+    v = (e.get("arguments") or {}).get(field)
+    if v is None or (isinstance(v, str) and v.startswith("=")) or field in to_give(name):
+        return None
+    return copy.deepcopy(v)

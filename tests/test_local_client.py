@@ -108,7 +108,7 @@ class AnswerFields(unittest.TestCase):
         a = {"group": "", "tool": ""}
         said = check_input(schema, a, "tool_find")
         self.assertEqual(a, {})
-        self.assertEqual(said, ["ignored group, tool (empty: read as left out)"])
+        self.assertEqual(said, [])  # read as left out, and not said: an empty value carries nothing (26 Nov)
         a = {"group": "", "find": "fillet"}
         check_input(obj({"group": {"type": "string"}, "find": {"type": "string"}}), a, "tool_groups")
         self.assertEqual(a, {"find": "fillet"})

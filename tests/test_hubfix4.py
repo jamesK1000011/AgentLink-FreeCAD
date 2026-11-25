@@ -101,7 +101,7 @@ class JobStartInABatch(unittest.TestCase):
         # the same refusal again, alone: the same words, and the repeat ladder's line after them (22 Nov)
         self.assertTrue(got["alone"][1]["error"]["message"].startswith(said[1]), (said[1], got["alone"]))
         self.assertEqual(rows[2]["error"], {"code": "not_found", "kind": "fixable", "message": "nosuchtool: no such tool — tool_groups lists them. "
-                                            "This call cannot succeed as written. The error says what to change; call the tool again with the corrected value."})
+                                            "Change what the error names and call again."})
         self.assertIn("view_render cannot run as a job: only a read that leaves the window and the 3D view alone can", said[3])
 
 

@@ -1066,6 +1066,12 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             what = ("removed no material — the wall did not hollow the body" if dress
                     else "cut nothing — the profile does not meet the body that way")
             side = "" if dress else cut_side_words(feat, body)
+            if side:
+                # The side words say which way (or that the outline is beside
+                # the body): the card's own reversed words would say it twice,
+                # or point away from the fix (26 Nov QA).
+                hint = re.sub(r"[;,]?\s*reversed: true[^.;]*[.;]?", ".", hint).replace("..", ".").strip()
+                hint = "" if hint == "." else hint
             raise ToolError("failed", f"{feat.Label} {what}.{(' ' + side) if side else ''} Nothing was kept. {hint}".strip())
         if must_change == "changed" and abs(delta) <= tol:
             # A fillet or chamfer may add material (an inside corner, concave)

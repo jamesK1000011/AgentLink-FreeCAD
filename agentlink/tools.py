@@ -21,7 +21,7 @@ import Part
 
 from . import geometry as geo
 from . import changes, docstates, keep, store
-from .protocol import FIND_FORMS, Tool, ToolError, close_names, describe, does_hits, find_queries, kinded, plain_name, sort_find, strip_kind
+from .protocol import AGAIN_WORDS, FIND_FORMS, Tool, ToolError, close_names, describe, does_hits, find_queries, kinded, plain_name, sort_find, strip_kind
 
 
 
@@ -202,11 +202,59 @@ def _tool_names(calls, idx, fixed=None):
     return ", ".join(names[:8]) + (f" … and {len(names) - 8} more" if len(names) > 8 else "")
 
 
-def _resend_words(calls, i):
+def _start_words(sent):
+    """The words about start after a new list's calls: only when the batch
+    was sent with start (26 Nov QA: every note said "Leave start out", and
+    no run had used start)."""
+    return " Leave start out: start counts in the list you send, and the new list starts at its first call." if sent else ""
+
+
+def _resend_words(calls, i, start_sent=False):
     """How to go on after a stop before calls[i] (budget, heavy read) of an
     inline list: one way only, a new batch with the calls not run (1g)."""
     rest = list(range(i, len(calls)))
-    return f"send a new batch with these calls, in order: {_tool_names(calls, rest)}. Leave start out."
+    return f"send a new batch with these calls, in order: {_tool_names(calls, rest)}.{_start_words(start_sent)}"
+
+
+def _span_words(idx):
+    """Indices as short words: "0-3", "0, 2, 5-7"."""
+    idx = sorted(set(idx))
+    out, j = [], 0
+    while j < len(idx):
+        e = j
+        while e + 1 < len(idx) and idx[e + 1] == idx[e] + 1:
+            e += 1
+        out.append(f"{idx[j]}-{idx[e]}" if e > j + 1 else (f"{idx[j]}, {idx[e]}" if e == j + 1 else str(idx[j])))
+        j = e + 1
+    return ", ".join(out)
+
+
+def ran_before(server, calls, k):
+    """The indices (in calls) from k on of the calls that ran before and are
+    kept: the same tool with the same arguments as a call that went through
+    in the last batch (its kept calls) or as a changing call on the repeat
+    guard's record whose result is still there (protocol.again_before).
+    Each earlier call matches one resent call at most, in order. For the
+    note of a batch whose call k was refused as a repeat (26 Nov QA: a whole
+    batch sent again; the note then listed calls that had run as calls to
+    send)."""
+    from .protocol import _still_there, canonical_call
+
+    kept = list(getattr(server, "_batch_kept", None) or [])
+    for rec in getattr(server, "_ran", None) or []:
+        if rec.get("made") and _still_there(rec["made"]):
+            kept.append((rec["name"], rec["call"]))
+    out, used = [], set()
+    for j in range(k, len(calls)):
+        c = calls[j] if isinstance(calls[j], dict) else {}
+        if c.get("bad") is not None:
+            continue
+        key = (plain_name(server, c.get("tool")), canonical_call(c.get("arguments")))
+        hit = next((m for m, x in enumerate(kept) if m not in used and x == key), None)
+        if hit is not None:
+            used.add(hit)
+            out.append(j)
+    return out
 
 
 _STATUS_WORDS = {"not_started": "it changed nothing", "rolled_back": "its own change was taken back",
@@ -231,12 +279,20 @@ def _refused_note(ref, rows, calls, first, k, out, mine):
     elif done:
         parts.append(f"Calls {', '.join(map(str, done))} ({_tool_names(calls, rel(done))}) ran and stay: do not send them again.")
     resend = rel(gone) + [k] + list(range(k + 1, len(calls)))
+    before = [j for j in (mine.get("ranBefore") or ()) if j in resend]
+    if before:
+        # Refused as a repeat: the calls of this list that ran before and
+        # are kept are named, and the next list leaves them out.
+        parts.append(f"Calls {_span_words([first + j for j in before])} ({_tool_names(calls, before)}) ran in your last batch and are kept: do not send them again.")
+        resend = [j for j in resend if j not in before]
     if mine.get("file"):
         parts.append(f"Next: fix call {first + k} in the file, then batch {{ path: \"{mine['file']}\", start: {first + k} }}.")
+    elif not resend:
+        parts.append("Next: nothing of this list is left to send. Go on from your last batch's answer.")
     else:
-        parts.append(f"Next: send a new batch with these calls, in order: {_tool_names(calls, resend, fixed=k)}. Leave start out.")
-        if first:
-            parts.append("start counts in the list you send. In a new, shorter list, leave start out.")
+        fixed = None if k in before else k
+        what = f"only calls {_span_words([first + j for j in resend])}" if before else "these calls"
+        parts.append(f"Next: send a new batch with {what}, in order: {_tool_names(calls, resend, fixed=fixed)}.{_start_words(mine.get('startSent'))}")
     return " ".join(parts)
 
 
@@ -249,10 +305,14 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
     warning or rollbackNote where they apply."""
     out = {}
     undone, foreign = changes.undo_own(start, made, own)
-    # What the calls made is taken back: the same calls may be sent again (protocol.again_before).
+    # What the calls made is taken back: the same calls may be sent again
+    # (protocol.again_before). Nothing made: nothing taken back, and the
+    # record stays (26 Nov QA: a resent batch refused at its first call
+    # cleared it, so the next resend was not caught).
     from .protocol import again_clear
 
-    again_clear(getattr(s, "server", None))
+    if made:
+        again_clear(getattr(s, "server", None))
     if foreign is None:
         left = take_back(start, None, names0)
         if left:
@@ -300,6 +360,9 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
             out["takenBackNote"] = (f"Taken back: {', '.join(gone)}. Those calls answered ok, but what they made is gone. "
                                    "Fix the refused call and send the whole block again.")
     return out
+
+# The calls of the last batches that went through, kept for ran_before.
+BATCH_KEPT = 60
 
 # Seconds a batch starts calls for before it answers with what ran and where
 # to go on (budget); the most that may be asked for.
@@ -2258,8 +2321,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             # The standing words its answers gave once in this conversation
             # and leave out since (saidBefore names the keys): agentlink/once.py.
             said = _once.said(s, t.name)
-            if _once.health_said(s):
-                said["health"] = _once.health_said(s)  # the health's advice and a sketch reading's DoF note
+            health = _once.health_said(s)
+            if not t.name.startswith("sketch_"):
+                health.pop("sketchNote", None)  # a sketch reading's DoF note: on sketch tools only (26 Nov QA)
+            if health:
+                said["health"] = health  # the health's advice and a sketch reading's DoF note
             if said:
                 out["said"] = said
             return out
@@ -2838,6 +2904,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "own": [], "t0": t_out,
                               "lastChange": last_change, "echoed": 0,
                               "budget": float(budget), "first": first, "total": total, "file": a.get("path"), "record": record,
+                              "startSent": a.get("start") is not None,
                               "hold": _batch_hold() if build_mode == "end" else None}
         got = None
 
@@ -2997,6 +3064,17 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     out["note"] = _refused_note(ref, rows, calls, first, k, out, mine)
             elif isinstance(out.get("notRun"), int) and not isinstance(out.get("notRun"), bool):
                 out["notRun"] = list(range(first + n - out["notRun"], first + n))
+            if not mine.get("depth"):
+                # The calls of this list that went through and stay, after
+                # those of the batches before (an undo, a rollback, another
+                # document clears them), for the note of a repeat of them in
+                # a later batch (ran_before).
+                from .protocol import canonical_call
+
+                kept = (getattr(server, "_batch_kept", None) or []) + [
+                    (plain_name(server, calls[j].get("tool")), canonical_call(calls[j].get("arguments")))
+                    for j, r in enumerate(rows) if j < n and isinstance(r, dict) and r.get("ok") and not r.get("takenBack")]
+                server._batch_kept = kept[-BATCH_KEPT:]
             if not stop:
                 bad = [first + j for j, r in enumerate(rows) if isinstance(r, dict) and not r.get("ok")]
                 if bad:
@@ -3007,6 +3085,16 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             """A batch stopped by a refusal (or a build that left something
             failing): rolled back whole when it rolls back."""
             nonlocal start
+            k = out.get("stopped")
+            row = results[k] if isinstance(k, int) and 0 <= k < len(results) and isinstance(results[k], dict) else {}
+            err = row.get("error") if isinstance(row.get("error"), dict) else {}
+            if str(err.get("message") or "").startswith(AGAIN_WORDS):
+                # Refused as a repeat: which calls of this list ran before,
+                # read before a rollback clears the record.
+                try:
+                    mine["ranBefore"] = ran_before(server, calls, k)
+                except Exception:  # noqa: BLE001 - words only
+                    pass
             if hold is not None and hold.active:
                 if rollback and start is not None and not mine.get("depth"):
                     hold.release()  # undone below, and recomputed there
@@ -3076,7 +3164,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     # Out of time: what ran stays (this is no failure, so nothing
                     # is rolled back), the rest is named with how to run it.
                     nxt = first + i
-                    how = f"batch {{ path: \"{mine['file']}\", start: {nxt} }}" if mine.get("file") else _resend_words(calls, i)
+                    how = f"batch {{ path: \"{mine['file']}\", start: {nxt} }}" if mine.get("file") else _resend_words(calls, i, mine.get("startSent"))
                     if hold is not None:
                         hold.build("end: out of time")
                     return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
@@ -3123,7 +3211,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                         except _chain.Miss as e:
                             hmiss = kinded({"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."})
                     nxt = first + i + 1
-                    how = f"batch {{ path: \"{mine['file']}\", start: {nxt} }}" if mine.get("file") else _resend_words(calls, i + 1)
+                    how = f"batch {{ path: \"{mine['file']}\", start: {nxt} }}" if mine.get("file") else _resend_words(calls, i + 1, mine.get("startSent"))
                     if hold is not None:
                         hold.build("before a heavy read")
                     job = None
@@ -3144,7 +3232,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     if hmiss is None and job is None:
                         return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
                                       "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
-                                              + (f"batch {{ path: \"{mine['file']}\", start: {first + i} }} runs it first." if mine.get("file") else _resend_words(calls, i))})
+                                              + (f"batch {{ path: \"{mine['file']}\", start: {first + i} }} runs it first." if mine.get("file") else _resend_words(calls, i, mine.get("startSent")))})
                     if hmiss is None:
                         # The GUI thread stands still here while the job's thread
                         # works: where both are, should the wait reach a minute
