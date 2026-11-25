@@ -1093,6 +1093,10 @@ def where_went(feat, body, delta, tol=0.01):
         new = body.Shape
         if old is None or old.isNull() or not old.Solids or new is None or new.isNull():
             return {}
+        if getattr(feat, "TypeId", "") in ("PartDesign::Fillet", "PartDesign::Chamfer"):
+            # A round or a bevel says its edges (on); its region is slivers
+            # along them, whose box is the whole body: noise.
+            return {}
         if len(old.Faces) + len(new.Faces) > WHERE_FACES:
             return {"where": f"not worked out: the body has more than {WHERE_FACES // 2} faces"}
         if delta > 0:
@@ -1106,6 +1110,9 @@ def where_went(feat, body, delta, tol=0.01):
         out = {"removed": span_text(reg.BoundBox)}
         lids = []
         diag = max(old.BoundBox.DiagonalLength, 1.0)
+        # The old body's surface, not its solid: a point inside a solid is at
+        # distance 0 from it (live, 25 Nov: a hollow's inner walls were listed).
+        skin = Part.Compound(list(old.Faces))
         for f in list(reg.Faces)[:WHERE_LIDS]:
             # A face of the removed region that lies on the body's old
             # surface is where the cut opens the body; the others are the
@@ -1115,7 +1122,7 @@ def where_went(feat, body, delta, tol=0.01):
                 p = f.valueAt((u0 + u1) / 2, (v0 + v1) / 2)
                 if not f.isInside(p, 1e-6, True):
                     p = f.CenterOfMass
-                if old.distToShape(Part.Vertex(p))[0] > 1e-4 * diag:
+                if skin.distToShape(Part.Vertex(p))[0] > 1e-4 * diag:
                     continue
                 n = f.normalAt(*f.Surface.parameter(p))
                 # Outward from the removed region (and so from the old body)
