@@ -97,5 +97,74 @@ class Build(unittest.TestCase):
         self.assertIsNone(examples.for_tool("pd_pad", {}))
 
 
+class Placed(unittest.TestCase):
+    """Blind QA (24-25 Nov): small models copy the examples. Every sketch
+    used center [0, 0], and round ends were full circles. The examples now
+    show a round-ended outline, a centred plate and a shape at an edge."""
+
+    def test_sketch_add_example_is_a_round_ended_link(self):
+        got = examples.for_tool("sketch_add", {"sketchName": "Sketch"}, how="null")
+        items = got["example"]["arguments"]["items"]
+        self.assertEqual([i["kind"] for i in items], ["arc", "arc", "line", "line"])
+        import math
+
+        def ends(it):
+            if it["kind"] == "line":
+                return {1: tuple(it["from"]), 2: tuple(it["to"])}
+            c, r = it["center"], it["radius"]
+            at = lambda a: (round(c[0] + r * math.cos(math.radians(a)), 6) + 0.0, round(c[1] + r * math.sin(math.radians(a)), 6) + 0.0)  # noqa: E731
+            return {1: at(it["start"]), 2: at(it["end"])}
+
+        pts = [ends(i) for i in items]
+        what = got["fill"][0]
+        pairs = [[[2, 1], [0, 2]], [[2, 2], [1, 1]], [[1, 2], [3, 1]], [[3, 2], [0, 1]]]
+        self.assertIn("[[2, 1], [0, 2]], [[2, 2], [1, 1]], [[1, 2], [3, 1]], [[3, 2], [0, 1]]", what)
+        for (g1, v1), (g2, v2) in pairs:
+            self.assertEqual(pts[g1][v1], pts[g2][v2], (g1, v1, g2, v2))  # each tangent pair is one joint
+        used = sorted((g, v) for p in pairs for g, v in p)
+        self.assertEqual(used, [(g, v) for g in range(4) for v in (1, 2)])  # every end used once: one closed outline
+        self.assertIn("sketch_constrain tangent", what)
+        self.assertIn("rectangle { center: [0, 0], size: [w, h] }", what)
+        self.assertIn("corner [x min, y min] from sketch_new's bodyExtent", what)
+        # the [p, p] tangent form is the one sketch_constrain makes into an end-to-end tangent
+        with open(os.path.join(HERE, "..", "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn('return [("Tangent", refs[0][0], refs[0][1], refs[1][0], refs[1][1])]', src)
+        self.assertIn('if "corner" in item:', src)
+
+    def test_edge_example_numbers_follow_body_extent(self):
+        # A 50 x 40 plate centred on XY, padded 4: world x [-25, 25], y [-20, 20], z [0, 4].
+        # On XZ the sketch x is world x and its y is world z (body_extent, tests/test_qa_sketch_1124.py).
+        ext = {"x": [-25.0, 25.0], "y": [0.0, 4.0]}
+        corner = [ext["x"][0], ext["y"][0]]
+        self.assertEqual(corner, [-25.0, 0.0])
+        tj = tools_json()
+        add, new = tj["sketch_add"]["description"], tj["sketch_new"]["description"]
+        self.assertIn("a plate on XY is centred, rectangle { center: [0, 0], size: [50, 40] }, padded 4.", add)
+        self.assertIn("sketch_new answers bodyExtent { x: [-25.0, 25.0], y: [0.0, 4.0] }.", add)
+        self.assertIn("rectangle { corner: [-25, 0], size: [4, 30] }", add)
+        self.assertIn('pd_pad { sides: "symmetric", length: 40 }', add)
+        self.assertIn("bodyExtent is { x: [-25.0, 25.0], y: [0.0, 4.0] }.", new)
+        self.assertIn("sketch_add rectangle { corner: [-25, 0], size: [4, 30] } is an upright on the -x end.", new)
+        self.assertIn("symmetric", tj["pd_pad"]["inputSchema"]["properties"]["sides"]["enum"])
+        with open(os.path.join(HERE, "..", "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
+            g = f.read()
+        self.assertIn("`bodyExtent { x: [-25.0, 25.0], y: [0.0, 4.0] }`", g)
+        self.assertIn("`rectangle { corner: [-25, 0], size: [4, 30] }`", g)
+        self.assertIn("`rectangle { center: [0, 0], size: [50, 40] }`", g)
+
+    def test_the_guide_has_the_link_recipe_once_and_the_card_numbers(self):
+        with open(os.path.join(HERE, "..", "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
+            g = f.read()
+        self.assertEqual(g.count("Recipe for ends"), 1)
+        self.assertIn("x 0 (radius 10) and x 80 (radius 6); it is also the example on the `sketch_add` card", g)
+        items = examples.load()["sketch_add"]["arguments"]["items"]
+        for it in items:
+            if it["kind"] == "arc":
+                self.assertIn(f"arc {{ center: [{it['center'][0]}, {it['center'][1]}], radius: {it['radius']}, start: {it['start']}, end: {it['end']} }}", g)
+            else:
+                self.assertIn(f"line {{ from: [{it['from'][0]}, {it['from'][1]}], to: [{it['to'][0]}, {it['to'][1]}] }}", g)
+
+
 if __name__ == "__main__":
     unittest.main()

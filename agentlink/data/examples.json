@@ -31,35 +31,58 @@
     "sketch": "=facts.editSketch or facts.sketchName",
     "items": [
      {
-      "kind": "rectangle",
+      "kind": "arc",
       "center": [
        0,
        0
       ],
-      "size": [
-       40,
-       20
+      "radius": 10,
+      "start": 90,
+      "end": 270
+     },
+     {
+      "kind": "arc",
+      "center": [
+       80,
+       0
+      ],
+      "radius": 6,
+      "start": -90,
+      "end": 90
+     },
+     {
+      "kind": "line",
+      "from": [
+       0,
+       -10
+      ],
+      "to": [
+       80,
+       -6
       ]
      },
      {
-      "kind": "circle",
-      "center": [
-       10,
-       0
+      "kind": "line",
+      "from": [
+       80,
+       6
       ],
-      "radius": 3
+      "to": [
+       0,
+       10
+      ]
      }
     ]
    },
    "fill": [
     {
      "arg": "items",
-     "what": "your geometry, in the sketch's x/y, mm: these two items are a 40 x 20 rectangle at the origin and a 3 mm circle in it",
-     "keep": true
+     "keep": true,
+     "what": "your geometry, in the sketch's x/y, mm. These four items are a link with two round ends (ids 0 to 3). Arc 0 has radius 10 at x 0, arc 1 radius 6 at x 80, and two lines join them. Use arcs, not full circles, for round ends. Then sketch_constrain tangent on the two end points at each joint: [[2, 1], [0, 2]], [[2, 2], [1, 1]], [[1, 2], [3, 1]], [[3, 2], [0, 1]]. A plate on XY is centred: rectangle { center: [0, 0], size: [w, h] }. A shape at an edge of the body takes corner [x min, y min] from sketch_new's bodyExtent"
     }
    ],
    "source": "the tool's card and schema (tools.json); worked values written for this file",
-   "date": "2026-11-22"
+   "date": "2026-11-25"
   },
   "sketch_constrain": {
    "arguments": {

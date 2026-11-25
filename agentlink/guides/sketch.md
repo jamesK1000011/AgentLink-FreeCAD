@@ -4,6 +4,9 @@
 ## workflow
 1. `pd_body_new`, then `sketch_new { plane: "XY" }` — or on a face of the body: `face: { at: [x,y,z], normal: [0,0,1] }`. The answer's `frame` says where sketch x/y lie in the world.
 2. `sketch_add` the profile: rectangle, rounded_rectangle, circle, polygon, slot, polyline … Shapes come with their own coincident/horizontal/vertical constraints (a polyline's sides that run along x or y are held horizontal or vertical). `dims: true, name: "plate"` adds their sizes as named constraints (`plate_width`).
+   - Where a shape goes: a first plate on XY is centred, `rectangle { center: [0, 0], size: [50, 40] }`. A shape at an edge of the body takes `corner`, its lower-left corner, from the `bodyExtent` that `sketch_new` answers.
+   - Example, an upright tab at one end of that plate (padded 4): `sketch_new { plane: "XZ" }` answers `bodyExtent { x: [-25.0, 25.0], y: [0.0, 4.0] }`. The tab is `rectangle { corner: [-25, 0], size: [4, 30] }`, corner `[x min, y min]`.
+     Then `pd_pad { sides: "symmetric", length: 40 }` makes it as wide as the plate. At `center: [0, 0]` the same tab would be in the middle of the plate and go below it, not stand on its end.
 3. `sketch_constrain` the rest: refs are FreeCAD's — geometry id, `[id, vertex]` (1 start, 2 end, 3 centre), `"origin"`; -1 the horizontal axis, -2 the vertical.
 4. `sketch_state` before a feature: `readyForFeature`, `dof`, conflicts, open vertices.
 
@@ -12,8 +15,8 @@
 - A pad works on a sketch with dof > 0, but the profile can slide when a value changes. Fix it to the origin and dimension it for a parametric part.
 - Every id counts from 0: geometry ids, constraint ids, and the conflicting / redundant lists (FreeCAD's own lists count from 1; the tools convert them). `"health"` on a changing call's reply says the same in words ("2 DoF left on line 3").
 - `sketch_add` joins a shape's own pieces, never two separate items: a line drawn to where an arc ends still needs `coincident` (or `tangent` on the two end points, which joins them smoothly) from `sketch_constrain`.
-- Round ends joined by straight sides (a crank arm, a lever, a link): draw arcs, not full circles. A full circle is a closed loop of its own. Lines that touch it do not close an outline with it: `sketch_state` says the wire branches. Recipe for ends at x 0 (radius 10) and x 60 (radius 6):
-  `sketch_add` items `arc { center: [0, 0], radius: 10, start: 90, end: 270 }` (id 0), `arc { center: [60, 0], radius: 6, start: -90, end: 90 }` (id 1), `line { from: [0, -10], to: [60, -6] }` (id 2), `line { from: [60, 6], to: [0, 10] }` (id 3).
+- Round ends joined by straight sides (a crank arm, a lever, a link): draw arcs, not full circles. A full circle is a closed loop of its own. Lines that touch it do not close an outline with it: `sketch_state` says the wire branches. Recipe for ends at x 0 (radius 10) and x 80 (radius 6); it is also the example on the `sketch_add` card:
+  `sketch_add` items `arc { center: [0, 0], radius: 10, start: 90, end: 270 }` (id 0), `arc { center: [80, 0], radius: 6, start: -90, end: 90 }` (id 1), `line { from: [0, -10], to: [80, -6] }` (id 2), `line { from: [80, 6], to: [0, 10] }` (id 3).
   Then `sketch_constrain` `tangent` on the end points at each joint: `[[2, 1], [0, 2]]`, `[[2, 2], [1, 1]]`, `[[1, 2], [3, 1]]`, `[[3, 2], [0, 1]]`. Each one joins the two ends and makes the joint smooth. For two equal ends, `slot` is one item.
 - An arc always runs counter-clockwise from its start (vertex 1) to its end (vertex 2); vertex 3 is its centre. A line has no vertex 3.
 - `distance_x` / `distance_y` are signed, second point minus first: `[[0, 1], [0, 2]]` with 30 puts the end 30 mm to the right of the start.
