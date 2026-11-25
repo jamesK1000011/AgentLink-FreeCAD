@@ -43,7 +43,7 @@ MIN_CHARS = 60
 NOTHING_NEW = "nothing new"
 # Keys of a health reading that are not its finding: timing, the hints put
 # beside it, the status bar's text.
-HEALTH_ASIDE = {"ms", "msBy", "overlapPairs", "saidBefore", "options", "appliesNow", "statusBar"}
+HEALTH_ASIDE = {"ms", "msBy", "overlapPairs", "saidBefore", "options", "appliesNow", "statusBar", "next"}
 
 # Coded tools' standing keys: { tool: { key: values or None (any value) } }.
 # Filled with the literal texts where a key also carries words that change.
@@ -216,7 +216,7 @@ def quiet_health(st, tool, out):
         st["health"] = key
         return False
     out["health"] = NOTHING_NEW
-    for k in ("options", "appliesNow"):
+    for k in ("options", "appliesNow", "next"):
         if k in h and k not in out:
             out[k] = h[k]
     return True

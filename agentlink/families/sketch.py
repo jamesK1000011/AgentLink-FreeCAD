@@ -508,8 +508,10 @@ def fresh(sk):
 def state_of(sk):
     # Every sketch tool's state comes from here: the Shape is built again
     # first, so the wires and open ends are those of the sketch as it is now.
-    fresh(sk)
+    # Solve first, then build: a solve after the build marks the sketch as
+    # touched again ("1 object not recomputed yet", live 25 Nov).
     code = sk.solve()
+    fresh(sk)
     conflicting = [i - 1 for i in (getattr(sk, "ConflictingConstraints", None) or [])]
     redundant = [i - 1 for i in (getattr(sk, "RedundantConstraints", None) or [])]
     partial = [i - 1 for i in (getattr(sk, "PartiallyRedundantConstraints", None) or [])]

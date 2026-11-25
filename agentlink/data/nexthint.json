@@ -295,7 +295,8 @@
    "unless": {
     "body": [
      "sketch-open",
-     "sketch-not-ready"
+     "sketch-not-ready",
+     "sketch-empty"
     ]
    },
    "suggest": [
