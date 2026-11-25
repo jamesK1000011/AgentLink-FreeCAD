@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 """A new error at the same place is not "the same refusal as before"
 (live check 25 Nov: sketch_constrain's second refusal was a different
 error, and the note said it was the same)."""
@@ -50,3 +51,25 @@ class NewErrorSamePlace(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RepeatFollowsRename(unittest.TestCase):
+    """A feature named on "CrankSketch" after sketch_new renamed the new
+    sketch in this batch acts on another sketch: not a repeat (QA 1126e)."""
+
+    def test_named_sketch_through_alias(self):
+        import types
+
+        from agentlink import protocol
+
+        old = types.SimpleNamespace(Name="Sketch", Label="CrankSketch")
+        new = types.SimpleNamespace(Name="Sketch001", Label="CrankSketch 2")
+        objs = {"Sketch": old, "Sketch001": new}
+        doc = types.SimpleNamespace(Name="D", getObject=objs.get,
+                                    getObjectsByLabel=lambda l: [o for o in objs.values() if o.Label == l])
+        s = types.SimpleNamespace(doc=doc)
+        rec = {"name": "pd_pad", "doc": "D", "sketch": "Sketch", "filled": False}
+        args = {"sketch": "CrankSketch"}
+        self.assertTrue(protocol._same_target(s, rec, args))
+        s._batch_aliases = {("D", "CrankSketch"): "Sketch001"}
+        self.assertFalse(protocol._same_target(s, rec, args))

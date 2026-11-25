@@ -1864,7 +1864,22 @@ def _default_sketch(s, doc):
         return None
 
 
-def _same_target(s, rec):
+def _named_sketch(s, doc, ref):
+    """The sketch the name ref takes now: the batch's rename (sketch_new gave
+    a taken name a new one) first, then the label or the object name."""
+    try:
+        # pd_common.renamed_sketch's own lookup, here so it needs no FreeCAD.
+        alias = s.__dict__.get("_batch_aliases") if s is not None else None
+        name = alias.get((doc.Name, ref)) if isinstance(alias, dict) else None
+        o = doc.getObject(name) if name else None
+        if o is None:
+            o = doc.getObject(ref) or next((x for x in doc.getObjectsByLabel(ref)), None)
+        return o
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _same_target(s, rec, args=None):
     """Whether a call with a recorded call's arguments acts on the same thing
     now: the same document; the same sketch (the named one, or the one it
     takes when none is named); else nothing made in the document since it."""
@@ -1875,7 +1890,11 @@ def _same_target(s, rec):
         return False
     if rec.get("sketch"):
         if not rec.get("filled"):
-            return True  # named in the arguments: the same sketch
+            # Named in the arguments: the same name can take another sketch
+            # now (a batch's rename, QA 1126e: a false repeat refusal).
+            ref = args.get("sketch") if isinstance(args, dict) else None
+            now = _named_sketch(s, doc, ref) if isinstance(ref, str) else None
+            return now is None or now.Name == rec["sketch"]
         now = _default_sketch(s, doc)
         return now is not None and now.Name == rec["sketch"]
     return rec.get("token") is not None and _token(doc) == rec["token"]
@@ -1896,7 +1915,7 @@ def again_before(server, params):
     call = canonical_call(args)
     ran = getattr(server, "_ran", None) or []
     for rec in reversed(ran):
-        if rec["name"] == name and rec["call"] == call and rec["made"] and _same_target(s, rec) and _still_there(rec["made"]):
+        if rec["name"] == name and rec["call"] == call and rec["made"] and _same_target(s, rec, args) and _still_there(rec["made"]):
             ago = server._seq - rec["seq"]
             msg = (f"{AGAIN_WORDS}, and answered ok (made: {_made_words(rec['made'])}; "
                    f"calls since then: {ago - 1}). If it runs again, it adds the same again. Nothing was done. "

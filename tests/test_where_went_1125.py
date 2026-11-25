@@ -61,8 +61,12 @@ class Words(unittest.TestCase):
         self.assertEqual(got["top"], "+z at z 10")
         self.assertEqual(got["bottom"], "-z at z 0")
         self.assertTrue(got["slant"].startswith("normal [0.71, 0, 0.71]"))
-        self.assertEqual(got["pad"], {"added": "x 0..5, y -15..15, z -20..20", "beyond": ["-z", "+z"],
-                                      "where": "The new material goes 20 mm below the body's bottom (z 0) and 15 mm above its top (z 5)."})
+        where = got["pad"].pop("where")
+        self.assertEqual(got["pad"], {"added": "x 0..5, y -15..15, z -20..20", "beyond": ["-z", "+z"]})
+        self.assertTrue(where.startswith("The new material goes 20 mm below the body's bottom (z 0) and 15 mm above its top (z 5). "), where)
+        # Where it sits on the axes it stays inside (QA 1126e).
+        self.assertIn("Against the body before, it sits in the middle of x, touching neither end (x 0..5 of ", where)
+        self.assertIn("across all of y", where)
         self.assertEqual(got["first"], {})
 
 

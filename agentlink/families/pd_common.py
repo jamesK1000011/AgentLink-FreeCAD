@@ -1315,6 +1315,9 @@ def where_went(feat, body, delta, tol=0.01):
                 return {}
             nb, ob = _bbt(reg.BoundBox), _bbt(old.BoundBox)
             out = {"added": span_text(reg.BoundBox), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
+            pos = position_sentence(nb, ob)
+            if pos:
+                out["where"] += " " + pos
             apart = loose_sentence(old, new)
             if apart:
                 out["where"] = apart + " " + out["where"]
@@ -1429,6 +1432,33 @@ def added_sentence(new, old, tol=1e-3):
     said = [f"{_g(d)} mm {how} {'its' if k else OWNER} {what} ({ax} {_g(at)})"
             for k, (d, how, what, ax, at) in enumerate(words)]
     return "The new material goes " + _and(said) + "."
+
+
+def position_sentence(new, old, tol=1e-3):
+    """Where added material sits along each axis of the body before it, in
+    words: across all of it, at one end, or in the middle (QA 1126e: three
+    models put an upright across the middle of a base meant to carry it at
+    one end, and "inside the body's box" did not show it). Axes the new
+    material goes past are said by added_sentence; flat axes are left out.
+    None when nothing is to say. Boxes as xmin, xmax, ymin, ymax, zmin, zmax."""
+    said = []
+    for i, ax in enumerate("xyz"):
+        lo, hi = old[2 * i], old[2 * i + 1]
+        a, b = new[2 * i], new[2 * i + 1]
+        if hi - lo <= 10 * tol or a < lo - tol or b > hi + tol:
+            continue
+        span = f"{ax} {_g(a)}..{_g(b)} of {_g(lo)}..{_g(hi)}"
+        if a <= lo + tol and b >= hi - tol:
+            said.append(f"across all of {ax}")
+        elif a <= lo + tol:
+            said.append(f"at the -{ax} end ({span})")
+        elif b >= hi - tol:
+            said.append(f"at the +{ax} end ({span})")
+        else:
+            said.append(f"in the middle of {ax}, touching neither end ({span})")
+    if not said:
+        return None
+    return "Against the body before, it sits " + _and(said) + "."
 
 
 def _and(items):

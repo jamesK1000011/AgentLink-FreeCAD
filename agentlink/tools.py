@@ -1101,7 +1101,7 @@ class Session:
         row = {"name": o.Label, **self.stats_of(o)}
         if row.get("solids", 1) > 1:
             n = row["solids"]
-            row["multiSolid"] = (f"{n} solids in one Body, on purpose (AllowCompound true): each is checked on its own" if self.allows_compound(o)
+            row["multiSolid"] = (f"{n} separate solids in one Body (AllowCompound allows it, on by default): not one part unless meant" if self.allows_compound(o)
                                  else f"{n} solids in one object: pieces that do not touch")
         if o.Name != o.Label:
             row["object"] = o.Name
@@ -1153,7 +1153,14 @@ class Session:
         if intended:
             # A deliberate split (Body.AllowCompound): counted, each solid
             # checked on its own.
-            s["intended"] = f"{len(sh.Solids)} solids in one Body on purpose (AllowCompound true): each checked on its own below."
+            # AllowCompound is on by default in FreeCAD 1.1, so it does not
+            # say the pieces are meant (QA 1126e: "on purpose" read as "one
+            # valid part"). The words say so; each solid is still checked.
+            n = len(sh.Solids)
+            s["intended"] = (f"{n} separate solids in one Body: pieces that do not touch. FreeCAD allows this (AllowCompound, on by default), "
+                             f"so this check cannot tell if they are meant. If the task is one part, join them: start the new feature inside the body. "
+                             f"Each solid is checked on its own below.")
+            s.setdefault("warnings", []).append(f"{n} separate solids, not one part.")
             s["each"] = geo.each_solid(sh)
             bad = [e for e in s["each"] if not e["ok"]]
             for e in bad:
@@ -1859,7 +1866,7 @@ def make_tools(session):
     body = {"type": "string", "description": "A body's name; may be left out when there is one."}
     return [
         Tool("session_state", "Read what the document holds. For each body: volume, area, faces, solids and size (mm). That is every shown body, also a Body of several solids "
-                              "(multiSolid tells how many, and if AllowCompound means it). A part attached to another (a screw) shows next to it. Also the step count, running jobs "
+                              "(multiSolid tells how many separate pieces). A part attached to another (a screw) shows next to it. Also the step count, running jobs "
                               "and where files go. In the window, also next: one short line (less than 400 characters) of what FreeCAD does now, most urgent first. That is a dialog "
                               "in front and its buttons, or a sketch open in edit with its DoF. Or an open task panel and its buttons. Then likely next: up to 3 tools, likeliest "
                               "first, each with a few words on why. The document's own state ranks them. A failing recompute is first; then the selection (an edge, a face). Then a "
@@ -1884,7 +1891,7 @@ def make_tools(session):
         Tool("report_read", "Read FreeCAD's Report view in the window. last: its last lines (40 by default). problems: true gives only warnings and errors. Each answer also brings "
                             "back new problem lines as \"report\". FreeCAD's own known faults are counted once (\"known\"). When there are problems, first: the first problem line without its time. Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
         Tool("body_check", "Check if a body is sound: FreeCAD's own Check Geometry, then closed, one solid, no very short edges. Also no sliver faces (less than 0.01 mm wide). It "
-                           "tells where each problem is. A Body with AllowCompound true can hold several solids on purpose. They are counted and each is checked (each); no "
+                           "tells where each problem is. A Body with AllowCompound true (the default) can hold several solids. They are named as separate pieces, and each is checked (each). No "
                            "problem. A BOP-only finding on a shape that BRepCheck calls valid and closed is a warning with where, not a failure. Example: InvalidCurveOnSurface, "
                            "where a counterbore breaks a chamfer.", obj({"body": body}), s.body_check),
         Tool(

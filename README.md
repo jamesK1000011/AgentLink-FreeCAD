@@ -411,9 +411,9 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 | Tool list | Tools listed | Tokens (est.) of the `tools/list` answer |
 |---|---:|---:|
 | static (default), ste | 6 | 1,710 |
-| static, full | 6 | 4,450 |
-| classic, ste | 24 | 6,579 |
-| classic, full | 24 | 9,228 |
+| static, full | 6 | 4,446 |
+| classic, ste | 24 | 6,585 |
+| classic, full | 24 | 9,230 |
 <!-- stats:end -->
 
 ## Add-ons

@@ -388,7 +388,11 @@ class OnStandIns(unittest.TestCase):
         self.assertEqual(len(st["each"]), 2)
         self.assertIn("intended", st)
         self.assertTrue(st["checkGeometry"]["warning"])
-        self.assertIn("InvalidCurveOnSurface", st["warnings"][0])
+        self.assertTrue(any("InvalidCurveOnSurface" in w for w in st["warnings"]), st["warnings"])
+        # AllowCompound is on by default: not "on purpose" (QA 1126e).
+        self.assertIn("2 separate solids", st["intended"])
+        self.assertNotIn("on purpose", st["intended"])
+        self.assertIn("2 separate solids, not one part.", st["warnings"])
         self.assertFalse(out["Loose"]["ok"])           # two solids not meant
         self.assertFalse(out["Broken"]["ok"])          # not valid by BRepCheck: still a problem
         self.assertFalse(out["Selfx"]["ok"])           # a self-intersection is never soft
