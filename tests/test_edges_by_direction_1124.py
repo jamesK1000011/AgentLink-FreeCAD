@@ -53,7 +53,7 @@ class Cards(unittest.TestCase):
         for n in ("pd_fillet", "pd_chamfer"):
             d = self.e[n]["description"]
             self.assertIn('{ type: "line", axis: "z" } is every straight edge along z: the vertical edges.', d, n)
-            self.assertIn("The answer adds on: each edge with its direction, length and mid-point.", d, n)
+            self.assertIn("each edge with its direction, length, mid-point and side.", d, n)
         self.assertIn("Add length or inside to keep fewer of them.", self.e["pd_fillet"]["description"])
 
     def test_pocket_leads_with_where_the_cut_goes(self):

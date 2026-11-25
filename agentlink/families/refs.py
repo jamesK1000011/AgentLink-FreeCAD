@@ -8,7 +8,7 @@
 #   { ref: "Face8", … }                     one of shape_query's items as it came
 #   { type, radius, axis, normal, near,     shape_query's filters, on this body
 #     inside, x, y, z, tol, area, length,
-#     within, of, sort, limit }
+#     within, of, outside, sort, limit }
 #   [ any of these, … ]                     every one of them, in order
 #
 # and each tool keeps its own older forms ({ near } the nearest edge,
@@ -23,7 +23,7 @@ from ..protocol import ToolError
 REF = re.compile(r"^(?:(?P<owner>.+)[.:])?(?P<sub>(?P<kind>Face|Edge|Vertex)(?P<n>\d+))$")
 ATTR = {"face": "Faces", "edge": "Edges", "vertex": "Vertexes"}
 # The keys only shape_query's filters have: a dict with any of them is a filter.
-FILTER_ONLY = {"type", "axis", "within", "area", "length", "inside", "of", "sort", "limit", "ref"}
+FILTER_ONLY = {"type", "axis", "within", "area", "length", "inside", "outside", "of", "sort", "limit", "ref"}
 FILTER_KEYS = FILTER_ONLY | {"normal", "radius", "near", "x", "y", "z", "tol", "kind"}
 # Edge kinds a tool's older { kind: line } meant: shape_query's type.
 EDGE_TYPES = {"line", "circle", "ellipse", "bspline", "bezier"}

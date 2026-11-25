@@ -254,7 +254,7 @@ _NEAR_A = "{ part, element }: \"Face6\", a datum (\"LCS\", { datum }), or a shap
 _UPTO = "The face to go up to: { side: \"+z\" } (also of, largest; one face only), { at, normal }, \"Face8\", or shape_query's filters."
 _EDGES = ("edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, "
           "kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, "
-          "or shape_query's filters ({ type: circle, radius, axis, near, \u2026 })")
+          "or shape_query's filters ({ type: circle, radius, axis, near, outside, \u2026 })")  # outside: 26 Nov QA, fix 9
 _FACES = ("faces: [{ side: \"+z\" } | { at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") "
           "or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, \u2026 })")
 _PLANE_FACE = "XY | XZ | YZ, a datum plane's name, or a face { side: \"+z\" } | { at, normal }"
@@ -319,6 +319,8 @@ SCHEMAS = {
     "pd_pocket": {"why": "face selectors; length described; rename set 3", "describe": {"upToFace": _UPTO, "length": "The cut's depth in mm (extent length)."},
                   "rename": {"type": ("extent", {"type": "string", "description": "length (default), through_all, up_to_first or up_to_face."}), "upToFace": ("face", None)}},
     **{n: {"why": "face selectors", "describe": {"edges": _EDGES}} for n in ("pd_fillet", "pd_chamfer")},
+    # 26 Nov QA, fix 9: outside (convex) or inside (concave) edges
+    "shape_query": {"why": "26 Nov QA: outside edges", "after": [("inside", "outside", {"type": "boolean"})]},
     "pd_draft": {"why": "face selectors", "describe": {"faces": _FACES, "neutral": _PLANE_FACE}},
     "pd_thickness": {"why": "face selectors", "describe": {"faces": _FACES}},
     # 24 Nov, rename set 8 (rule R5): the plane-or-face field split in two, one meaning each

@@ -324,6 +324,7 @@ tests/_pd_base.py
 tests/data/freecad-1.1.0-commands.txt
 tests/test_activity_words.py
 tests/test_addon_test.py
+tests/test_answers_where_1126.py
 tests/test_app_install.py
 tests/test_app_open_1118.py
 tests/test_approvals.py

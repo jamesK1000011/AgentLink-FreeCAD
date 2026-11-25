@@ -779,6 +779,7 @@ def find_edges(shape, queries, names=()):
 
 
 EDGES_SHOWN = 12  # edges an answer describes one by one; the rest are counted
+EDGES_SIDED = 200  # edges sorted into outside and inside; past this, not
 
 
 def _num_word(x):
@@ -798,12 +799,15 @@ def edge_words(shape, names, cap=EDGES_SHOWN):
     """Each edge of names on shape in a short line: "Edge9: line along y,
     60 mm, mid [40, 0, 0]" (24 Nov QA: an answer that named the edges only
     let a wrong choice of edges pass unseen). At most cap lines, then how
-    many more there are."""
+    many more there are. Each line ends with outside or inside when it is
+    known (26 Nov QA), and the first line counts them: "8 edges: 4 outside
+    (lose material), 4 inside (gain material)"."""
     from .measure import describe_edge
 
     edges = shape.Edges
+    sides = edge_sides(shape, names)
     out = []
-    for n in names[:cap]:
+    for k, n in enumerate(names[:cap]):
         try:
             i = int(str(n)[4:])
             d = describe_edge(edges[i - 1], i)
@@ -817,10 +821,46 @@ def edge_words(shape, names, cap=EDGES_SHOWN):
             what = f"{'circle' if d.get('closed') else 'arc'} r {_num_word(d['radius'])} mm about {_dir_word(d['axis'])}"
         else:
             what = t
-        out.append(f"{n}: {what}, {_num_word(d['length'])} mm, mid [{', '.join(_num_word(c) for c in d['mid'])}]")
+        side = f", {sides[k]}" if sides and sides[k] else ""
+        out.append(f"{n}: {what}, {_num_word(d['length'])} mm, mid [{', '.join(_num_word(c) for c in d['mid'])}]{side}")
     if len(names) > cap:
         out.append(f"… and {len(names) - cap} more edges ({len(names)} in all)")
+    head = sides_line(sides)
+    return ([head] if head else []) + out
+
+
+def edge_sides(shape, names):
+    """"outside", "inside" or None for each edge of names on shape
+    (measure.edge_side); [] when there are too many to look at."""
+    if len(names) > EDGES_SIDED:
+        return []
+    from .measure import edge_side
+
+    edges = shape.Edges
+    out = []
+    for n in names:
+        try:
+            out.append(edge_side(shape, edges[int(str(n)[4:]) - 1]))
+        except Exception:  # noqa: BLE001 - not an edge: not known
+            out.append(None)
     return out
+
+
+def sides_line(sides):
+    """"8 edges: 4 outside (lose material), 4 inside (gain material)", or
+    "" when no edge's side is known."""
+    o, i = sides.count("outside"), sides.count("inside")
+    if not o and not i:
+        return ""
+    parts = []
+    if o:
+        parts.append(f"{o} outside (lose material)")
+    if i:
+        parts.append(f"{i} inside (gain material)")
+    rest = len(sides) - o - i
+    if rest:
+        parts.append(f"{rest} smooth or not known")
+    return f"{len(sides)} edge{'s' if len(sides) != 1 else ''}: " + ", ".join(parts)
 
 
 def find_faces(shape, queries, names=()):
@@ -1085,8 +1125,11 @@ def _bbt(bb):
 def where_went(feat, body, delta, tol=0.01):
     """{added: "x .., y .., z ..", beyond: [sides]} or {removed: …, opens:
     [faces of the body it breaks through]}, from the body before the
-    feature (its BaseFeature) and after. {} when there was no body before
-    (the first feature: bounds says it all). Large bodies: {where: why not}."""
+    feature (its BaseFeature) and after, and where: the same in one
+    sentence, against the body before (26 Nov QA: no model read the terse
+    fields). A sketch of several profiles adds profiles: what each one did.
+    {} when there was no body before (the first feature: bounds says it
+    all). Large bodies: {where: why not}."""
     try:
         base = getattr(feat, "BaseFeature", None)
         old = getattr(base, "Shape", None) if base is not None else None
@@ -1103,12 +1146,15 @@ def where_went(feat, body, delta, tol=0.01):
             reg = new.cut(old)
             if reg.isNull() or reg.Volume <= tol:
                 return {}
-            return {"added": span_text(reg.BoundBox), "beyond": beyond_sides(_bbt(reg.BoundBox), _bbt(old.BoundBox))}
+            nb, ob = _bbt(reg.BoundBox), _bbt(old.BoundBox)
+            out = {"added": span_text(reg.BoundBox), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
+            out.update(profile_results(feat, reg, old, tol, cut=False))
+            return out
         reg = old.cut(new)
         if reg.isNull() or reg.Volume <= tol:
             return {}
         out = {"removed": span_text(reg.BoundBox)}
-        lids = []
+        lids, sides = [], []
         diag = max(old.BoundBox.DiagonalLength, 1.0)
         # The old body's surface, not its solid: a point inside a solid is at
         # distance 0 from it (live, 25 Nov: a hollow's inner walls were listed).
@@ -1135,10 +1181,151 @@ def where_went(feat, body, delta, tol=0.01):
                 continue
             if w not in lids:
                 lids.append(w)
+                sides.append(side_key((n.x, n.y, n.z), (p.x, p.y, p.z)))
         out["opens"] = lids or ["nothing: the cut is closed inside the body"]
+        out["where"] = removed_sentence(sides, _bbt(reg.BoundBox))
+        out.update(profile_results(feat, reg, old, tol, cut=True))
         return out
     except Exception as e:  # noqa: BLE001 - a reading only
         return {"where": f"not worked out ({type(e).__name__})"}
+
+
+def _g(x):
+    return f"{_r(x):g}"
+
+
+OWNER = "the body's"
+
+
+def added_sentence(new, old, tol=1e-3):
+    """Where added material goes against the body before it, in one
+    sentence: "The new material goes 20 mm below the body's bottom (z 0)
+    and 15 mm above its top (z 5)." (boxes as xmin, xmax, ymin, ymax,
+    zmin, zmax)."""
+    words = []
+    for i, ax in enumerate("xyz"):
+        lo, hi = old[2 * i], old[2 * i + 1]
+        if new[2 * i] < lo - tol:
+            how, what = ("below", "bottom") if ax == "z" else ("past", f"-{ax} side")
+            words.append((lo - new[2 * i], how, what, ax, lo))
+        if new[2 * i + 1] > hi + tol:
+            how, what = ("above", "top") if ax == "z" else ("past", f"+{ax} side")
+            words.append((new[2 * i + 1] - hi, how, what, ax, hi))
+    if not words:
+        return "The new material is inside the body's box before."
+    said = [f"{_g(d)} mm {how} {'its' if k else OWNER} {what} ({ax} {_g(at)})"
+            for k, (d, how, what, ax, at) in enumerate(words)]
+    return "The new material goes " + _and(said) + "."
+
+
+def _and(items):
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def side_key(normal, point):
+    """(axis index, +1 or -1, coordinate) for a face whose normal runs along
+    an axis; None for a slanted or curved one."""
+    ax = max(range(3), key=lambda i: abs(normal[i]))
+    if abs(normal[ax]) > 0.999:
+        return (ax, 1 if normal[ax] > 0 else -1, point[ax])
+    return None
+
+
+def removed_sentence(sides, reg):
+    """Where a cut opens the body, in one sentence, from side_key's of the
+    faces it opens and the removed region's box (xmin, xmax, …): "The cut
+    goes all the way through along z.", "The cut opens on +z (z 10) and
+    goes 7 mm deep.", "The cut is closed inside the body."."""
+    if not sides:
+        return "The cut is closed inside the body."
+    keyed = [k for k in sides if k is not None]
+    slant = len(sides) - len(keyed)
+    signs = {}
+    for ax, sg, at in keyed:
+        signs.setdefault(ax, {})[sg] = at
+    through = [ax for ax in sorted(signs) if len(signs[ax]) == 2]
+    ends = [(ax, sg, at) for ax in sorted(signs) if ax not in through for sg, at in sorted(signs[ax].items(), reverse=True)]
+    deep = [(f"{'+' if sg > 0 else '-'}{'xyz'[ax]} ({'xyz'[ax]} {_g(at)})", _g(reg[2 * ax + 1] - reg[2 * ax])) for ax, sg, at in ends]
+    parts = []
+    if through:
+        parts.append("goes all the way through along " + _and(["xyz"[ax] for ax in through]))
+    if len(deep) == 1 and not through and not slant:
+        parts.append(f"opens on {deep[0][0]} and goes {deep[0][1]} mm deep")
+    elif deep:
+        parts.append("opens on " + ", and on ".join(f"{w}, {d} mm deep" for w, d in deep))
+    if slant:
+        parts.append(f"opens on {'a' if slant == 1 else slant} slanted or curved face{'s' if slant > 1 else ''}")
+    return "The cut " + _and(parts) + "."
+
+
+PROFILES_SHOWN = 12  # profiles of one sketch looked at one by one
+PROFILE_FEATURES = ("PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Hole")
+
+
+def profile_faces(feat):
+    """[(words, face)] for each profile (outline with its holes) of a pad's,
+    pocket's or hole's sketch, when it has more than one; else []."""
+    if getattr(feat, "TypeId", "") not in PROFILE_FEATURES:
+        return []
+    sk = _profile_of(feat)
+    if sk is None or "Sketch" not in getattr(sk, "TypeId", ""):
+        return []
+    wires = [w for w in sk.Shape.Wires if w.isClosed()]
+    if len(wires) < 2:
+        return []
+    try:
+        faces = list(Part.makeFace(wires, "Part::FaceMakerBullseye").Faces)
+    except Exception:  # noqa: BLE001 - older FreeCAD
+        faces = list(Part.Face(wires, "Part::FaceMakerBullseye").Faces)
+    if len(faces) < 2:
+        return []
+    inv = sk.Placement.inverse()
+    out = []
+    for f in faces:
+        edges = f.OuterWire.Edges
+        c = inv.multVec(f.CenterOfMass)
+        at = f"({_g(c.x)}, {_g(c.y)})"
+        if len(edges) == 1 and type(edges[0].Curve).__name__ == "Circle":
+            out.append((f"the circle r {_g(edges[0].Curve.Radius)} at {at}", f))
+        else:
+            out.append((f"the outline at {at}", f))
+    return out
+
+
+def profile_results(feat, reg, old, tol, cut=True):
+    """{profiles: "2 profiles: the circle r 2.5 at (45, 0) is off the body;
+    1 cut."} for a sketch of several profiles (26 Nov QA: one hole of two
+    was off the part, and nothing said so); {} for one profile, or on any
+    error. A profile did something when its prism along the sketch's
+    normal meets the region the feature added or removed."""
+    try:
+        got = profile_faces(feat)
+        if not got:
+            return {}
+        n_all = len(got)
+        got = got[:PROFILES_SHOWN]
+        bb = old.BoundBox
+        span = 2 * max(bb.DiagonalLength, reg.BoundBox.DiagonalLength, 1.0) + bb.Center.Length + reg.BoundBox.Center.Length
+        verb = "cut" if cut else "added"
+        idle = []
+        for words, f in got:
+            n = f.normalAt(0, 0)
+            prism = f.translated(n * -span).extrude(n * (2 * span))
+            if prism.common(reg).Volume > tol:
+                continue
+            if not cut:
+                idle.append(f"{words} adds nothing (inside the body already)")
+            elif prism.common(old).Volume > tol:
+                idle.append(f"{words} cut nothing")
+            else:
+                idle.append(f"{words} is off the body")
+        did = len(got) - len(idle)
+        head = f"{n_all} profiles" + (f" ({len(got)} looked at)" if n_all > len(got) else "")
+        if not idle:
+            return {"profiles": f"{head}: {'both' if did == 2 else 'all ' + str(did)} {verb}."}
+        return {"profiles": f"{head}: " + "; ".join(idle) + f"; {did} {verb}."}
+    except Exception:  # noqa: BLE001 - a reading only: left out
+        return {}
 
 
 def _profile_of(o):

@@ -61,7 +61,8 @@ class Words(unittest.TestCase):
         self.assertEqual(got["top"], "+z at z 10")
         self.assertEqual(got["bottom"], "-z at z 0")
         self.assertTrue(got["slant"].startswith("normal [0.71, 0, 0.71]"))
-        self.assertEqual(got["pad"], {"added": "x 0..5, y -15..15, z -20..20", "beyond": ["-z", "+z"]})
+        self.assertEqual(got["pad"], {"added": "x 0..5, y -15..15, z -20..20", "beyond": ["-z", "+z"],
+                                      "where": "The new material goes 20 mm below the body's bottom (z 0) and 15 mm above its top (z 5)."})
         self.assertEqual(got["first"], {})
 
 

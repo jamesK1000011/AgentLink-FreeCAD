@@ -7035,7 +7035,7 @@
   },
   "pd_fillet": {
    "group": "feature",
-   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An inside corner gets material, an outside corner loses material: both are correct. The answer adds on: each edge with its direction, length and mid-point. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
+   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. { type: \"line\", axis: \"z\", outside: true } is only the outside vertical corners. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An outside (convex) edge loses material; an inside (concave) edge gets material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7044,7 +7044,7 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "edges": {
-      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
+      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, outside, … })"
      },
      "radius": {
       "type": "number"
@@ -7080,7 +7080,7 @@
   },
   "pd_chamfer": {
    "group": "feature",
-   "description": "Bevel edges of the body. edges: as pd_fillet. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. The tool refuses only a chamfer that changes nothing. The answer adds on: each edge with its direction, length and mid-point. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Bevel edges of the body. edges: as pd_fillet. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. outside: true keeps the outside edges, false the inside edges. The tool refuses only a chamfer that changes nothing. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7089,7 +7089,7 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "edges": {
-      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
+      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, outside, … })"
      },
      "size": {
       "type": "number"
@@ -16593,7 +16593,7 @@
   },
   "shape_query": {
    "group": "measure",
-   "description": "Find the faces, edges or vertices of a body by their properties. Other tools take the refs that it answers (\"Face12\", \"Edge3\", counted from 1). kind: face|edge|vertex. type for faces: plane, cylinder, cone, sphere, torus, bspline. type for edges: line, circle, ellipse, bspline. normal [x,y,z]: for flat or curved faces, outward at the centre. axis: the direction of a line, or the axis of a circle or cylinder, in either direction. within: degrees for normal and axis (1). radius, area, length: a number or [least, most]. x / y / z: the coordinate of the centre, within tol (0.01). near [x,y,z] or { point, within }: nearest first. inside { min, max }: the centre is in that box. of \"Face6\": the edges or vertices of that face. sort: area|radius|length|distance|x|y|z; -key puts the largest first. limit: 20. found counts all; more gives the rest. Each item in the answer: ref, type, area / length, centroid / mid, normal, radius, axis, center. body can also be an object with edges and no solid: a pd_binder of a skeleton, a sketch, a wire. Then kind is edge by default. Each edge also has from and to [x,y,z]; dir is the direction of a line. Trap: the numbers change after any modelling step. Query again; do not use old numbers. Changes nothing.",
+   "description": "Find the faces, edges or vertices of a body by their properties. Other tools take the refs that it answers (\"Face12\", \"Edge3\", counted from 1). kind: face|edge|vertex. type for faces: plane, cylinder, cone, sphere, torus, bspline. type for edges: line, circle, ellipse, bspline. normal [x,y,z]: for flat or curved faces, outward at the centre. axis: the direction of a line, or the axis of a circle or cylinder, in either direction. within: degrees for normal and axis (1). radius, area, length: a number or [least, most]. x / y / z: the coordinate of the centre, within tol (0.01). near [x,y,z] or { point, within }: nearest first. inside { min, max }: the centre is in that box. outside: true for edges is the outside (convex) edges, false the inside (concave) edges. of \"Face6\": the edges or vertices of that face. sort: area|radius|length|distance|x|y|z; -key puts the largest first. limit: 20. found counts all; more gives the rest. Each item in the answer: ref, type, area / length, centroid / mid, normal, radius, axis, center. body can also be an object with edges and no solid: a pd_binder of a skeleton, a sketch, a wire. Then kind is edge by default. Each edge also has from and to [x,y,z]; dir is the direction of a line. Trap: the numbers change after any modelling step. Query again; do not use old numbers. Changes nothing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -16621,6 +16621,9 @@
      "near": {},
      "inside": {
       "type": "object"
+     },
+     "outside": {
+      "type": "boolean"
      },
      "x": {
       "type": "number"

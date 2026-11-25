@@ -134,6 +134,71 @@ def describe_edge(e, i):
     return out
 
 
+# ---- outside and inside edges (26 Nov QA, fix 9) ---------------------------------------
+# A fillet on { type: "line", axis: "z" } of a lid took its 4 outside corners
+# and its 4 inside ones; the answer named all 8 the same way. An outside
+# (convex) edge loses material to a round or a bevel, an inside (concave)
+# one gains it.
+
+
+def _into(face, p, t, eps):
+    """The direction from p (on an edge of face, tangent t) into the face,
+    across the edge: the face's normal at p crossed with t, signed to the
+    side where the face is."""
+    u, v = face.Surface.parameter(p)
+    w = face.normalAt(u, v).cross(t)
+    if w.Length < 1e-12:
+        return None
+    w = w.normalize()
+    a = face.distToShape(Part.Vertex(p + w * eps))[0]
+    b = face.distToShape(Part.Vertex(p - w * eps))[0]
+    return w if a < b else -w
+
+
+def _faces_of(shape, e):
+    try:
+        got = list(shape.ancestorsOfType(e, Part.Face))
+    except Exception:  # noqa: BLE001 - older shapes: look for it
+        got = [f for f in shape.Faces if any(e.isSame(x) for x in f.Edges)]
+    out = []
+    for f in got:
+        if not any(f.isSame(g) for g in out):
+            out.append(f)
+    return out
+
+
+def side_of(p, d1, d2, eps, solid):
+    """"outside" (convex) when a step from p between the two faces' into
+    directions d1 and d2 lands in the solid, "inside" (concave) when it
+    lands out of it, None for a smooth edge."""
+    s = d1 + d2
+    if s.Length < 1e-3:
+        return None
+    return "outside" if solid.isInside(p + s * (eps / s.Length), eps * 1e-3, False) else "inside"
+
+
+def edge_side(shape, e):
+    """"outside", "inside" or None (smooth, a seam, a free edge, or not
+    worked out) for an edge of a solid shape."""
+    try:
+        faces = _faces_of(shape, e)
+        if len(faces) != 2:
+            return None
+        m = (e.FirstParameter + e.LastParameter) / 2
+        p, t = e.valueAt(m), e.tangentAt(m)
+        if t.Length < 1e-12:
+            return None
+        t = t.normalize()
+        eps = max(1e-4, 1e-3 * shape.BoundBox.DiagonalLength)
+        eps = min(eps, max(1e-4, 0.1 * e.Length))
+        d1, d2 = _into(faces[0], p, t, eps), _into(faces[1], p, t, eps)
+        if d1 is None or d2 is None:
+            return None
+        return side_of(p, d1, d2, eps, shape)
+    except Exception:  # noqa: BLE001 - a reading only
+        return None
+
+
 def rng(v, name):
     """A filter's range from a number (± a small tolerance) or [least, most]; None when not asked."""
     if v is None:
@@ -184,7 +249,7 @@ def query_body(session, ref):
 def filter_shape(shape, a, default_kind="face", of_el=None):
     """The elements of a shape that pass every filter in a (shape_query's:
     kind, type, normal, axis, within, radius, area, length, near, inside,
-    x/y/z with tol, sort): (kind, [(index, element, description)]). of_el:
+    x/y/z with tol, outside, sort): (kind, [(index, element, description)]). of_el:
     a face whose edges or vertices only are taken. The one filter every
     tool that takes faces or edges shares (families/refs.py)."""
     kind = (a.get("kind") or default_kind).lower()
@@ -212,6 +277,12 @@ def filter_shape(shape, a, default_kind="face", of_el=None):
         lo, hi = picks.vec3(box["min"], "inside.min"), picks.vec3(box["max"], "inside.max")
     # x / y / z: the element's centre at that coordinate (a face's plane, say), within tol mm.
     at_xyz = {k: picks.num(a[k], k) for k in ("x", "y", "z") if a.get(k) is not None}
+    outside = a.get("outside")
+    if outside is not None:
+        if not isinstance(outside, bool):
+            raise ToolError("invalid_input", "outside: true (outside edges: a round takes material off) or false (inside edges: a round adds material).")
+        if kind != "edge":
+            raise ToolError("invalid_input", "outside: edges only — true keeps the outside (convex) edges, false the inside (concave) ones.")
     tol = picks.num(a.get("tol", 0.01), "tol")
     cos_w = math.cos(math.radians(within))
     pool = getattr(shape, KIND_ATTR[kind])
@@ -252,6 +323,8 @@ def filter_shape(shape, a, default_kind="face", of_el=None):
         if at_xyz and any(abs(getattr(centre, k) - v) > tol for k, v in at_xyz.items()):
             continue
         if box is not None and not (lo.x <= centre.x <= hi.x and lo.y <= centre.y <= hi.y and lo.z <= centre.z <= hi.z):
+            continue
+        if outside is not None and edge_side(shape, x) != ("outside" if outside else "inside"):
             continue
         if near_p is not None:
             dist = x.distToShape(Part.Vertex(near_p))[0]
