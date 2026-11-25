@@ -203,6 +203,22 @@ def to_reply(got, first, path, size, lines="all"):
     return short
 
 
+def untimed(reply, depth=0):
+    """reply with each call's ms left out of its rows (in place; a batch's
+    calls inside it too). The record and the logs keep the times (24 Nov
+    blind QA: a timing on every call was noise to the model). Never raises."""
+    try:
+        for row in (reply.get("results") if isinstance(reply, dict) else None) or []:
+            res = row.get("result") if isinstance(row, dict) else None
+            if isinstance(res, dict):
+                res.pop("ms", None)
+                if depth < 4 and "results" in res:
+                    untimed(res, depth + 1)
+    except Exception:  # noqa: BLE001
+        pass
+    return reply
+
+
 def record_reply(got, first, record_path, from_file, lines):
     """What a batch without to answers once its record (record_path, None
     when it could not be written) holds the whole answer: a batch from a

@@ -463,7 +463,10 @@ class Filter(unittest.TestCase):
 
     def test_the_line_is_pushed_once_and_measured(self):
         got = _child("--states")["server"]
-        self.assertEqual(got["first"]["health"]["appliesNow"].keys() - {"ms"}, {"groups", "not", "notChecked"})
+        # A line with no group and nothing that refuses (only notChecked) tells nothing: not said
+        # (24 Nov blind QA: appliesNow { groups: {}, not: 0, notChecked: 62 } in each answer).
+        self.assertNotIn("appliesNow", got["first"].get("health", {}))
+        self.assertNotIn("appliesNow", got["first"])
         self.assertNotIn("appliesNow", got["second"].get("health", {}))  # not said again while it is as it was
         self.assertNotIn("appliesNow", json.dumps(got["off"]))  # the switch
         self.assertEqual(got["refusedOutcome"], "refusedLeading")
@@ -507,7 +510,7 @@ class Filter(unittest.TestCase):
                                                    "message": "No strength study: fea_setup { body } first. This call cannot succeed as written. "
                                                               "The error says what to change; call the tool again with the corrected value."})
         b = got["batch"]
-        self.assertEqual(b["appliesNow"].keys() - {"ms"}, {"groups", "not", "notChecked"})
+        self.assertEqual(set(b["appliesNow"]), {"groups", "not", "notChecked"})  # no ms: the meter and the logs keep the time
         self.assertEqual(b["appliesNow"]["groups"], {"strength": 1})
         self.assertNotIn("appliesNow", json.dumps(b["results"]))
         self.assertNotIn("appliesNow", json.dumps(got["again"]))  # as it was: not said again

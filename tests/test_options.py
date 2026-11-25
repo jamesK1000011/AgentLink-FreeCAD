@@ -187,8 +187,8 @@ class Build(Base):
         o, _s, _ = self.opts(doc_of(body_with("Body", sk, pad, tip=pad), sk, pad))
         tools = [x["tool"] for x in o["list"]]
         self.assertEqual(tools[0], "sketch_new")
-        pp = next(x for x in o["list"] if x["tool"] == "pd_polar_pattern")
-        self.assertEqual(pp["arguments"], {"body": "Body", "features": ["Pad"]})
+        # No pattern option by default after a pad (24 Nov blind QA): nothing says the part repeats.
+        self.assertNotIn("pd_polar_pattern", tools)
 
     def test_sketch_open_in_edit(self):
         sk = sketch("Sketch")

@@ -152,10 +152,10 @@ class Unattended(Base):
     def test_13_machine_queue_and_estimates(self):
         from agentlink import keep, once
 
-        # The machine is said once in a conversation (agentlink/once.py):
-        # an earlier test of this class read session_state already.
         once.reset(self.session)
-        st = self.ok("session_state")
+        # Only on request (or while heavy jobs run or wait): noise in every read otherwise (24 Nov blind QA).
+        self.assertNotIn("machine", self.ok("session_state"))
+        st = self.ok("session_state", {"machine": True})
         self.assertIn("heavySlots", st["machine"])
         self.assertTrue(self.ok("queue_go")["go"])
         # Past runs say a heavy tool is slow at this size: logged data only

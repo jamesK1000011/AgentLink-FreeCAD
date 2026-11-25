@@ -524,7 +524,15 @@ class Shape(unittest.TestCase):
         from agentlink import fastpath
 
         self.assertEqual(fastpath.with_unit(1520.0, "mm³"), "1520 mm³")
-        self.assertEqual(fastpath.with_unit(152000.0, "mm³"), "152,000 mm³")
+        self.assertEqual(fastpath.with_unit(152000.0, "mm³"), "152000 mm³")
+        # The feature answers' precision, in plain notation (24 Nov blind QA: "1.405e+04 mm³").
+        self.assertEqual(fastpath.with_unit(14053.6512, "mm³"), "14053.65 mm³")
+        self.assertEqual(fastpath.with_unit(14053.6, "mm²"), "14053.6 mm²")
+        self.assertEqual(fastpath.with_unit(0.012345, "mm"), "0.0123 mm")
+        self.assertEqual(fastpath.with_unit(-2.5, "mm"), "-2.5 mm")
+        self.assertEqual(fastpath.with_unit([1234567.891, 0.5], "mm"), "[1234567.89, 0.5] mm")
+        self.assertEqual(fastpath.with_unit(1.88612, "g"), "1.8861 g")
+        self.assertEqual(fastpath.with_unit(15260.5, "g"), "15260.5 g")
         self.assertEqual(fastpath.with_unit([1, 2.5, 3], "mm"), "[1, 2.5, 3] mm")
         self.assertEqual(fastpath.with_unit("x", "mm"), "x")
         self.assertIsNone(fastpath.what_words("Body.Edge7.length"))

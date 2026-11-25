@@ -4,7 +4,7 @@
 Many answers carry a sentence that is the same on every call of a tool: an
 explanation written into the tool itself (doc_new's "The previous document
 stays open …", sketch_new's "Coordinates are the sketch's …", part_wire's
-use), the machine session_state reads, a batch { to } reply's own note, the
+use), a batch { to } reply's own note, the
 health check's advice on an overlap. Measured over a full run of every
 family's test model (private records: tokens-findings.md) they were among
 the largest repeated parts of the replies, and none carries anything new the
@@ -13,8 +13,8 @@ second time.
 Such a value is given the first time a tool answers with it in a
 conversation (since the client's initialize). Later answers of that tool
 with the very same value leave the key out and name it in saidBefore — so
-the answer still says the note applies; a value that differs is a new one
-and is given whole. tool_groups { tool: name } gives the words again
+the answer still says the note applies (not for QUIET keys, whose name
+carries nothing); a value that differs is a new one and is given whole. tool_groups { tool: name } gives the words again
 (said), so nothing becomes unreachable.
 
 What counts as standing is decided from the tool itself, never guessed from
@@ -37,7 +37,6 @@ MIN_CHARS = 60
 # Coded tools' standing keys: { tool: { key: values or None (any value) } }.
 # Filled with the literal texts where a key also carries words that change.
 CODED = {
-    "session_state": {"machine": None},
     # Filled by register() where the words are written: tool_groups' notes
     # (tools.py), usage_report's (usage.py), a batch reply's own (batchrec.py).
     "tool_groups": {},
@@ -58,6 +57,13 @@ STANDING = re.compile(r"^\d+ objects? still failing from before this call: ")
 # sketch_constrain …), and sketch_state's own answer.
 DOF_NOTE = "it pads as drawn, but edits may move it — dimension and fix it for a parametric part."
 DOF_LINE = re.compile(r"^\d+ degrees of freedom: " + re.escape(DOF_NOTE) + "$")
+
+# Left-out words that are not named in saidBefore: they say how Agent Link
+# itself works (a batch's own notes), or their reading stays in
+# the answer (a sketch's dof), so the name carries nothing for the model
+# (24 Nov blind QA: saidBefore ["order"] on every batch). tool_groups
+# { tool } still gives them again (said).
+QUIET = {("batch", "order"), ("batch", "toNote"), ("batch", "note"), ("batch", "healthNote")}
 
 _literals = {}
 
@@ -156,8 +162,9 @@ def thin(st, tool, out, rule=None):
                 gone.append(k)
             elif len(said) < 8:
                 said.append(v)
-    if gone:
-        out["saidBefore"] = sorted(set(out.get("saidBefore") or []) | set(gone))
+    named = [k for k in gone if (name, k) not in QUIET]
+    if named:
+        out["saidBefore"] = sorted(set(out.get("saidBefore") or []) | set(named))
     if isinstance(out.get("health"), dict):
         thin_health(st, out["health"])
     for reading in (out.get("state"), out):
@@ -172,8 +179,7 @@ def thin_dof(st, reading):
     if not (isinstance(note, str) and DOF_LINE.match(note)):
         return
     if "dof" in st["todo"]:
-        del reading["note"]
-        reading["saidBefore"] = sorted(set(reading.get("saidBefore") or []) | {"note"})
+        del reading["note"]  # its count stays, as dof: nothing to name in saidBefore
     else:
         st["todo"].add("dof")
 

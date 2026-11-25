@@ -8091,7 +8091,7 @@
   },
   "pd_body_new": {
    "group": "sketch",
-   "description": "Make an empty PartDesign body. It is the container for the features of a parametric part. It has its own XY/XZ/YZ planes and x/y/z axes. name: the label; the tool makes it unique. Answer: body, its label to give to other tools. Next: sketch_new on one of its planes. Prefer one body for each made part and one solid in each body. Start it from the skeleton (pd_binder) or the origin planes.",
+   "description": "Make an empty PartDesign body: the container for the features of one part. Next: sketch_new { body, plane: \"XY\" } on one of its planes (XY, XZ or YZ). name: the label; the tool makes it unique. Answer: body, its label to give to other tools. The body has its own XY/XZ/YZ planes and x/y/z axes. Make one body for each made part and one solid in each body. Several parts that share sizes from a skeleton (a body or sketch): pd_binder brings its faces in to sketch on.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21370,7 +21370,7 @@
   },
   "doc_new": {
    "group": "doc",
-   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). In the window, the new document comes to the front (front: true in the answer). You cannot undo this. A batch's rollback does not include it. Prefer one file for each part, in one project folder with a parameter file. Save it at once with doc_save: other files refer to it by its name.",
+   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). In the window, the new document comes to the front (front: true in the answer). You cannot undo this. A batch's rollback does not include it. Save it with doc_save when the part is built and measured. After a change, doc_save saves only after body_check, measure or get of a body. A file that other files link to needs its name first: an empty new document saves at once. For a project of several parts: one file for each part, in one folder, with a parameter file.",
    "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",

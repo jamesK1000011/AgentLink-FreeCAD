@@ -570,6 +570,9 @@ def sketch_reading(sk):
     r["amber"] = not red and (bool(r.get("dof")) or bool(r.get("open")))
     r["state"] = "empty" if words == ["empty"] else ("fully constrained" if words == ["fully constrained"] else None)
     r["line"] = f"{r['sketch']}: " + "; ".join(words) if words else None
+    if r.get("free") and words:
+        # The same line without which geometry is free (sketch_state names it).
+        r["short"] = f"{r['sketch']}: " + "; ".join(f"{dof} DoF left" if w.startswith(f"{dof} DoF left on ") else w for w in words)
     return r
 
 
@@ -1020,10 +1023,27 @@ def _waits(o, w):
     return any(_input(o, p) for p in w["since"][o.Name])
 
 
-def check(session, tool, m):
+def _targets(args):
+    """The sketches a call names (its sketch or sketches argument), as
+    given: labels or names. Empty when it names none."""
+    out = set()
+    try:
+        for key in ("sketch", "sketches"):
+            v = (args or {}).get(key)
+            for x in (v if isinstance(v, (list, tuple)) else [v]):
+                if isinstance(x, str) and x:
+                    out.add(x)
+    except Exception:
+        pass
+    return out
+
+
+def check(session, tool, m, args=None):
     """The health of the document after a changing call, or None when the
     call recomputed nothing and nothing is red (attach() then says "nothing
-    red", so every changing call's answer carries a health). m: mark()'s."""
+    red", so every changing call's answer carries a health). m: mark()'s.
+    args: the call's arguments, when known: a sketch tool's call that names
+    its sketch reads out that sketch, and the others only when they changed."""
     if m is None:
         return None
     seen_now = _close(m)
@@ -1132,12 +1152,17 @@ def check(session, tool, m):
     # 2. Sketches the call recomputed. Red ones are all named, yellow ones up
     # to MAX_AMBER, and the clean ones named when few and counted when many.
     amber, fine = [], []
+    amber_sketches = 0
     sketches = [o for o in changed if getattr(o, "TypeId", "") == "Sketcher::SketchObject" and _label(o) not in failing_now]
     # News only (live: every sheet_format repeated "NutSketch: 1 DoF left…",
     # and cam_tool_add said "Sketch001: fully constrained" of the bit's own
     # sketch). A red reading is always said.
     sigs0 = (m.get("sketches") or {}) if same_doc else {}
     own_call = sketch_tool(tool)
+    # A sketch tool's call reads out the sketch it names as it stands; the
+    # other sketches it recomputed only when they changed (24 Nov blind QA:
+    # every sketch's freedom piled up in each verdict).
+    named = _targets(args) if own_call else set()
     for sk in sketches[:MAX_SKETCHES]:
         try:
             if tool_bit_sketch(sk):
@@ -1147,7 +1172,8 @@ def check(session, tool, m):
             same = was is not None and was == sketch_sig(sk)
         except Exception:
             continue
-        if not r["red"] and not own_call:
+        mine = own_call and (not named or sk.Name in named or _label(sk) in named)
+        if not r["red"] and not mine:
             if same:
                 continue  # recomputed, and reads as it did before the call
             if not r.get("amber") and was is None:
@@ -1158,7 +1184,10 @@ def check(session, tool, m):
             todos.append(r.get("todo"))
             h.setdefault("sketches", []).append({k: r[k] for k in ("sketch", "conflicting", "redundant", "partiallyRedundant", "malformed") if k in r})
         elif r.get("amber"):
-            amber.append(r["line"])
+            # Which geometry is free, for the first sketch only: the others
+            # say their count (sketch_state names it for each).
+            amber.append(r["line"] if not amber_sketches else (r.get("short") or r["line"]))
+            amber_sketches += 1
         elif r.get("line"):
             fine.append(("sketch", r["state"] or "ok", r["line"]))
     if len(sketches) > MAX_SKETCHES:
@@ -1352,7 +1381,7 @@ def check(session, tool, m):
     return out
 
 
-def attach(session, tool, m, out):
+def attach(session, tool, m, out, args=None):
     """check() put onto a tool's answer as "health" (a dict answer only; an
     answer that already carries one keeps it): always there after a
     changing call while the check is on — "nothing red" when there is
@@ -1364,7 +1393,7 @@ def attach(session, tool, m, out):
             if m is not None and isinstance(out, dict):
                 _timed(session, out.get("health"))  # a batch's own health
             return out
-        h = check(session, tool, m)
+        h = check(session, tool, m, args)
         # Nothing recomputed and nothing red is said too: an answer of a
         # changing call with no health at all read as a check that did not
         # run (a drawing with a section, live).

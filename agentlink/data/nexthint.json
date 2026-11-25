@@ -907,20 +907,6 @@
      "why": "holes, from a sketch of points"
     },
     {
-     "tool": "pd_polar_pattern",
-     "why": "repeat a feature, not copies by hand",
-     "arguments": {
-      "body": "=facts.bodyName",
-      "features": "=[facts.tipName] if facts.tipName else None"
-     },
-     "ask": [
-      {
-       "arg": "count",
-       "sample": 4
-      }
-     ]
-    },
-    {
      "tool": "pd_fillet",
      "why": "fillets last, when the shape is done"
     }
@@ -971,20 +957,6 @@
     {
      "tool": "pd_pad",
      "why": "or pd_pocket, pd_revolution from that sketch"
-    },
-    {
-     "tool": "pd_polar_pattern",
-     "why": "repeat a feature, not more primitives",
-     "arguments": {
-      "body": "=facts.bodyName",
-      "features": "=[facts.tipName] if facts.tipName else None"
-     },
-     "ask": [
-      {
-       "arg": "count",
-       "sample": 4
-      }
-     ]
     }
    ],
    "weight": 52,

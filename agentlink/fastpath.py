@@ -287,14 +287,24 @@ def what_words(what):
     return None
 
 
-def _fmt_num(v):
+GEOMETRY_UNITS = ("mm", "mm²", "mm³")
+
+
+def _fmt_num(v, unit="mm³"):
+    """A number in plain notation, never 1.405e+04 (24 Nov blind QA: get
+    and pd_pad gave the same volume two ways). A length, area or volume as
+    the feature answers give it: 2 decimals from 1 up (14053.65); else, and
+    below 1, 4 decimals (1.886 g, 0.0123 mm)."""
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return v
-    v = round(float(v), 4)
-    if v == int(v) and abs(v) < 1e15:
-        v = int(v)
-        return f"{v:,}" if abs(v) >= 10000 else str(v)
-    return f"{v:,.4g}" if abs(v) >= 10000 else f"{v:g}"
+    f = float(v)
+    if f != f or f in (float("inf"), float("-inf")):
+        return str(f)
+    places = 2 if unit in GEOMETRY_UNITS and abs(f) >= 1 else 4
+    r = round(f, places)
+    if r == int(r) and abs(r) < 1e15:
+        return str(int(r))
+    return f"{r:.{places}f}".rstrip("0").rstrip(".")
 
 
 def with_unit(v, unit):
@@ -303,9 +313,9 @@ def with_unit(v, unit):
     if unit is None:
         return v
     if isinstance(v, (int, float)) and not isinstance(v, bool):
-        return f"{_fmt_num(v)} {unit}"
+        return f"{_fmt_num(v, unit)} {unit}"
     if isinstance(v, list) and v and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v):
-        return f"[{', '.join(str(_fmt_num(x)) for x in v)}] {unit}"
+        return f"[{', '.join(str(_fmt_num(x, unit)) for x in v)}] {unit}"
     return v
 
 

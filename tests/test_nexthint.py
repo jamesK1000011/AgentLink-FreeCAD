@@ -57,8 +57,11 @@ class Ranking(unittest.TestCase):
         # a closed sketch not yet used by a feature
         self.assertEqual(top({"body": "sketch-closed", "features": "none"})[:2], ["pd_pad", "pd_revolution"])
         self.assertEqual(top({"body": "sketch-closed", "features": "some"}), ["pd_pad", "pd_pocket", "pd_revolution"])
-        # a body whose last feature is a pad or a pocket: the next feature, holes, patterns; fillets last (21 Nov: modelling principles)
-        self.assertEqual(top({"body": "features", "features": "some", "lastFeature": "pad"}), ["sketch_new", "pd_hole", "pd_polar_pattern"])
+        # a body whose last feature is a pad or a pocket: the next feature, holes; fillets last (21 Nov: modelling principles).
+        # No pattern by default: nothing in the state says the part repeats (24 Nov blind QA: pd_polar_pattern after every pad).
+        self.assertEqual(top({"body": "features", "features": "some", "lastFeature": "pad"}), ["sketch_new", "pd_hole", "pd_fillet"])
+        for last in ("pad", "pocket", "additivebox"):
+            self.assertNotIn("pd_polar_pattern", top({"body": "features", "features": "some", "lastFeature": last}))
         self.assertEqual(top({"body": "features", "features": "some", "lastFeature": "pocket"})[0], "sketch_new")
         # a primitive as the last feature: a sketch first
         self.assertEqual(top({"body": "features", "features": "some", "lastFeature": "additivebox"})[:2], ["sketch_new", "pd_pad"])
@@ -114,7 +117,7 @@ class AddOns(unittest.TestCase):
         rule = {"when": {"body": "features"}, "suggest": [{"tool": "addon_review", "why": "the add-on's own review"}], "weight": 49, "source": "t", "date": "2026-11-16"}
         self.assertEqual(nexthint.declare({"review-after-features": rule}, "addon"), [])
         got = [p["tool"] for p in nexthint.rank({"body": "features", "features": "some", "lastFeature": "pad"})]
-        self.assertEqual(got[:5], ["sketch_new", "pd_hole", "pd_polar_pattern", "pd_fillet", "addon_review"])
+        self.assertEqual(got[:5], ["sketch_new", "pd_hole", "pd_fillet", "addon_review", "body_check"])
         # Not installed: passed over, and costs nothing.
         picks = nexthint.available(nexthint.rank({"body": "features", "lastFeature": "fillet"}), {}, exists=lambda n: n != "addon_review")
         self.assertNotIn("addon_review", [p["tool"] for p in picks])

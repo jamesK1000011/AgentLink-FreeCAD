@@ -270,6 +270,34 @@ def test_a_sketch_tool_reads_an_unchanged_sketch_out():
     assert "Sketch: 1 DoF left on line 0" in run_as(T, d, lambda: [sk])["verdict"]
 
 
+def test_a_sketch_tool_that_names_its_sketch_reads_out_only_that_one_and_changed_ones():
+    # 24 Nov blind QA: each sketch's freedom piled up in every verdict.
+    d = Doc()
+    a = Sketch(d, "A", dof=4, free=[(0, 0), (1, 1)])
+    b = Sketch(d, "B", dof=4, free=[(0, 0), (1, 1)])
+    s = Session(d)
+    m = health.mark(s)
+    for o in (a, b):
+        health._observer_note(o)
+    v = health.check(s, T, m, {"sketch": "B"})["verdict"]
+    assert "B: 4 DoF left on line 0" in v and "A:" not in v
+    # a sketch it names nothing about but changed is still said
+    m = health.mark(s)
+    a.DoF, a._free = 3, [(0, 0)]
+    for o in (a, b):
+        health._observer_note(o)
+    v = health.check(s, T, m, {"sketch": "B"})["verdict"]
+    assert "A: 3 DoF left" in v and "B: 4 DoF left" in v
+
+
+def test_only_the_first_free_sketch_names_its_free_geometry():
+    d = Doc()
+    made = lambda: [Sketch(d, "A", dof=4, free=[(0, 0)]), Sketch(d, "B", dof=2, free=[(0, 0)])]
+    v = run_as(T, d, made)["verdict"]
+    assert "A: 4 DoF left on line 0" in v
+    assert "B: 2 DoF left" in v and "B: 2 DoF left on" not in v
+
+
 def test_a_red_sketch_is_said_however_it_read_before():
     d = Doc()
     sk = Sketch(d, "Sketch", conflicting=[2])

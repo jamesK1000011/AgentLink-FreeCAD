@@ -66,7 +66,7 @@ def _with_health(session, tool, args):
         health.drop(m)
         raise
     with around.part("health"):
-        return health.attach(session, tool, m, out)
+        return health.attach(session, tool, m, out, args)
 
 
 class ToolError(Exception):

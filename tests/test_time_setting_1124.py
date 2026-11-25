@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Decision 7 (24 Nov): the runner passes the run's time limit as a setting,
 # AGENTLINK_TIME_LIMIT_MIN (minutes), read at start. The time counts from
-# the first tools/call. Set: session_state and the health verdict of a
-# changing answer say "time: N of M minutes used". Not set: nothing shows.
+# the first tools/call. Set: session_state says "N of M minutes used"; the
+# health verdict of a changing answer says "time: N of M minutes used" only
+# from half the limit on (24 Nov blind QA: noise before). Not set: nothing shows.
 import os
 import sys
 import unittest
@@ -24,10 +25,15 @@ BODY = '''
     first = timelimit._first[0]
     if first is not None:
         timelimit._first[0] = first - 125      # two minutes and a bit since the first call
+    early = tools._time_state()
+    early_verdict = call("probe_make", {"name": "E"})[1]["health"]["verdict"]
+    if first is not None:
+        timelimit._first[0] = first - 965      # sixteen minutes and a bit: past half of 30
     state = tools._time_state()   # session_state's own field (session_state needs FreeCAD's version: not on the stand-in)
     made = call("probe_make", {"name": "A"})[1]
     inside = call("batch", {"calls": [mk("B"), mk("C")]})[1]
     print(json.dumps({"before": before, "started": first is not None, "state": state.get("time"),
+                      "early": early.get("time"), "earlyVerdict": early_verdict,
                       "verdict": made["health"]["verdict"], "batch": inside.get("health", {}).get("verdict"),
                       "rows": [r.get("result", {}).get("health", {}).get("verdict") for r in inside.get("results", []) if isinstance(r, dict)]}))
 '''
@@ -49,14 +55,16 @@ class TimeSet(unittest.TestCase):
         self.assertTrue(self.got["started"])
 
     def test_session_state_shows_it(self):
-        self.assertEqual(self.got["state"], "2 of 30 minutes used")
+        self.assertEqual(self.got["early"], "2 of 30 minutes used")
+        self.assertEqual(self.got["state"], "16 of 30 minutes used")
         with open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8") as f:
             src = f.read()
         body = src[src.index("    def session_state(self, a):"):src.index("    def _front_state(self):")]
         self.assertIn("**_time_state(),", body)
 
-    def test_the_health_verdict_shows_it(self):
-        self.assertTrue(self.got["verdict"].endswith("; time: 2 of 30 minutes used") or self.got["verdict"] == "time: 2 of 30 minutes used",
+    def test_the_health_verdict_shows_it_from_half_the_limit(self):
+        self.assertNotIn("time:", self.got["earlyVerdict"])
+        self.assertTrue(self.got["verdict"].endswith("; time: 16 of 30 minutes used") or self.got["verdict"] == "time: 16 of 30 minutes used",
                         self.got["verdict"])
         self.assertEqual(self.got["verdict"].count("time:"), 1)
 
@@ -65,7 +73,7 @@ class TimeSet(unittest.TestCase):
         self.assertIsNone(self.got["batch"])
         self.assertEqual(len(self.got["rows"]), 2)
         self.assertNotIn("time:", self.got["rows"][0])
-        self.assertEqual(self.got["rows"][1], "nothing red; time: 2 of 30 minutes used")
+        self.assertEqual(self.got["rows"][1], "nothing red; time: 16 of 30 minutes used")
 
 
 class TimeNotSet(unittest.TestCase):
@@ -103,10 +111,13 @@ class TheSetting(unittest.TestCase):
         h = {"ok": True, "verdict": "nothing red"}
         self.assertEqual(timelimit.mark_health(h), {"ok": True, "verdict": "nothing red"})
 
-    def test_the_verdict_gets_it_once(self):
+    def test_the_verdict_gets_it_once_from_half_the_limit(self):
         timelimit.configure("30")
-        h = timelimit.mark_health(timelimit.mark_health({"ok": True, "verdict": "nothing red"}))
-        self.assertEqual(h["verdict"], "nothing red; time: 0 of 30 minutes used")
+        self.assertEqual(timelimit.mark_health({"ok": True, "verdict": "nothing red"})["verdict"], "nothing red")  # before the first call
+        timelimit.started(now=1000.0)
+        self.assertEqual(timelimit.mark_health({"ok": True, "verdict": "nothing red"}, now=1000.0 + 60 * 14)["verdict"], "nothing red")
+        h = timelimit.mark_health(timelimit.mark_health({"ok": True, "verdict": "nothing red"}, now=1000.0 + 60 * 15), now=1000.0 + 60 * 15)
+        self.assertEqual(h["verdict"], "nothing red; time: 15 of 30 minutes used")
 
     def test_documented_with_the_other_settings(self):
         for doc in ("SETUP.md", "README.md", os.path.join("docs", "clients", "README.md")):

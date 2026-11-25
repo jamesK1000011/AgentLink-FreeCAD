@@ -161,9 +161,10 @@ class BatchOrder(unittest.TestCase):
 ''')
         self.assertIn("one at a time, in order", got["desc"])
         self.assertIn("one at a time, in order", got["first"]["order"])
-        # Said once a conversation; later answers name it in saidBefore.
+        # Said once a conversation; later answers leave it out, and do not
+        # name it (once.QUIET: a batch's own notes; 24 Nov blind QA).
         self.assertNotIn("order", got["second"])
-        self.assertIn("order", json.dumps(got["second"].get("saidBefore")))
+        self.assertNotIn("saidBefore", got["second"])
 
 
 class PickExample(unittest.TestCase):

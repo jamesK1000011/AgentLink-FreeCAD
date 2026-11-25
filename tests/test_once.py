@@ -70,11 +70,12 @@ class Thin(unittest.TestCase):
         words = "A coded tool's note that nobody registered as standing, long enough to count."
         for _ in range(2):
             self.assertEqual(once.thin_reply(self.s, t, {"note": words})["note"], words)
+        # The machine comes only when asked for (session_state { machine: true }) or while
+        # heavy jobs run: it is given each time (24 Nov blind QA).
         machine = {"chip": "Apple M5", "perfCores": 4, "memoryGB": 24.0}
         once.thin_reply(self.s, "session_state", {"bodies": [], "machine": dict(machine)})
         again = once.thin_reply(self.s, "session_state", {"bodies": [], "machine": dict(machine)})
-        self.assertNotIn("machine", again)
-        self.assertEqual(once.said(self.s, "session_state")["machine"], machine)
+        self.assertEqual(again["machine"], machine)
 
     def test_health_advice_once_and_the_standing_failure_while_it_stands(self):
         def h(verdict, todo):
@@ -104,7 +105,7 @@ class Thin(unittest.TestCase):
         later = once.thin_reply(self.s, "sketch_constrain", reading(3))
         self.assertNotIn("note", later["state"])
         self.assertEqual(later["state"]["dof"], 3)  # the count stays, as dof
-        self.assertEqual(later["state"]["saidBefore"], ["note"])
+        self.assertNotIn("saidBefore", later["state"])  # the count is the reading: nothing to name
         top = once.thin_reply(self.s, "sketch_state", reading(2)["state"])  # sketch_state's own answer is the reading
         self.assertNotIn("note", top)
         self.assertIn(once.DOF_NOTE, once.health_said(self.s)["sketchNote"])  # reachable
@@ -125,7 +126,8 @@ class Thin(unittest.TestCase):
         two = once.thin_reply(self.s, "batch", batchrec.to_reply(copy.deepcopy(got), 0, "p", 1))
         self.assertEqual(one["note"], batchrec.TO_NOTE)
         self.assertNotIn("note", two)
-        self.assertEqual(two["saidBefore"], ["note"])
+        self.assertNotIn("saidBefore", two)  # a batch's own notes are not named again (once.QUIET)
+        self.assertEqual(once.said(self.s, "batch")["note"], batchrec.TO_NOTE)  # reachable
         stopped = dict(copy.deepcopy(got), note="Stopped after 70 s (budget 60 s): the rest from: 1.")
         three = once.thin_reply(self.s, "batch", batchrec.to_reply(stopped, 0, "p", 1))
         self.assertTrue(three["note"].startswith("Stopped after"))  # the batch's own note: always

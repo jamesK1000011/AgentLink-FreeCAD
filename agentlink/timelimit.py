@@ -10,10 +10,11 @@ It is read once, when Agent Link starts. The time counts from the first
 tools/call, not from the start of the server: a client can start the
 server some time before the agent's first call.
 
-When it is set, session_state has "time": "N of M minutes used", and the
+When it is set, session_state has "time": "N of M minutes used". The
 health verdict that a changing answer carries ends with the same words
-("time: N of M minutes used"); a batch says it once, on its last call's
-health. N is whole minutes, rounded down. When it
+("time: N of M minutes used") only from half the limit on (SHOW_FROM): before
+that the line was noise in every verdict (24 Nov blind QA). A batch says it
+once, on its last call's health. N is whole minutes, rounded down. When it
 is not set (or not a number above 0), nothing is shown: normal use does
 not change.
 """
@@ -21,6 +22,7 @@ import os
 import time
 
 ENV = "AGENTLINK_TIME_LIMIT_MIN"
+SHOW_FROM = 0.5   # the part of the limit used from which a health verdict says the time
 
 
 def _read(raw):
@@ -69,16 +71,25 @@ def line(now=None):
     return f"time: {u}" if u else None
 
 
+def matters(now=None):
+    """Whether a health verdict says the time: a limit is set and at least
+    SHOW_FROM of it is used."""
+    if LIMIT is None or _first[0] is None:
+        return False
+    return ((time.time() if now is None else now) - _first[0]) / 60.0 >= LIMIT * SHOW_FROM
+
+
 def state():
     """{ time } for session_state, or {} when no limit is set."""
     u = used()
     return {"time": u} if u else {}
 
 
-def mark_health(h):
-    """The time line added at the end of a health verdict (once). Never raises."""
+def mark_health(h, now=None):
+    """The time line added at the end of a health verdict (once), from half
+    the limit on (matters). Never raises."""
     try:
-        ln = line()
+        ln = line(now) if matters(now) else None
         if ln and isinstance(h, dict) and ln not in str(h.get("verdict", "")):
             h["verdict"] = f"{h.get('verdict', '')}; {ln}".lstrip("; ")
     except Exception:  # noqa: BLE001

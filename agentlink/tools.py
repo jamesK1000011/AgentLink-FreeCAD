@@ -923,7 +923,7 @@ class Session:
             **self._options_state(),
             **self._tools_state(),
             **self._extensions_state(),
-            **self._unattended_state(),
+            **self._unattended_state(machine=bool(a.get("machine"))),
             **self._front_state(),
             **_time_state(),
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
@@ -1014,20 +1014,24 @@ class Session:
             row["encased"] = self.meta[o.Label]["encased"]["what"]
         return row
 
-    def _unattended_state(self):
-        """The machine preset, the heavy-job queue and a dialog in front
-        (unattended use, N, F), for session_state."""
+    def _unattended_state(self, machine=False):
+        """The heavy-job queue, the machine preset and a dialog in front
+        (unattended use, N, F), for session_state. The machine (chip, cores,
+        memory, fan, heavy slots) only with machine: true or while heavy jobs
+        run or wait: the queue (keep.py) uses the preset on its own, and on
+        other reads it was noise in every answer (24 Nov blind QA)."""
         out = {}
         try:
-            g = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink")
-            m = keep.preset({"heavySlots": g.GetInt("HeavySlots", 0), "criticalPressureGuard": g.GetBool("CriticalPressureGuard", True)})
-            out["machine"] = {k: m.get(k) for k in ("chip", "perfCores", "memoryGB", "fan", "heavySlots", "criticalPressureGuard") if m.get(k) not in (None, "")}
             q = keep.queue_state()
             queue = {}
             if q.get("running"):
                 queue["running"] = [r.get("tool") for r in q["running"]]
             if q.get("held"):
                 queue["held"] = q.get("notice") or "new heavy jobs wait for the person's go (queue_go)"
+            if machine or queue:
+                g = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink")
+                m = keep.preset({"heavySlots": g.GetInt("HeavySlots", 0), "criticalPressureGuard": g.GetBool("CriticalPressureGuard", True)})
+                out["machine"] = {k: m.get(k) for k in ("chip", "perfCores", "memoryGB", "fan", "heavySlots", "criticalPressureGuard") if m.get(k) not in (None, "")}
             if queue:
                 out["queue"] = queue
         except Exception:
@@ -1772,8 +1776,9 @@ def make_tools(session):
                               "can load, and its log's last lines. agentDocument, frontDocument and mismatch: the document in front is not the agent's document "
                               "(after a restart, for example). Then the tools that act on the front document act on the other one. doc_switch to the agent's "
                               "document binds both again. documents: every open document (name, label, unsaved, byAgent; the agent's own has agent: true). "
+                              "machine: true adds the machine (chip, cores, memory, fan, heavy-job slots); it also comes while heavy jobs run or wait. "
                               "orient: true answers only a short read: where, the documents, the agent's document and its bodies, the options. Changes nothing.",
-             obj({"launcher": {"type": "boolean"}, "orient": {"type": "boolean"}}), s.session_state),
+             obj({"launcher": {"type": "boolean"}, "orient": {"type": "boolean"}, "machine": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang). Agent Link runs this outside FreeCAD. The "
                                   "documents come back from their newest saved copies, as after a crash. Use it for a stuck window; app_restart quits a working window cleanly.", obj({}), _force_restart_here),
         Tool("app_open", "Open the FreeCAD window when it is closed. Agent Link starts it in the background: it does not come to the front and takes no focus. "
@@ -2835,7 +2840,10 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         def finish(got):
             """The batch's answer from what _batch_run gave: its title, the
             record's last write, the lines asked for. Also called from inside
-            a menu's or dialog's loop when the batch is answered there (cont)."""
+            a menu's or dialog's loop when the batch is answered there (cont).
+            Its calls' ms are in the record and the logs, not in the reply."""
+            from . import batchrec
+
             if isinstance(got, dict):
                 if isinstance(a.get("title"), str) and a["title"].strip():
                     got.setdefault("title", a["title"].strip()[:120])  # kept in its record, for a person reading it later
@@ -2844,15 +2852,13 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     got["record"] = record.path
             lines = a.get("lines")
             if lines == "full" or a.get("writeTo"):
-                return _batch_to(a.get("writeTo"), got, first, "all" if lines in (None, "full") else lines, full=lines == "full")
+                return batchrec.untimed(_batch_to(a.get("writeTo"), got, first, "all" if lines in (None, "full") else lines, full=lines == "full"))
             # A batch from a file (a long run, kept out of the conversation by
             # design) or one that asks for lines answers like batch { writeTo } from
             # its record, which holds every call's whole answer: a plain file
             # batch's reply repeated every answer (10-35 k characters, live).
             # lines: "full" gives the whole answer here instead.
-            from . import batchrec
-
-            return batchrec.record_reply(got, first, record.path if record.ok else None, a.get("path") is not None, lines)
+            return batchrec.untimed(batchrec.record_reply(got, first, record.path if record.ok else None, a.get("path") is not None, lines))
 
         mine["finish"] = finish
         try:

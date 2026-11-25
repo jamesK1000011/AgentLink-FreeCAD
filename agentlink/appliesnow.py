@@ -8,12 +8,14 @@ after each changing call, within a time budget, and said as one short line
 beside the health's "next":
 
     "appliesNow": { "groups": { "sketch": 14, "feature": 9 }, "not": 6,
-                    "notChecked": 11, "ms": 40 }
+                    "notChecked": 11 }
 
 group names and counts, never a tool's text. groups: the tools whose
 leading checks all pass, by group; not: those one of whose checks refuses
 now; notChecked: those that could not be told (most need the call's
-arguments); partial: the tools the budget ran out before. The line is said
+arguments); partial: the tools the budget ran out before. The reading's
+time (ms) stays in the meter and the logs, not in the line. A line with no
+group and nothing that refuses tells nothing and is not said. The line is said
 when it is not what was last said (as "next" is), and never inside a batch
 (the batch's own answer carries it once). tool_groups { now: true } gives
 the same reading in full; tool_groups { needs: tool, arguments } one tool
@@ -239,10 +241,17 @@ def push(session, tool, out, count=True):
             return out
         r = take(session)
         ln = line(r, server)
+        # The model's line has no timing (the reading keeps its ms for the
+        # meter and the logs), and a line that tells nothing (no group
+        # applies, none refuses: only notChecked) is not said (24 Nov blind
+        # QA: appliesNow { groups: {}, not: 0, notChecked: 62 } in each batch).
         said = {k: v for k, v in (ln or {}).items() if k != "ms"}
         if ln is None or said == getattr(session, "_applies_said", None):
             return out
         session._applies_said = said
+        if not said.get("groups") and not said.get("not") and not said.get("partial"):
+            return out
+        ln = said
         h = out.get("health")
         if isinstance(h, dict):
             h["appliesNow"] = ln

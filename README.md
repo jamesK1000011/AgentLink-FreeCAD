@@ -410,10 +410,10 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 
 | Tool list | Tools listed | Tokens (est.) of the `tools/list` answer |
 |---|---:|---:|
-| static (default), ste | 6 | 1,701 |
-| static, full | 6 | 4,407 |
-| classic, ste | 24 | 6,461 |
-| classic, full | 24 | 9,077 |
+| static (default), ste | 6 | 1,710 |
+| static, full | 6 | 4,450 |
+| classic, ste | 24 | 6,471 |
+| classic, full | 24 | 9,120 |
 <!-- stats:end -->
 
 ## Add-ons
@@ -454,7 +454,7 @@ The tool list starts short. Add-ons that are not installed cost nothing: their t
 A runner that gives the agent a fixed time (a test run, a scheduled job) can tell Agent Link the limit.
 Set `AGENTLINK_TIME_LIMIT_MIN` to the minutes in the server's `env`.
 Agent Link reads it when it starts. The time counts from the agent's first tool call.
-`session_state` then shows `time: N of M minutes used`, and the health verdict of each changing answer ends with the same words.
+`session_state` then shows `time: N of M minutes used`, and from half the limit on, the health verdict of each changing answer ends with the same words.
 When it is not set, nothing is shown.
 
 ## Privacy
