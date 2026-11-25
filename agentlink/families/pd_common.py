@@ -718,6 +718,17 @@ def face_pick(body, ref):
     return facesel.copyable(descs, i, ref if sel else None)
 
 
+def face_pick_said(body, ref):
+    """face_pick's form, and with it which face a { side } selector took
+    when it had a choice, in words (facesel.pick_words; None when it had
+    none, or for { at, normal })."""
+    _, shape = tip_shape(body)
+    if not facesel.is_selector(ref):
+        return face_pick(body, ref), None
+    i, descs = _by_selector(shape, ref, body)
+    return facesel.copyable(descs, i, ref), facesel.pick_words(descs, i, ref)
+
+
 EDGE_KEYS = ("near", "face", "all", "kind", "tol")
 FACE_KEYS = ("at", "normal", "tol")
 

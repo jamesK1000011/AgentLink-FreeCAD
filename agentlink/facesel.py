@@ -150,6 +150,43 @@ def copyable(faces, i, q=None):
     return out
 
 
+SHOWN_LEVELS = 6  # planes pick_words names; past this, "…"
+
+
+def pick_words(faces, i, q):
+    """Which face selector q took (face i), in words, when the faces facing
+    that way lie on more than one plane (or, for largest, are more than
+    one): "picked the +z face at z 20, the farthest of the +z faces (z 5,
+    z 20). For another, give face { at, normal } or { side, of }." None when
+    there was no choice. Which face is picked does not change here."""
+    if not is_selector(q):
+        return None
+    side, of, largest = check(q)
+    hits, pool = matches(faces, q)
+    if i not in hits or len(pool) < 2:
+        return None
+    k = "xyz".index(side[1])
+    name = side[1]
+    levels = sorted({_level(faces[j], k) for j in pool})
+    shown = ", ".join(f"{name} {_num(v)}" for v in levels[:SHOWN_LEVELS]) + (", …" if len(levels) > SHOWN_LEVELS else "")
+    other = "For another, give face { at, normal } or { side, of }."
+    at = _num(_level(faces[i], k))
+    if largest:
+        return (f"picked the {side} face at {name} {at}, the largest of {len(pool)} {side} faces "
+                f"({round(float(faces[i]['area']), 1):g} mm²; they lie at {shown}). {other}")
+    if len(levels) < 2:
+        return None
+    return f"picked the {side} face at {name} {at}, the farthest of the {side} faces ({shown}). {other}"
+
+
+def _level(f, k):
+    return round(float(f["center"][k]), 2) + 0.0
+
+
+def _num(v):
+    return str(int(v)) if v == int(v) else f"{v:g}"
+
+
 def entry(faces, i, q=None):
     """One face as a refusal lists it."""
     f = faces[i]

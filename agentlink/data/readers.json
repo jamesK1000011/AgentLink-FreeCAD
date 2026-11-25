@@ -274,6 +274,7 @@
   "sketch_more": {
    "readers": [
     "V",
+    "axes",
     "broken",
     "doc",
     "ext_count",
@@ -1074,6 +1075,7 @@
   "sketch": {
    "readers": [
     "V",
+    "axes",
     "body",
     "body_extent",
     "body_of",
@@ -1087,6 +1089,7 @@
     "doc",
     "ext_count",
     "face_pick",
+    "face_pick_said",
     "frame",
     "geo_kind",
     "geo_of_edge",
@@ -1096,6 +1099,7 @@
     "line",
     "make_constraint",
     "offset_out",
+    "on_words",
     "placement",
     "plane_mode",
     "plane_ref",

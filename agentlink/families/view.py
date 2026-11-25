@@ -932,7 +932,9 @@ def tools(session):
             "view_render",
             "Draw the parts as a picture and look at it; works headless. It draws the shown parts, without the containers that hold them (an assembly, an "
             "App::Part, a group). Shown meshes are drawn too, for example an imported STL or a texture result, but not with a map. Hidden parts are not drawn, and the answer names them (hidden). objects: [names] draws those named. views: one or several (\"all\": "
-            "iso, top, front, right, each fitted). map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or an add-on's map "
+            "iso, top, front, right, each fitted). "
+            "front looks from -Y toward +Y (it shows the -Y side), with Z up. top looks down -Z, with +Y up the screen. right looks from +X, rear from +Y, left from -X. "
+            "iso looks from the front, the right and above. map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or an add-on's map "
             "(view_maps lists them). A map has a legend and the worst spot's at. range: [lo, hi] fixes the colours. section { axis x|y|z, offset mm, flip }: cuts "
             "it open (cut faces hatched). zoom { at, size mm }: frames a spot, for example a finding's at. layers: which add-on layers (a scan …). The PNG comes "
             "back as an image (inline false: the file only) and is written to path. Limits: the size is calculated before it draws: every layer's triangles times "

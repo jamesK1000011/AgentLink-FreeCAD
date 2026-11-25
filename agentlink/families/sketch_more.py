@@ -16,7 +16,7 @@ from .. import runners
 from . import pd_common as pc
 from . import picks
 from ..protocol import ToolError
-from .sketch import SOLVE, ext_count
+from .sketch import SOLVE, axes, ext_count
 
 GROUP = "sketch"
 INFO = ("Sketches: bodies, sketches on planes and faces, geometry and constraints, offset, external edges, fillet/trim/split/mirror, "
@@ -400,5 +400,5 @@ def tools(session):
                # the family's: the solver's reading, a sketch kept and put back, the geometry
                "attach_edge": lambda sk, b, a: attach_edge(doc(), sk, b, a), "state": state, "solver_lists": solver_lists, "ext_count": ext_count, "kind_of": kind_of, "kept": kept,
                "restore": lambda sk, snap: restore(doc(), sk, snap), "copies": copies, "turn": turn, "scaling": scaling, "reach": reach, "detect": detect,
-               "lower_degree": lower_degree, "copy_frame": copy_frame, "new_beside": lambda src: new_beside(doc(), src), "bring_in": bring_in, "mirrored": mirrored}
+               "lower_degree": lower_degree, "copy_frame": copy_frame, "new_beside": lambda src: new_beside(doc(), src), "bring_in": bring_in, "mirrored": mirrored, "axes": axes}
     return runners.tools(GROUP, s, helpers, family="sketch_more")

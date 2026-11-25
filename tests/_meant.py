@@ -340,7 +340,11 @@ SCHEMAS = {
                                                       "value": {"type": "number", "description": "A size: mm, or deg for angle."},
                                                       "name": {"type": "string", "description": "A name for param_bind."}},
                                        "required": ["type"], "additionalProperties": False}}}},
-    "sketch_new": {"why": "face selectors", "replace": {"face": {
+    # 25 Nov orientation fixes (owner-approved peer idea 3): up, the world axis that sketch y runs along
+    "sketch_new": {"why": "face selectors; orientation: up",
+                   "after": [("flip", "up", {"type": "string", "enum": ["x", "y", "z"],
+                                             "description": "The world axis that sketch y runs along. On a standing face, z when left out."})],
+                   "replace": {"face": {
         "type": "object",
         "description": "{ side: \"+z\" | \"-z\" | \"+x\" | \"-x\" | \"+y\" | \"-y\", of: the feature that made it, largest: true } (one face only), "
                        "or { at: [x,y,z] a point on the face, normal: [x,y,z] its outward normal }",
@@ -459,6 +463,9 @@ RESULTS = {
     "object_list": (("typesHere",), "pipe 20 Nov: the types there are when nothing is kept"),
     "pd_gear": (("on", "stored"), "bicycle finding 5: the plane used and the properties that keep the teeth"),
     "sketch_add": (("dimsNote",), "bicycle finding 6: dims asked of a kind with no size"),
+    # 25 Nov orientation fixes (owner-approved audit 1, 7; peer idea 1): the frame in words, the face a side took
+    "sketch_new": (("axes", "picked"), "orientation audit 1, 7: the frame in words on every answer; which face a side picked"),
+    "sketch_state": (("axes",), "orientation audit 1: the frame in words"),
 }
 
 

@@ -14,6 +14,7 @@ import Part
 import Sketcher
 
 from .. import geometry as geo
+from .. import orient
 from .. import runners
 from ..once import DOF_NOTE
 from ..protocol import ToolError
@@ -935,19 +936,46 @@ def constraint(t):
     return Sketcher.Constraint(*t)
 
 
-def face_frame(P):
+def face_frame(P, up=None):
     """The attachment offset that lines a sketch on a face (placed at P) up
     with the world: its origin the world origin's foot on the face's plane,
-    its x along the world axis that lies most in the plane — so coordinates
-    read as the part's own."""
+    its axes by orient.face_axes — y up world z on a standing face, else x
+    along the world axis that lies most in the plane — so coordinates read
+    as the part's own. up: the world axis sketch y runs along."""
     n = P.Rotation.multVec(V(0, 0, 1))
     o = n * P.Base.dot(n)
-    best = max((V(1, 0, 0), V(0, 1, 0), V(0, 0, 1)), key=lambda e: 1 - abs(e.dot(n)))
-    x = best - n * best.dot(n)
-    x.normalize()
-    y = n.cross(x)
+    x, y = (V(*c) for c in _axes_or_refuse(orient.face_axes, n, up))
     D = FreeCAD.Placement(o, FreeCAD.Rotation(x, y, n, "ZXY"))
     return P.inverse().multiply(D)
+
+
+def up_frame(P, up):
+    """The attachment offset that turns a sketch placed at P about its own
+    normal so its y runs along the world axis up (orient.up_axes). The origin
+    and the normal stay as the attachment put them."""
+    n = P.Rotation.multVec(V(0, 0, 1))
+    x, y = (V(*c) for c in _axes_or_refuse(orient.up_axes, n, up))
+    D = FreeCAD.Placement(P.Base, FreeCAD.Rotation(x, y, n, "ZXY"))
+    return P.inverse().multiply(D)
+
+
+def _axes_or_refuse(fn, n, up):
+    try:
+        return fn((n.x, n.y, n.z), up)
+    except ValueError as e:
+        raise ToolError("invalid_input", f"{e} Nothing was made.")
+
+
+def axes(pl):
+    """A sketch's frame (placement pl) in one line of words (orient.axes_line)."""
+    return orient.axes_line(frame(pl))
+
+
+def on_words(what, pl):
+    """sketch_new's on for a face: the face's centre and, beside it, where the
+    sketch origin is (another point: the world origin's foot on the face)."""
+    o = ", ".join(orient.num(c) for c in frame(pl)["origin"])
+    return f"{what} (its centre); sketch origin at [{o}]"
 
 
 def geo_of_edge(e):
@@ -1058,7 +1086,7 @@ def tools(session):
     helpers = {"doc": doc, "finish": lambda tool, read, recompute=True: picks.finish(s, tool, read, recompute=recompute),
                "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps), "unique": lambda label, *own: s.unique(label, *own),
                "body": lambda ref: pc.pd_body(doc(), ref), "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b, s), "note_sketch": lambda sk: pc.note_made_sketch(s, sk), "status_words": pc.status_words, "body_of": pc.body_of,
-               "body_reading": pc.body_reading, "broken": pc.newly_broken, "plane_ref": lambda *x: pc.plane_ref(*x), "face_pick": lambda *x: pc.face_pick(*x), "support_prop": pc.support_prop, "plane_mode": pc.plane_mode,
+               "body_reading": pc.body_reading, "broken": pc.newly_broken, "plane_ref": lambda *x: pc.plane_ref(*x), "face_pick": lambda *x: pc.face_pick(*x), "face_pick_said": lambda *x: pc.face_pick_said(*x), "support_prop": pc.support_prop, "plane_mode": pc.plane_mode,
                "version": lambda: ".".join(FreeCAD.Version()[:3]),
                # FreeCAD's own
                "V": V, "placement": FreeCAD.Placement, "setprop": setattr, "vec2": pc.vec2, "is_tuple": lambda x: isinstance(x, tuple),
@@ -1067,6 +1095,6 @@ def tools(session):
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
-               "gid": gid, "face_frame": face_frame, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
+               "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)

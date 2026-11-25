@@ -1130,6 +1130,8 @@ def install():
             return dict(q)
 
         pc.face_pick = face_pick
+        # 25 Nov: sketch_new reads the form with its words (picked); on the stand-in, no words
+        pc.face_pick_said = lambda body, q: (face_pick(body, q), None)
         from agentlink.families import measure as M
 
         def query(session, q):

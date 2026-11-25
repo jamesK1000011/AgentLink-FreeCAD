@@ -2,10 +2,12 @@
 # Sketches in a PartDesign body
 
 ## workflow
-1. `pd_body_new`, then `sketch_new { plane: "XY" }` — or on a face of the body: `face: { at: [x,y,z], normal: [0,0,1] }`. The answer's `frame` says where sketch x/y lie in the world.
+1. `pd_body_new`, then `sketch_new { plane: "XY" }` — or on a face of the body: `face: { at: [x,y,z], normal: [0,0,1] }`. The answer's `axes` says in words where sketch x, sketch y and the normal point, and where [0, 0] is in the world. Read it before you draw. `frame` gives the same as vectors.
+   - Planes (sketch x, sketch y, normal): XY +X, +Y, +Z. XZ +X, +Z, -Y. YZ +Y, +Z, +X. A pad grows along the normal; a pocket or a hole cuts against it. XZ with offset 15 is at y -15.
+   - A face sketch: [0, 0] is the foot of the world origin on the face plane, not the face centre. On a standing face, y runs up +Z (a +y face: x runs -X). On another face, x is the world axis that lies most in the face. `up: "x" | "y" | "z"` sets the axis that y runs along.
 2. `sketch_add` the profile: rectangle, rounded_rectangle, circle, polygon, slot, polyline … Shapes come with their own coincident/horizontal/vertical constraints (a polyline's sides that run along x or y are held horizontal or vertical). `dims: true, name: "plate"` adds their sizes as named constraints (`plate_width`).
    - Where a shape goes: a first plate on XY is centred, `rectangle { center: [0, 0], size: [50, 40] }`. A shape at an edge of the body takes `corner`, its lower-left corner, from the `bodyExtent` that `sketch_new` answers.
-   - Example, a block on one corner of that plate (padded 4): `sketch_new { face: { side: "+z" } }` answers `bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }`. On this face the sketch x/y are the world x/y.
+   - Example, a block on one corner of that plate (padded 4): `sketch_new { face: { side: "+z" } }` answers `bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }`. On a +z face the sketch x/y are the world x/y. On another face they are not: read `axes`.
      The block is `rectangle { corner: [-25, -20], size: [10, 10] }`, corner `[x min, y min]`. Then `pd_pad { length: 6 }` makes it. At `center: [0, 0]` the same block would be in the middle of the plate, not on its corner.
 3. `sketch_constrain` the rest: refs are FreeCAD's — geometry id, `[id, vertex]` (1 start, 2 end, 3 centre), `"origin"`; -1 the horizontal axis, -2 the vertical.
 4. `sketch_state` before a feature: `readyForFeature`, `dof`, conflicts, open vertices.

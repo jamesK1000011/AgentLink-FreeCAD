@@ -8119,7 +8119,7 @@
   },
   "sketch_new": {
    "group": "sketch",
-   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal. reversed: true reverses the normal. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world. On a face, face is the form that picks it again. bodyExtent: the box of the body's solid in the sketch's own x/y, { x: [min, max], y: [min, max] } (mm). It is not there when the body has no solid. Use its numbers to start a shape at an edge of the body, not at the origin. Example: on face { side: \"+z\" } of a 50 x 40 x 4 plate centred on XY, bodyExtent is { x: [-25.0, 25.0], y: [-20.0, 20.0] }. There, sketch_add rectangle { corner: [-25, -20], size: [10, 10] } is a block on one corner of the plate.",
+   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal. reversed: true reverses the normal. The planes give sketch x, sketch y and the normal. XY: +X, +Y, +Z. XZ: +X, +Z, -Y. YZ: +Y, +Z, +X. A pad grows along the normal, and a pocket or a hole cuts against it. offset moves the sketch along the normal: XZ with offset 15 is at y -15. A face sketch aligns with the world. Its origin is the foot of the world origin on the face plane, not the face centre. On a standing face, y runs up +Z. On another face, x is along the world axis that lies most in the face, and y is normal × x. up: x | y | z makes sketch y run along that world axis, and x is y × normal. Answer: sketch (its label), axes and frame. axes: the frame in words. Read it before you draw. frame: where the sketch x/y and its origin are in the world. picked: which face a side took when more faces face that way. On a face, face is the form that picks it again. bodyExtent: the box of the body's solid in the sketch's own x/y, { x: [min, max], y: [min, max] } (mm). It is not there when the body has no solid. Use its numbers to start a shape at an edge of the body, not at the origin. Example: on face { side: \"+z\" } of a 50 x 40 x 4 plate centred on XY, bodyExtent is { x: [-25.0, 25.0], y: [-20.0, 20.0] }. There, sketch_add rectangle { corner: [-25, -20], size: [10, 10] } is a block on one corner of the plate.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8175,6 +8175,15 @@
      "reversed": {
       "type": "boolean"
      },
+     "up": {
+      "type": "string",
+      "enum": [
+       "x",
+       "y",
+       "z"
+      ],
+      "description": "The world axis that sketch y runs along. On a standing face, z when left out."
+     },
      "name": {
       "type": "string"
      }
@@ -8189,7 +8198,7 @@
    "steps": [
     {"let": {"b": "=body(a.body)"}},
     {"refuse": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face ({ side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body's solid), one of them, not both.", "when": "=('plane' in a) == ('face' in a)"},
-    {"let": {"pick": "=face_pick(b, a.face) if 'face' in a else None"}},
+    {"let": {"pick, picked": "=face_pick_said(b, a.face) if 'face' in a else (None, None)"}},
     {"let": {"label": "=unique(a.name or 'Sketch')", "sk": "=b.newObject('Sketcher::SketchObject', 'Sketch')"}},
     {"set": {"sk.Label": "=label"}},
     {"let": {"sup": "=support_prop(sk)", "link, what": "=plane_ref(b, a.plane if 'plane' in a else a.face, 'plane')"}},
@@ -8201,7 +8210,14 @@
     {
      "when": "='face' in a",
      "then": [
-      {"set": {"sk.AttachmentOffset": "=face_frame(sk.Placement)"}},
+      {"set": {"sk.AttachmentOffset": "=face_frame(sk.Placement, a.get('up'))"}},
+      {"do": "=doc().recompute()"}
+     ]
+    },
+    {
+     "when": "='plane' in a and a.get('up')",
+     "then": [
+      {"set": {"sk.AttachmentOffset": "=up_frame(sk.Placement, a.up)"}},
       {"do": "=doc().recompute()"}
      ]
     },
@@ -8217,7 +8233,7 @@
     {"let": {"ext": "=body_extent(b, sk)"}},
     {"do": "=note_sketch(sk)"}
    ],
-   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=what", "face": {"when": "=pick", "value": "=pick"}, "offset": {"when": "=off", "value": "=off"}, "frame": "=frame(sk.Placement)", "bodyExtent": {"when": "=ext", "value": "=ext"}, "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
+   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=on_words(what, sk.Placement) if 'face' in a else what", "face": {"when": "=pick", "value": "=pick"}, "picked": {"when": "=picked", "value": "=picked"}, "offset": {"when": "=off", "value": "=off"}, "axes": "=axes(sk.Placement)", "frame": "=frame(sk.Placement)", "bodyExtent": {"when": "=ext", "value": "=ext"}, "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
   },
   "sketch_add": {
    "group": "sketch",
@@ -8600,7 +8616,7 @@
   },
   "sketch_state": {
    "group": "sketch",
-   "description": "Read the solver's state of a sketch. Check it before a feature. dof: 0 is fully constrained. Also conflicting / redundant / malformed constraint ids, closed wires and open vertices. readyForFeature, with todo when it is false. It is false for an open wire, a branch, or closed loops that cross or touch. Its frame in the world. detail (default true): lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool. A pad on a sketch with dof > 0 works, but it moves when you edit the sketch.",
+   "description": "Read the solver's state of a sketch. Check it before a feature. dof: 0 is fully constrained. Also conflicting / redundant / malformed constraint ids, closed wires and open vertices. readyForFeature, with todo when it is false. It is false for an open wire, a branch, or closed loops that cross or touch. Its frame in the world, as vectors (frame) and in words (axes). detail (default true): lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool. A pad on a sketch with dof > 0 works, but it moves when you edit the sketch.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8622,7 +8638,7 @@
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
     {"let": {"st": "=state_of(sk)"}},
-    {"put": {"frame": "=frame(sk.Placement)"}, "into": "st"},
+    {"put": {"axes": "=axes(sk.Placement)", "frame": "=frame(sk.Placement)"}, "into": "st"},
     {"put": {"geometry": "=[describe_geo(sk, i) for i in range(len(sk.Geometry))]", "constraints": "=[describe_con(sk, i) for i in range(len(sk.Constraints))]"}, "into": "st", "when": "=a.get('detail', True)"},
     {"put": {"error": "=sk.getStatusString()"}, "into": "st", "when": "=not sk.isValid()"}
    ],
@@ -9105,7 +9121,7 @@
   },
   "td_view": {
    "group": "techdraw",
-   "description": "Put a view of bodies on a page. bodies: all when omitted. direction: front|top|right|left|rear|bottom|iso, or [x, y, z] (from the part to the viewer). scale: the page's scale when omitted. at: [x, y] page mm, its centre, from the bottom-left origin. hidden: dashed hidden lines. name: the label. Answer: its label (other td_ tools take it), size on the paper, and edges. 0 edges: the bodies are empty or hidden. The tool waits for its lines (up to 30 s in the window).",
+   "description": "Put a view of bodies on a page. bodies: all when omitted. direction: front|top|right|left|rear|bottom|iso, or [x, y, z] (from the part to the viewer). front looks from -Y, with Z up. top looks from +Z. right looks from +X. scale: the page's scale when omitted. at: [x, y] page mm, its centre, from the bottom-left origin. hidden: dashed hidden lines. name: the label. Answer: its label (other td_ tools take it), size on the paper, and edges. 0 edges: the bodies are empty or hidden. The tool waits for its lines (up to 30 s in the window).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -17274,7 +17290,7 @@
   },
   "steps_render": {
    "group": "notes",
-   "description": "Draw the build again as pictures, headless (not the window). Each feature gets a PNG (step_01.png …). Each picture is framed on the finished part, so the part grows in place. Each caption gives the step, the type and what the step did. A contact sheet steps.png shows them all. sheet: false leaves out the sheet. inline: false keeps the sheet out of the answer. body: the body. view: iso, or top, front, right …. width, height: pixels for each picture (480 × 360). path: a folder (steps_<body> in the session's folder). The tool tessellates every step: on a heavy body, each step takes seconds. Answer: folder, files, sheet, steps. The model does not change.",
+   "description": "Draw the build again as pictures, headless (not the window). Each feature gets a PNG (step_01.png …). Each picture is framed on the finished part, so the part grows in place. Each caption gives the step, the type and what the step did. A contact sheet steps.png shows them all. sheet: false leaves out the sheet. inline: false keeps the sheet out of the answer. body: the body. view: iso, or top, front, right …. front looks from -Y, with Z up. top looks down -Z, with +Y up. right looks from +X. width, height: pixels for each picture (480 × 360). path: a folder (steps_<body> in the session's folder). The tool tessellates every step: on a heavy body, each step takes seconds. Answer: folder, files, sheet, steps. The model does not change.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21014,7 +21030,7 @@
   },
   "sketch_merge": {
    "group": "sketch",
-   "description": "Merge sketches into a new sketch on the plane of the first. The tool keeps geometry and constraints, but not constraints to outside geometry. sketches: [names]. remove: true deletes the originals. Answer: sketch, its label.",
+   "description": "Merge sketches into a new sketch on the plane of the first. The tool keeps geometry and constraints, but not constraints to outside geometry. sketches: [names]. remove: true deletes the originals. Answer: sketch, its label, and axes (its frame in words).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21058,11 +21074,11 @@
     {"let": {"bad": "=broken(doc())"}},
     {"refuse": {"fmt": "That breaks {bad[0]['object']}: {bad[0]['error']} — nothing was kept. sketch_state reads the sketch as it is; a feature built on it needs its profile closed."}, "code": "failed", "when": "=bad"}
    ],
-   "answer": {"via": "finish", "with": ["sketch_merge", "$fields"], "late": true, "fields": {"...state": "=state(sk)", "...extra": "=extra"}}
+   "answer": {"via": "finish", "with": ["sketch_merge", "$fields"], "late": true, "fields": {"...state": "=state(sk)", "...extra": "=extra", "axes": "=axes(sk.Placement)"}}
   },
   "sketch_mirror": {
    "group": "sketch",
-   "description": "Make a mirrored copy of a whole sketch as a new sketch on the same plane. about: y (left-right) | x (up-down) | origin. Geometry only, no constraints. Answer: sketch, its label.",
+   "description": "Make a mirrored copy of a whole sketch as a new sketch on the same plane. about: y (left-right) | x (up-down) | origin. Geometry only, no constraints. Answer: sketch, its label, and axes (its frame in words).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21102,11 +21118,11 @@
     {"let": {"bad": "=broken(doc())"}},
     {"refuse": {"fmt": "That breaks {bad[0]['object']}: {bad[0]['error']} — nothing was kept. sketch_state reads the sketch as it is; a feature built on it needs its profile closed."}, "code": "failed", "when": "=bad"}
    ],
-   "answer": {"via": "finish", "with": ["sketch_mirror", "$fields"], "late": true, "fields": {"...state": "=state(sk)", "...extra": "=extra"}}
+   "answer": {"via": "finish", "with": ["sketch_mirror", "$fields"], "late": true, "fields": {"...state": "=state(sk)", "...extra": "=extra", "axes": "=axes(sk.Placement)"}}
   },
   "sketch_attach": {
    "group": "sketch",
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. reversed: true reverses the normal. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and reversed stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. reversed: true reverses the normal. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and reversed stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: axes (the frame in words), on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21156,7 +21172,7 @@
     {"let": {"sk": "=sketch_of(a.sketch)"}},
     {"let": {"b": "=first([p for p in sk.InList if p.TypeId == 'PartDesign::Body'])"}},
     {"refuse": {"fmt": "{sk.Label} is in no body: attach works on a body's sketch — sketch_new makes one in a body, and sketch_carbon copies this one into it."}, "code": "invalid_state", "when": "=b is None"},
-    {"when": "=a.get('edge') is not None or a.get('repair')", "then": [{"refuse": "edge or repair: not with plane or face.", "when": "='plane' in a or 'face' in a"}, {"let": {"extra": "=attach_edge(sk, b, a)"}}, {"answer": {"via": "finish", "with": ["sketch_attach", "$fields"], "late": true, "fields": {"...state": "=state(sk)", "...extra": "=extra"}}}]},
+    {"when": "=a.get('edge') is not None or a.get('repair')", "then": [{"refuse": "edge or repair: not with plane or face.", "when": "='plane' in a or 'face' in a"}, {"let": {"extra": "=attach_edge(sk, b, a)"}}, {"answer": {"via": "finish", "with": ["sketch_attach", "$fields"], "late": true, "fields": {"axes": "=axes(sk.Placement)", "...state": "=state(sk)", "...extra": "=extra"}}}]},
     {"refuse": {"fmt": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face {{ at: [x,y,z], normal: [x,y,z] }}, one of them, not both."}, "when": "=('plane' in a) == ('face' in a)"},
     {"let": {"link, what": "=plane_ref(b, a['plane'] if 'plane' in a else a['face'], 'plane')"}},
     {"let": {"owner": "=link[0]", "moved": "=False", "order": "=list(b.Group)"}},
@@ -21173,7 +21189,7 @@
     {"let": {"bad": "=broken(doc())"}},
     {"refuse": {"fmt": "That breaks {bad[0]['object']}: {bad[0]['error']} — nothing was kept. sketch_state reads the sketch as it is; a feature built on it needs its profile closed."}, "code": "failed", "when": "=bad"}
    ],
-   "answer": {"via": "finish", "with": ["sketch_attach", "$fields"], "late": true, "fields": {"...state": "=state(sk)", "...extra": "=extra"}}
+   "answer": {"via": "finish", "with": ["sketch_attach", "$fields"], "late": true, "fields": {"axes": "=axes(sk.Placement)", "...state": "=state(sk)", "...extra": "=extra"}}
   },
   "sketch_validate": {
    "group": "sketch",
@@ -21228,7 +21244,7 @@
   },
   "view_snapshot": {
    "group": "view",
-   "description": "Save the FreeCAD window's 3D view as the person sees it, to a file. The answer gives its path; inline: true also puts the picture in the answer. view: first turn to a standard view (fit true). views [..]: up to 6, or \"all\". This gives one grid picture, each view's file in paths, and puts the person's view back. width and height (800 x 600): the whole picture; several views share it. cell: true gives each view that size instead. The answer gives the sizes as saved. Sometimes no picture is taken: the answer is empty, with the reason and what to do. That occurs when nothing with a shape shows (an empty document, all hidden). It also occurs when the model is outside the frame, or less than 6 pixels across. fitted: false with fitNote: the view was not fitted again, so parts can be cut off. That is with no view given (as the person left it), or fit: false. Needs the window; view_render draws without one.",
+   "description": "Save the FreeCAD window's 3D view as the person sees it, to a file. The answer gives its path; inline: true also puts the picture in the answer. view: first turn to a standard view (fit true). front looks from -Y toward +Y (it shows the -Y side), with Z up. top looks down -Z, with +Y up the screen. right looks from +X. iso looks from the front, the right and above. views [..]: up to 6, or \"all\". This gives one grid picture, each view's file in paths, and puts the person's view back. width and height (800 x 600): the whole picture; several views share it. cell: true gives each view that size instead. The answer gives the sizes as saved. Sometimes no picture is taken: the answer is empty, with the reason and what to do. That occurs when nothing with a shape shows (an empty document, all hidden). It also occurs when the model is outside the frame, or less than 6 pixels across. fitted: false with fitNote: the view was not fitted again, so parts can be cut off. That is with no view given (as the person left it), or fit: false. Needs the window; view_render draws without one.",
    "inputSchema": {"type": "object", "properties": {"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's."}, "view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/view.py)",

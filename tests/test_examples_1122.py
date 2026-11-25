@@ -136,10 +136,11 @@ class Placed(unittest.TestCase):
         # A 50 x 40 plate centred on XY, padded 4: world x [-25, 25], y [-20, 20], z [0, 4].
         # face_frame on the +z face: x is world x (the first axis in the face), y = z cross x = world y,
         # origin (0, 0, 4); so bodyExtent is the plate's x and y.
-        with open(os.path.join(HERE, "..", "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
-            src = f.read()
-        self.assertIn("best = max((V(1, 0, 0), V(0, 1, 0), V(0, 0, 1)), key=lambda e: 1 - abs(e.dot(n)))", src)
-        self.assertIn("y = n.cross(x)", src)
+        # (25 Nov: the rule is agentlink/orient.py's face_axes; a +z face is not a standing face.)
+        from agentlink import orient
+
+        x, y = orient.face_axes((0, 0, 1))
+        self.assertEqual((tuple(x), tuple(y)), ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)))
         ext = {"x": [-25.0, 25.0], "y": [-20.0, 20.0]}
         self.assertEqual([ext["x"][0], ext["y"][0]], [-25.0, -20.0])
         tj = tools_json()
