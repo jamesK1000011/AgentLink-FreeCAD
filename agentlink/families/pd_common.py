@@ -1079,6 +1079,11 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
         if feat is not None:
             out.update(where_went(feat, body, delta, tol))
+            if "where" in out:
+                # The one plain sentence first (owner, 25 Nov: a small model reads
+                # the top of an ok answer and moves on; the numbers follow it).
+                head = {k: out[k] for k in ("feature", "type") if k in out}
+                out = {**head, "where": out["where"], **{k: v for k, v in out.items() if k not in head and k != "where"}}
     return picks.finish(session, tool, out, recompute=False)
 
 
