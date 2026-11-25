@@ -128,6 +128,27 @@ def legacy_of(keys, also=None):
     return lambda q: not is_filter(q, keys) and (also is None or also(q))
 
 
+# A direction in words where a kind or a type goes (24 Nov QA: { kind:
+# "vertical" } for the vertical edges of a box): shape_query's filters take
+# a direction as axis (an edge) or normal (a face).
+DIRECTION_WORDS = {"vertical", "horizontal"}
+
+
+def direction_word(q, kind, what):
+    """Refuse kind or type given as a direction word, with the filter that
+    gives the direction."""
+    for key in ("kind", "type"):
+        v = q.get(key)
+        if isinstance(v, str) and v.strip().lower() in DIRECTION_WORDS:
+            if kind == "edge":
+                fix = ('For a direction, use axis: { type: "line", axis: "z" } is every straight edge along z (the vertical edges). '
+                       'axis: "x" or "y" gives the horizontal edges along that axis.')
+            else:
+                fix = ('For a direction, use normal: { type: "plane", normal: "+z" } is every flat face that points up. '
+                       'A vertical face has its normal along x or y.')
+            raise ToolError("invalid_input", f"{what}: {key} {v.strip()!r} is not a {key} of a{'n' if kind == 'edge' else ''} {kind}. {fix} Nothing was changed.")
+
+
 def pick(shape, spec, kind, what, legacy=None, is_legacy=None, names=()):
     """[(name, element)] for a spec (above) on shape, each once, in order.
     kind: "face" or "edge" — what the tool takes. legacy(q) -> [(name,
@@ -137,6 +158,9 @@ def pick(shape, spec, kind, what, legacy=None, is_legacy=None, names=()):
     if spec is None or spec == [] or spec == {}:
         raise ToolError("invalid_input", f"{what}: {HELP}.")
     items = spec if isinstance(spec, list) else [spec]
+    for q in items:
+        if isinstance(q, dict):
+            direction_word(q, kind, what)
     out, seen = [], set()
     for q in items:
         if isinstance(q, str):

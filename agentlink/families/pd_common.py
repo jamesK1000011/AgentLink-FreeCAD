@@ -778,6 +778,51 @@ def find_edges(shape, queries, names=()):
     return [n for n, _ in got]
 
 
+EDGES_SHOWN = 12  # edges an answer describes one by one; the rest are counted
+
+
+def _num_word(x):
+    x = round(float(x), 2)
+    return str(int(x)) if x == int(x) else f"{x:g}"
+
+
+def _dir_word(d):
+    """"x", "-z" … for a direction along an axis (within 1°), else [x, y, z]."""
+    for i, ax in enumerate("xyz"):
+        if abs(d[i]) >= math.cos(math.radians(1.0)):
+            return ax
+    return "[" + ", ".join(_num_word(c) for c in d) + "]"
+
+
+def edge_words(shape, names, cap=EDGES_SHOWN):
+    """Each edge of names on shape in a short line: "Edge9: line along y,
+    60 mm, mid [40, 0, 0]" (24 Nov QA: an answer that named the edges only
+    let a wrong choice of edges pass unseen). At most cap lines, then how
+    many more there are."""
+    from .measure import describe_edge
+
+    edges = shape.Edges
+    out = []
+    for n in names[:cap]:
+        try:
+            i = int(str(n)[4:])
+            d = describe_edge(edges[i - 1], i)
+        except Exception:  # noqa: BLE001 - a name that is not an edge stays as it is
+            out.append(str(n))
+            continue
+        t = d.get("type", "edge")
+        if t == "line" and d.get("dir"):
+            what = f"line along {_dir_word(d['dir'])}"
+        elif "radius" in d:
+            what = f"{'circle' if d.get('closed') else 'arc'} r {_num_word(d['radius'])} mm about {_dir_word(d['axis'])}"
+        else:
+            what = t
+        out.append(f"{n}: {what}, {_num_word(d['length'])} mm, mid [{', '.join(_num_word(c) for c in d['mid'])}]")
+    if len(names) > cap:
+        out.append(f"… and {len(names) - cap} more edges ({len(names)} in all)")
+    return out
+
+
 def find_faces(shape, queries, names=()):
     """Face names for queries (families/refs.py): a reference "Face8" /
     "Body.Face8", shape_query's filters, or the older { at: [x,y,z],
@@ -880,34 +925,79 @@ def profile_words(feat):
     return ""
 
 
+# A card's hint to check the sketch fits an error about the sketch or its
+# profile only (24 Nov QA: it came after "Up to face: Must not intersect
+# sketch" and "BRep_API: command not done", which are not).
+SKETCH_CHECK = "Check the sketch with sketch_state"
+SKETCH_ERROR = re.compile(r"not closed|open (?:wire|edge|vert)|shape object is empty|(?:sketch|profile) is empty|empty (?:sketch|profile)"
+                          r"|self.?intersect|face from (?:the )?(?:sketch|profile)|(?:sketch|profile) has no face|no faces? (?:in|from) (?:the )?(?:sketch|profile)"
+                          r"|(?:make|create|creating) (?:a )?face", re.I)
+# FreeCAD's up-to-face checks (FeatureSketchBased): what each one means.
+UP_TO_WORDS = (
+    (re.compile(r"up to face: must not intersect sketch", re.I),
+     "The face to go up to touches the sketch (often it is the face that the sketch is on). "
+     "Choose a face away from the sketch, in the direction of the feature, or use extent length."),
+    (re.compile(r"up to face: must not be parallel", re.I),
+     "The face to go up to is parallel to the direction of the feature, so the feature never meets it. Choose a face across that direction."),
+)
+
+
+def sketch_error(error):
+    """Whether FreeCAD's error is about the sketch or its profile."""
+    return bool(SKETCH_ERROR.search(str(error or "")))
+
+
+def fit_hint(hint, error=""):
+    """hint without its sentence to check the sketch when the error is not
+    about the sketch; the rest as it was."""
+    if not hint or SKETCH_CHECK not in hint or sketch_error(error):
+        return hint
+    parts = [p for p in re.split(r"(?<=[;.])\s+", hint) if SKETCH_CHECK not in p]
+    return re.sub(r";$", ".", " ".join(parts).strip())
+
+
 def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
     """Recompute; refuse (the call's transaction is rolled back) if the
     feature or anything after it failed; else the body's reading."""
+    from ..protocol import NAMES_NOTHING
+
     doc = session.doc
     doc.recompute()
     bad = newly_broken(doc)  # not what was failing before the call
     if bad:
         mine = [b for b in bad if feat is not None and b["object"] == feat.Label]
         first = (mine or bad)[0]
-        if not hint and ("edge link" in first["error"].lower() or "face link" in first["error"].lower() or "invalid link" in first["error"].lower()):
+        hint = fit_hint(hint, first["error"])
+        known = sketch_error(first["error"])  # the sketch hint says what to change
+        for pat, words in UP_TO_WORDS:
+            if pat.search(first["error"]):
+                hint, known = words, True
+        later = feat is None or first["object"] != feat.Label  # a feature after this one broke
+        if (not hint or later) and ("edge link" in first["error"].lower() or "face link" in first["error"].lower() or "invalid link" in first["error"].lower()):
             # FreeCAD names a feature's edges and faces by the model before
             # it; a change upstream can leave a later feature's references
             # pointing at what is no longer there (worst in 1.0).
             hint = (f"{first['object']} refers to edges or faces of the model as it was, which the change renamed or removed. "
                     f"feature_remove {first['object']}, make the change, then add it again on the new edges (shape_query finds them; pd_fillet, pd_chamfer, pd_draft or pd_thickness).")
+            known = True
         if "shape object is empty" in first["error"].lower() or "wire is not closed" in first["error"].lower():
             # The profile makes no face (live, 22 Nov: a circle across the
             # outline's edge, twice): say why, from the sketch itself.
             why = profile_words(feat)
             if why:
                 hint = (why + " " + hint).strip()
+            known = True
         if "multiple solids" in first["error"].lower():
             # FreeCAD 1.1: a body takes several solids only while its
             # AllowCompound is true (the default); with it off, a feature
             # that leaves two pieces is an error.
             hint = (f"The result would be more than one solid and {body.Label}'s AllowCompound is off: make the feature touch the rest of the body, "
                     f"or object_set {{ object: \"{body.Label}\", values: {{ AllowCompound: true }} }} first.")
+            known = True
+        if not known:
+            hint = (hint + " " + NAMES_NOTHING).strip()
         raise ToolError("failed", f"{first['object']} ({first['type']}) failed: {first['error']}" + (f"; also broken: {[b['object'] for b in bad if b is not first]}" if len(bad) > 1 else "") + f" — nothing was kept.{(' ' + hint) if hint else ''}")
+    hint = fit_hint(hint)
     if feat is not None and getattr(feat, "TypeId", "") in DRESSUPS and not dressup_valid(body):
         # 24 Nov QA: a fillet that FreeCAD computed without an error left a
         # shape that is not valid (2 solids, NOT valid), and the answer said

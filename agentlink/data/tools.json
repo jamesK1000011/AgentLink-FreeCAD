@@ -6663,7 +6663,7 @@
   },
   "pd_pocket": {
    "group": "feature",
-   "description": "Pocket a closed sketch out of the body. extent: length | through_all | up_to_first | up_to_face (face). sides: one | two (length2) | symmetric. reversed. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). It cuts against the normal of the sketch. The tool refuses a pocket that cuts nothing. Then use reversed: true, or put the sketch on the face that it goes into. A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pocket a closed sketch out of the body. The pocket starts on its sketch's plane and goes into the body, against the sketch's normal. To cut from below, sketch on the bottom face. reversed: true goes the other way, along the normal. The tool refuses a pocket that cuts nothing. Then use reversed: true, or put the sketch on the face that it goes into. extent: length | through_all | up_to_first | up_to_face (face). sides: one | two (length2) | symmetric. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6883,7 +6883,7 @@
   },
   "pd_hole": {
    "group": "feature",
-   "description": "Drill holes at the centre of every circle of a sketch, not construction geometry. FreeCAD 1.1 also drills at its points. The holes go on the face that they enter, against its normal. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: default true, the tap-drill size; cosmetic unless modelThread. threaded: false makes a clearance hole (fit close|normal|loose). depth: mm | \"through\". drillPoint: flat|angled. cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes, diameter, thread, cut. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a hole with its thread as data (threaded, no modelThread) and the thread on the drawing. Model a thread only for a printed thread. modelThread makes nothing when reversed or not through.",
+   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. Put the sketch on the face that the holes go into. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: default true, the tap-drill size; cosmetic unless modelThread. threaded: false makes a clearance hole (fit close|normal|loose). depth: mm | \"through\". drillPoint: flat|angled. cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes, diameter, thread, cut. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a hole with its thread as data (threaded, no modelThread) and the thread on the drawing. Model a thread only for a printed thread. modelThread makes nothing when reversed or not through.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7035,7 +7035,7 @@
   },
   "pd_fillet": {
    "group": "feature",
-   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An inside corner gets material, an outside corner loses material: both are correct. The answer adds on (the edges). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
+   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An inside corner gets material, an outside corner loses material: both are correct. The answer adds on: each edge with its direction, length and mid-point. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7064,7 +7064,9 @@
     {"let": {"tip, shape": "=tip_shape(b)", "before": "=volume(b)"}},
     {"let": {"v": "=a.get('radius', 1)"}},
     {"refuse": "radius: mm, over 0.", "when": "=not is_num(v) or v <= 0"},
-    {"let": {"subs": "=find_edges(ref_shape(b, shape), a.edges, ref_names(b, tip))"}},
+    {"let": {"rs": "=ref_shape(b, shape)"}},
+    {"let": {"subs": "=find_edges(rs, a.edges, ref_names(b, tip))"}},
+    {"let": {"seen": "=edge_words(rs, subs)"}},
     {"let": {"f": "=new(b, 'PartDesign::Fillet', 'Fillet')"}},
     {"set": {"f.Base": "=(tip, subs)", "f.Radius": "=float(v)"}}
    ],
@@ -7072,13 +7074,13 @@
     "via": "settle",
     "with": ["=b", "=f", "pd_fillet", "=before", "changed", "A radius larger than a face beside the edge fails, and edges that are already smooth (tangent) cannot be rounded: try smaller, or fewer edges."],
     "then": [
-     {"put": {"on": "=subs"}}
+     {"put": {"on": "=seen"}}
     ]
    }
   },
   "pd_chamfer": {
    "group": "feature",
-   "description": "Bevel edges of the body. edges: as pd_fillet. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. The tool refuses only a chamfer that changes nothing. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Bevel edges of the body. edges: as pd_fillet. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. The tool refuses only a chamfer that changes nothing. The answer adds on: each edge with its direction, length and mid-point. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7114,7 +7116,9 @@
     {"let": {"v": "=a.get('size', 1)"}},
     {"refuse": "size: mm, over 0.", "when": "=not is_num(v) or v <= 0"},
     {"refuse": "size2 or angle, not both: size2 is the second distance (two distances), angle goes with size (distance and angle).", "when": "='size2' in a and 'angle' in a"},
-    {"let": {"subs": "=find_edges(ref_shape(b, shape), a.edges, ref_names(b, tip))"}},
+    {"let": {"rs": "=ref_shape(b, shape)"}},
+    {"let": {"subs": "=find_edges(rs, a.edges, ref_names(b, tip))"}},
+    {"let": {"seen": "=edge_words(rs, subs)"}},
     {"let": {"f": "=new(b, 'PartDesign::Chamfer', 'Chamfer')"}},
     {"set": {"f.Base": "=(tip, subs)", "f.Size": "=float(v)"}},
     {"set": {"f.ChamferType": "Two distances", "f.Size2": "=float(a.size2)"}, "when": "='size2' in a"},
@@ -7124,7 +7128,7 @@
     "via": "settle",
     "with": ["=b", "=f", "pd_chamfer", "=before", "changed", "A chamfer wider than a face beside the edge fails: try smaller."],
     "then": [
-     {"put": {"on": "=subs"}}
+     {"put": {"on": "=seen"}}
     ]
    }
   },

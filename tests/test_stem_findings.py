@@ -210,7 +210,7 @@ class StemFindings(Base):
         q = self.ok("shape_query", {"body": "Block", "kind": "edge", "type": "line", "axis": [1, 0, 0], "z": 0})
         self.assertEqual(q["found"], 2)
         c = self.ok("pd_chamfer", {"edges": ["Block." + q["items"][0]["ref"], q["items"][1]], "size": 1})
-        self.assertEqual(sorted(c["on"]), sorted(i["ref"] for i in q["items"]))
+        self.assertEqual(sorted(x.split(":")[0] for x in c["on"]), sorted(i["ref"] for i in q["items"]))  # "Edge3: line along x, …"
         # The older forms still work: { near } with kind.
         top = self.ok("shape_query", {"body": "Block", "kind": "face", "type": "plane", "normal": [0, 0, 1]})
         self.assertGreaterEqual(top["found"], 1)

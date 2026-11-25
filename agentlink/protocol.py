@@ -94,6 +94,10 @@ KIND_WORDS = {
     "retry": "Retrying the same call is expected to succeed.",
     "stop": "Do not call it again. Report what happened.",
 }
+# A FreeCAD error that names no input to change (24 Nov QA: "BRep_API:
+# command not done" came back with "The error says what to change"). A
+# message that carries this line keeps kind fixable, without that sentence.
+NAMES_NOTHING = "FreeCAD's error does not say which input to change."
 # The person's to say or to set: an approval, a hold, a refusal by rule.
 STOP_CODES = frozenset(("held_person_editing", "not_allowed", "refused", "denied", "declined", "stopped",
                         "pending_approval", "approval_pending", "unsupported", "unavailable"))
@@ -137,6 +141,8 @@ def set_kind(err, kind=None):
     err["kind"] = kind
     if kind == "stop" and STOP_MARK in msg:
         err["message"] = msg  # the stop line says it already
+    elif kind == "fixable" and NAMES_NOTHING in msg:
+        err["message"] = msg  # nothing named to change: the line says so
     else:
         err["message"] = (msg + " " + KIND_WORDS[kind]).strip()
     return err

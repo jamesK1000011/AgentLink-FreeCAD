@@ -480,7 +480,7 @@ def tools(session):
                "V": V, "placement": FreeCAD.Placement, "rotation": FreeCAD.Rotation, "setprop": setattr, "xyz": pc.geo.vec, "vec3": pc.vec3, "num_json": picks.num_json,
                # faces, edges, planes and axes by where they are (pd_common)
                "find_faces": lambda *x: pc.find_faces(*x), "find_edges": lambda *x: pc.find_edges(*x), "ref_shape": pc.ref_shape, "ref_names": pc.ref_names,
-               "plane_ref": lambda *x: pc.plane_ref(*x), "axis_ref": lambda *x: pc.axis_ref(*x), "support_prop": pc.support_prop,
+               "edge_words": pc.edge_words, "plane_ref": lambda *x: pc.plane_ref(*x), "axis_ref": lambda *x: pc.axis_ref(*x), "support_prop": pc.support_prop,
                "ref_snapshot": pc.ref_snapshot, "repair_refs": pc.repair_refs, "broken": pc.newly_broken,
                # the family's
                "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots,

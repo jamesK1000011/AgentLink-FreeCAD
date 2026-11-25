@@ -624,6 +624,7 @@
     "broken",
     "closed_tube_words",
     "doc",
+    "edge_words",
     "has_prop",
     "hole_spots",
     "in_body",

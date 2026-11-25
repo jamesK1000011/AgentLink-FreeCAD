@@ -390,6 +390,7 @@ tests/test_echo_reads.py
 tests/test_echo_rings.py
 tests/test_echo_round6.py
 tests/test_echo_window.py
+tests/test_edges_by_direction_1124.py
 tests/test_eff_a.py
 tests/test_eff_rel.py
 tests/test_examples_1122.py
@@ -480,6 +481,7 @@ tests/test_more_families.py
 tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py
+tests/test_noise_1124.py
 tests/test_note_faces.py
 tests/test_notice.py
 tests/test_once.py
@@ -552,6 +554,7 @@ tests/test_usage.py
 tests/test_usage_strip.py
 tests/test_view.py
 tests/test_watch_hooks.py
+tests/test_where_went_1125.py
 tests/test_window_r10.py
 tests/test_window_r6_fixes.py
 tests/test_window_r7_echo.py
