@@ -134,24 +134,31 @@ class Placed(unittest.TestCase):
 
     def test_edge_example_numbers_follow_body_extent(self):
         # A 50 x 40 plate centred on XY, padded 4: world x [-25, 25], y [-20, 20], z [0, 4].
-        # On XZ the sketch x is world x and its y is world z (body_extent, tests/test_qa_sketch_1124.py).
-        ext = {"x": [-25.0, 25.0], "y": [0.0, 4.0]}
-        corner = [ext["x"][0], ext["y"][0]]
-        self.assertEqual(corner, [-25.0, 0.0])
+        # face_frame on the +z face: x is world x (the first axis in the face), y = z cross x = world y,
+        # origin (0, 0, 4); so bodyExtent is the plate's x and y.
+        with open(os.path.join(HERE, "..", "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("best = max((V(1, 0, 0), V(0, 1, 0), V(0, 0, 1)), key=lambda e: 1 - abs(e.dot(n)))", src)
+        self.assertIn("y = n.cross(x)", src)
+        ext = {"x": [-25.0, 25.0], "y": [-20.0, 20.0]}
+        self.assertEqual([ext["x"][0], ext["y"][0]], [-25.0, -20.0])
         tj = tools_json()
         add, new = tj["sketch_add"]["description"], tj["sketch_new"]["description"]
         self.assertIn("a plate on XY is centred, rectangle { center: [0, 0], size: [50, 40] }, padded 4.", add)
-        self.assertIn("sketch_new answers bodyExtent { x: [-25.0, 25.0], y: [0.0, 4.0] }.", add)
-        self.assertIn("rectangle { corner: [-25, 0], size: [4, 30] }", add)
-        self.assertIn('pd_pad { sides: "symmetric", length: 40 }', add)
-        self.assertIn("bodyExtent is { x: [-25.0, 25.0], y: [0.0, 4.0] }.", new)
-        self.assertIn("sketch_add rectangle { corner: [-25, 0], size: [4, 30] } is an upright on the -x end.", new)
-        self.assertIn("symmetric", tj["pd_pad"]["inputSchema"]["properties"]["sides"]["enum"])
+        self.assertIn('sketch_new { face: { side: "+z" } } answers bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }.', add)
+        self.assertIn("rectangle { corner: [-25, -20], size: [10, 10] }", add)
+        self.assertIn("Then pd_pad { length: 6 } makes the block.", add)
+        self.assertIn("bodyExtent is { x: [-25.0, 25.0], y: [-20.0, 20.0] }.", new)
+        self.assertIn("sketch_add rectangle { corner: [-25, -20], size: [10, 10] } is a block on one corner of the plate.", new)
+        self.assertIn("+z", tj["sketch_new"]["inputSchema"]["properties"]["face"]["properties"]["side"]["enum"])
         with open(os.path.join(HERE, "..", "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
             g = f.read()
-        self.assertIn("`bodyExtent { x: [-25.0, 25.0], y: [0.0, 4.0] }`", g)
-        self.assertIn("`rectangle { corner: [-25, 0], size: [4, 30] }`", g)
+        self.assertIn("`bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }`", g)
+        self.assertIn("`rectangle { corner: [-25, -20], size: [10, 10] }`", g)
         self.assertIn("`rectangle { center: [0, 0], size: [50, 40] }`", g)
+        for text in (add, new, g):
+            self.assertNotIn("[4, 30]", text)  # the old upright example is gone
+            self.assertNotIn('sides: "symmetric", length: 40', text)
 
     def test_the_guide_has_the_link_recipe_once_and_the_card_numbers(self):
         with open(os.path.join(HERE, "..", "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
