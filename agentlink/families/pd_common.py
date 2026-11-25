@@ -687,6 +687,13 @@ def _mark_of(shape, descs, of, body=None, names=()):
             theirs = t
             break
     if theirs is None:
+        # A sketch's name for of (live s1126e: of: "Base", the sketch the pad
+        # was made from): name the feature that uses it.
+        users = [u for u in (getattr(o, "InList", None) or [])
+                 if getattr(getattr(u, "Profile", None), "__iter__", None) and o in list(u.Profile or [])[:1]]
+        if getattr(o, "TypeId", "") == "Sketcher::SketchObject":
+            made = f' Its feature is {users[0].Label}: of: "{users[0].Label}".' if users else ""
+            raise ToolError("invalid_input", f"face.of {of!r}: {o.Label} is a sketch; of takes the feature made from it, or leave of out.{made}")
         raise ToolError("invalid_input", f"face.of {of!r}: {o.Label} has no faces — a feature with a solid, or the body.")
     pl = shape.Placement * theirs.Placement.inverse()
     back = pl.inverse()
@@ -1308,6 +1315,9 @@ def where_went(feat, body, delta, tol=0.01):
                 return {}
             nb, ob = _bbt(reg.BoundBox), _bbt(old.BoundBox)
             out = {"added": span_text(reg.BoundBox), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
+            apart = loose_sentence(old, new)
+            if apart:
+                out["where"] = apart + " " + out["where"]
             out.update(profile_results(feat, reg, old, tol, cut=False))
             return out
         reg = old.cut(new)
@@ -1382,6 +1392,22 @@ def _g(x):
 
 
 OWNER = "the body's"
+
+
+def loose_sentence(old, new):
+    """The words when added material does not join the body: the body has
+    more solids after the feature than before. With AllowCompound true (the
+    default in FreeCAD 1.1) the feature is still valid, and health says
+    "valid" (live, 25 Nov: an upright drawn beside a plate, not on it, and
+    the model went on). None when the count did not go up."""
+    try:
+        before, after = len(old.Solids), len(new.Solids)
+    except Exception:  # noqa: BLE001
+        return None
+    if after <= before:
+        return None
+    return (f"It does not touch the body: it is a separate solid, and the body is now {after} pieces. "
+            "To join it, start the shape inside bodyExtent of the sketch, or move it until it meets the body.")
 
 
 def added_sentence(new, old, tol=1e-3):
