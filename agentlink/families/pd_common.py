@@ -896,6 +896,13 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         raise ToolError("failed", f"{feat.Label} ({short(feat)}) made a shape that is not valid (FreeCAD's shape check), though it gave no error — nothing was kept. "
                                   f"{hint or 'Try a smaller size, or fewer edges.'}".strip())
     out = {**({"feature": feat.Label, "type": short(feat)} if feat is not None else {}), "valid": True, **body_reading(body)}
+    if "box" in out:
+        # Where the body is, not only its size (24 Nov QA: a centred
+        # sketch on XZ gave the right size 40 as z -20..20, in 7 of 9 runs).
+        try:
+            out["bounds"] = span_text(body.Shape.BoundBox)
+        except Exception:  # noqa: BLE001 - a reading only
+            pass
     if before is not None and "volume" in out:
         delta = out["volume"] - before
         out["volumeChange"] = round(delta, 2)
@@ -915,7 +922,107 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             # A fillet or chamfer may add material (an inside corner, concave)
             # or take it away (an outside one): only no change at all is wrong.
             raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
+        if feat is not None:
+            out.update(where_went(feat, body, delta, tol))
     return picks.finish(session, tool, out, recompute=False)
+
+
+# ---- where a feature's material went (24 Nov QA) -------------------------------------------
+# A feature's answer gave the body's size and volume change, never where the
+# change was: an upright padded across the middle of a base, holes cut below
+# it, a hollow made from the top and the wrong edges rounded all answered as
+# if right. One boolean (after less before, or before less after) says where.
+
+WHERE_FACES = 4000  # faces of the two shapes together: past this, not worked out
+WHERE_LIDS = 40  # faces of the removed region looked at for where it opens
+
+
+def _r(x):
+    v = round(x, 2)
+    return 0.0 if v == 0 else v
+
+
+def span_text(bb):
+    """A bounding box as one short line: "x -30..30, y -15..15, z 0..5"."""
+    return f"x {_r(bb.XMin):g}..{_r(bb.XMax):g}, y {_r(bb.YMin):g}..{_r(bb.YMax):g}, z {_r(bb.ZMin):g}..{_r(bb.ZMax):g}"
+
+
+def beyond_sides(new, old, tol=1e-3):
+    """The sides of the old box the new box goes past, as ["-z", "+z"]
+    (boxes as xmin, xmax, ymin, ymax, zmin, zmax)."""
+    out = []
+    for i, ax in enumerate("xyz"):
+        if new[2 * i] < old[2 * i] - tol:
+            out.append(f"-{ax}")
+        if new[2 * i + 1] > old[2 * i + 1] + tol:
+            out.append(f"+{ax}")
+    return out
+
+
+def side_word(normal, point):
+    """"+z at z 10" for a face whose normal runs along an axis; else
+    "normal [0.71, 0, 0.71] at [x, y, z]"."""
+    ax = max(range(3), key=lambda i: abs(normal[i]))
+    if abs(normal[ax]) > 0.999:
+        name = "xyz"[ax]
+        return f"{'+' if normal[ax] > 0 else '-'}{name} at {name} {_r(point[ax]):g}"
+    return f"normal [{', '.join(f'{_r(c):g}' for c in normal)}] at [{', '.join(f'{_r(c):g}' for c in point)}]"
+
+
+def _bbt(bb):
+    return (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax)
+
+
+def where_went(feat, body, delta, tol=0.01):
+    """{added: "x .., y .., z ..", beyond: [sides]} or {removed: …, opens:
+    [faces of the body it breaks through]}, from the body before the
+    feature (its BaseFeature) and after. {} when there was no body before
+    (the first feature: bounds says it all). Large bodies: {where: why not}."""
+    try:
+        base = getattr(feat, "BaseFeature", None)
+        old = getattr(base, "Shape", None) if base is not None else None
+        new = body.Shape
+        if old is None or old.isNull() or not old.Solids or new is None or new.isNull():
+            return {}
+        if len(old.Faces) + len(new.Faces) > WHERE_FACES:
+            return {"where": f"not worked out: the body has more than {WHERE_FACES // 2} faces"}
+        if delta > 0:
+            reg = new.cut(old)
+            if reg.isNull() or reg.Volume <= tol:
+                return {}
+            return {"added": span_text(reg.BoundBox), "beyond": beyond_sides(_bbt(reg.BoundBox), _bbt(old.BoundBox))}
+        reg = old.cut(new)
+        if reg.isNull() or reg.Volume <= tol:
+            return {}
+        out = {"removed": span_text(reg.BoundBox)}
+        lids = []
+        diag = max(old.BoundBox.DiagonalLength, 1.0)
+        for f in list(reg.Faces)[:WHERE_LIDS]:
+            # A face of the removed region that lies on the body's old
+            # surface is where the cut opens the body; the others are the
+            # new walls inside it.
+            try:
+                u0, u1, v0, v1 = f.ParameterRange
+                p = f.valueAt((u0 + u1) / 2, (v0 + v1) / 2)
+                if not f.isInside(p, 1e-6, True):
+                    p = f.CenterOfMass
+                if old.distToShape(Part.Vertex(p))[0] > 1e-4 * diag:
+                    continue
+                n = f.normalAt(*f.Surface.parameter(p))
+                # Outward from the removed region (and so from the old body)
+                # whatever the face's orientation: a step along it is outside.
+                step = 1e-3 * diag
+                if reg.isInside(p + n * step, 1e-7, False):
+                    n = -n
+                w = side_word((n.x, n.y, n.z), (p.x, p.y, p.z))
+            except Exception:  # noqa: BLE001 - one face not read
+                continue
+            if w not in lids:
+                lids.append(w)
+        out["opens"] = lids or ["nothing: the cut is closed inside the body"]
+        return out
+    except Exception as e:  # noqa: BLE001 - a reading only
+        return {"where": f"not worked out ({type(e).__name__})"}
 
 
 def _profile_of(o):
