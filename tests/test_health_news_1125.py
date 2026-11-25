@@ -52,6 +52,17 @@ class HealthNews(unittest.TestCase):
         self.assertEqual(second["health"], once.NOTHING_NEW)
         self.assertLess(len(json.dumps(second)), len(json.dumps(first)))
 
+    def test_sketch_and_feature_calls_in_turn_are_quiet_per_subject(self):
+        # live, 25 Nov: sketch, pad, sketch, pad in one batch; one "last given"
+        # never matched, so every answer repeated the whole verdict.
+        sk = {"ok": True, "verdict": "Sketch 2: 4 DoF left on the start of lines 0, 1, 2, 3"}
+        once.thin_reply(self.s, changing(), answer(CLEAN))
+        once.thin_reply(self.s, changing("sketch_add"), answer(sk))
+        self.assertEqual(once.thin_reply(self.s, changing(), answer(CLEAN))["health"], once.NOTHING_NEW)
+        self.assertEqual(once.thin_reply(self.s, changing("sketch_add"), answer(sk))["health"], once.NOTHING_NEW)
+        sk3 = {"ok": True, "verdict": "Sketch 3: empty"}
+        self.assertEqual(once.thin_reply(self.s, changing("sketch_new"), answer(sk3))["health"], sk3)
+
     def test_a_change_is_given_whole(self):
         once.thin_reply(self.s, changing(), answer(CLEAN))
         two = {"ok": True, "verdict": "Body: valid, closed, 2 solids"}

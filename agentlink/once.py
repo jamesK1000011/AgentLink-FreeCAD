@@ -204,7 +204,15 @@ def quiet_health(st, tool, out):
     if not isinstance(h, dict) or not getattr(tool, "changes", False) or getattr(tool, "name", tool) == "batch":
         return False
     key = health_content(h)
-    if h.get("ok") is not True or key != st.get("health"):
+    # Per subject (the verdict's head: "Body", "Sketch 2"): a build that
+    # goes sketch, feature, sketch, feature alternates two verdicts, so one
+    # "last given" never matched (live, 25 Nov: no answer in a batch was quiet).
+    v = h.get("verdict")
+    head = v.split("; ", 1)[0] if isinstance(v, str) else ""
+    subject = head.split(":", 1)[0].strip() if ":" in head else ""
+    last = st.setdefault("healthBy", {})
+    if h.get("ok") is not True or key != last.get(subject):
+        last[subject] = key
         st["health"] = key
         return False
     out["health"] = NOTHING_NEW
