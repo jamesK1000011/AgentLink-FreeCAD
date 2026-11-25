@@ -44,7 +44,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 22 Nov, local runs: + con_keys (sketch reader: a constraint's fields written another way).
 # 22 Nov, face selectors: + face_pick (sketch reader: the form that picks sketch_new's face again).
 # 24 Nov, lost face in plain words: + status_words (sketch reader: FreeCAD's status through fusehint.plain_error).
-PIN = "d413ece5ee7a428fb118c67ca6241e32c22c8db1c5d77e52ff66ded211663cda"
+# 24 Nov, blind QA: + item_error (sketch_add's failed item by its index), body_extent (sketch_new's bodyExtent), sketch readers.
+PIN = "60541a4443bb0fbe475c08cdb2b438a0a68367c8fce91a029b1a6efae2bdc402"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -55,7 +56,7 @@ PIN = "d413ece5ee7a428fb118c67ca6241e32c22c8db1c5d77e52ff66ded211663cda"
 # coordinate system); feature_more's attach_on changes (pd_gear on any plane).
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
 # 22 Nov, face selectors: + face_pick (a sketch reader).
-COUNTS = {"readers": 929, "changers": 159, "families": 37}
+COUNTS = {"readers": 931, "changers": 159, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -893,7 +894,7 @@ def _states():
     lead = {o: n for o, n in m.counts["notChecked"].items() if n}
     refused_outcome = "refusedLeading" if err and m.counts["notChecked"]["refusedLeading"] == 1 else f"{refused} {lead}"
     fc.state["flags"] = {"effect": {"Pad": 0.0}}  # the pad adds nothing: refused after it was made
-    later, err, _p = call("pd_pad", {"sketch": "Sketch", "length": 5})
+    later, err, _p = call("pd_pad", {"sketch": "Sketch", "length": 4})  # not 5 again: the same changing call again is refused before it runs
     fc.state["flags"] = {}
     calls += 1
     later_outcome = "refusedLater" if err and m.counts["notChecked"]["refusedLater"] == 1 else f"{later} { {o: n for o, n in m.counts['notChecked'].items() if n} }"

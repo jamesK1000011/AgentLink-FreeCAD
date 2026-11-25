@@ -215,9 +215,24 @@ def sketch_of(doc, ref, body=None, session=None):
                                  "Use a name exactly as sketch_new's answer gives it (sketch) or as now lists it.")
 
 
-def used_sketch_note(sk, body=None):
-    """For a change to a sketch that a feature uses while its body has an
-    unused sketch (decision 4, D-b): words that name both; else None."""
+def profile_users(sk):
+    """Labels of the features whose profile is sketch sk (their Profile
+    link: a Pad, Pocket, Revolution, Groove, Hole …)."""
+    out = []
+    for p in getattr(sk, "InList", None) or []:
+        prof = getattr(p, "Profile", None)
+        if isinstance(prof, (tuple, list)):
+            prof = prof[0] if prof else None
+        if prof is sk:
+            out.append(str(p.Label))
+    return out
+
+
+def used_sketch_note(sk, body=None, tool=None):
+    """For a change to the geometry of a sketch that a feature uses (decision
+    4, D-b): words that name the feature, and the body's unused sketch when
+    it has one; else None. Blind QA, 24 Nov: holes were added to the sketch
+    of a Pad, then that sketch was pocketed, and the pocket cut nothing."""
     users = sketch_users(sk)
     if not users:
         return None
@@ -227,7 +242,11 @@ def used_sketch_note(sk, body=None):
     free = [o for o in reversed(list(getattr(body, "Group", None) or [])) if getattr(o, "TypeId", "") == "Sketcher::SketchObject"
             and o is not sk and not sketch_users(o)]
     if not free:
-        return None
+        prof = profile_users(sk)
+        doing = "adding to it" if tool == "sketch_add" else "this change"
+        if prof:
+            return f"Note: {sk.Label} is the profile of {', '.join(prof)}; {doing} changes {', '.join(prof)}."
+        return f"Note: {sk.Label} is used by {', '.join(users)}; {doing} changes {', '.join(users)}."
     names = ", ".join(o.Label for o in free[:3])
     return (f"{sk.Label} is used by {', '.join(users)}, so this change also changes {', '.join(users)}. "
             f"{body.Label} also has a sketch that is not used: {names}. "

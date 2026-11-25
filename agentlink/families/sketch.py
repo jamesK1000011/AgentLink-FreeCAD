@@ -40,6 +40,25 @@ def frame(pl):
     return {"origin": geo.vec(pl.Base), "xAxis": geo.vec(r.multVec(V(1, 0, 0))), "yAxis": geo.vec(r.multVec(V(0, 1, 0))), "normal": geo.vec(r.multVec(V(0, 0, 1)))}
 
 
+def body_extent(b, sk):
+    """Where body b's solid is in sketch sk's own x/y: {"x": [min, max],
+    "y": [min, max]} (mm, to 0.1), from the corners of the solid's box
+    taken through the inverse of the sketch's place in the world. None
+    when the body has no solid yet."""
+    try:
+        shape = b.Shape
+        if shape is None or shape.isNull() or not shape.Solids:
+            return None
+        bb = shape.BoundBox
+        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+        inv = pl.inverse()
+    except Exception:  # noqa: BLE001 - no reading: nothing said
+        return None
+    pts = [inv.multVec(V(x, y, z)) for x in (bb.XMin, bb.XMax) for y in (bb.YMin, bb.YMax) for z in (bb.ZMin, bb.ZMax)]
+    r = lambda v: round(float(v), 1) + 0.0  # noqa: E731
+    return {"x": [r(min(p.x for p in pts)), r(max(p.x for p in pts))], "y": [r(min(p.y for p in pts)), r(max(p.y for p in pts))]}
+
+
 def _geo_kind(g):
     return type(g).__name__.replace("ArcOfCircle", "Arc").replace("LineSegment", "Line")
 
@@ -173,6 +192,80 @@ def clashing(sk, cap=150):
     return out
 
 
+# An open end within this part of the outline's size of another open end is
+# a gap to close (a coincident constraint); farther from every other end,
+# and on no other curve, it is a loose end (a stray line, or a side left out).
+NEAR_GAP = 0.1
+
+
+def open_end_words(ends, curves, size, dist):
+    """The todo words for the open ends of a sketch's outline, one phrase
+    each (a curve with both ends loose: one phrase). ends: [(gid, kind,
+    pos, (x, y))], pos 1 start / 2 end; curves: the ids of the outline's
+    curves; size: the outline's size (its box's diagonal, mm); dist(gid,
+    (x, y)): mm from that curve to the point. [] when an end is on another
+    curve (a branch: no words here fit it)."""
+    tol = 1e-6 * max(size, 1.0)
+    gap = max(NEAR_GAP * size, tol)
+
+    def at(p):
+        return f"({geo.r3(p[0]):g}, {geo.r3(p[1]):g})"
+
+    near, loose, pairs = [], {}, set()
+    for gid, kind, pos, p in ends:
+        others = [(math.dist(p, q), g2, k2, s2, q) for g2, k2, s2, q in ends if g2 != gid]
+        d, g2, k2, s2, q = min(others) if others else (math.inf, None, None, None, None)
+        if d <= gap:
+            key = tuple(sorted(((gid, pos), (g2, s2))))
+            if key not in pairs:
+                pairs.add(key)
+                near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: "
+                            "sketch_constrain coincident joins them")
+            continue
+        if any(dist(g, p) <= tol for g in curves if g != gid):
+            continue  # on another curve: a branch, which the other words cover
+        loose.setdefault((gid, kind), []).append(p)
+    words = []
+    for (gid, kind), ps in loose.items():
+        if len(ps) > 1:
+            words.append(f"{kind} {gid} touches nothing at {' or '.join(at(p) for p in ps)}: remove it (sketch_edit {{ delete: [{gid}] }}) or join its ends")
+        else:
+            words.append(f"{kind} {gid} ends at {at(ps[0])} on nothing: remove it (sketch_edit {{ delete: [{gid}] }}) or join that end to another end")
+    words = near + words
+    if len(words) > 4:
+        words = words[:4] + [f"and {len(words) - 4} more open ends (openVertices)"]
+    return words
+
+
+def _open_end_words(sk, openv):
+    """open_end_words for sketch sk: its open ends (openv, the sketch's own
+    x/y) matched to the curves they end, by id. [] when one is not matched."""
+    ends = []
+    curves = [i for i, g in enumerate(sk.Geometry) if not sk.getConstruction(i) and _geo_kind(g) != "Point"]
+    for p in openv:
+        hit = None
+        for i in curves:
+            g = sk.Geometry[i]
+            for pos, q in ((1, getattr(g, "StartPoint", None)), (2, getattr(g, "EndPoint", None))):
+                if q is not None and math.dist((q.x, q.y), p) <= 1e-3:
+                    hit = (i, _geo_kind(g).lower(), pos, (q.x, q.y))
+                    break
+            if hit:
+                break
+        if hit is None:
+            return []
+        ends.append(hit)
+    try:
+        size = sk.Shape.BoundBox.DiagonalLength
+    except Exception:  # noqa: BLE001
+        size = 0.0
+
+    def dist(i, p):
+        return sk.Geometry[i].toShape().distToShape(Part.Vertex(V(p[0], p[1], 0)))[0]
+
+    return open_end_words(ends, curves, size, dist)
+
+
 def state_of(sk):
     code = sk.solve()
     conflicting = [i - 1 for i in (getattr(sk, "ConflictingConstraints", None) or [])]
@@ -212,7 +305,8 @@ def state_of(sk):
         if conflicting or redundant or malformed or code != 0:
             why.append("fix the constraints named (sketch_edit deleteConstraints)")
         if openv or (wires and closed < len(wires)):
-            why.append("close the open wires: coincident constraints at the open vertices")
+            said = _open_end_words(sk, openv)
+            why += said or ["close the open wires: coincident constraints at the open vertices"]
         if not wires:
             why.append("no profile yet: sketch_add")
         out["todo"] = "; ".join(why) or "the sketch has no closed wire"
@@ -220,6 +314,20 @@ def state_of(sk):
         # Its words after the count are said once a conversation (agentlink/once.py).
         out["note"] = f"{dof} degrees of freedom: {DOF_NOTE}"
     return out
+
+
+def item_error(n, e):
+    """sketch_add's refusal for item n that failed (blind QA, 24 Nov: FreeCAD's
+    words did not say which item): the same refusal, its words after
+    "items[n]: ". A tool's own refusal keeps its code; a ValueError is the
+    input's; any other error is FreeCAD's failure."""
+    if isinstance(e, ToolError):
+        code, msg = e.code, e.message
+    else:
+        code, msg = ("invalid_input" if isinstance(e, ValueError) else "failed"), (str(e) or type(e).__name__)
+    head = f"items[{n}]"
+    err = ToolError(code, msg if str(msg).startswith(head) else f"{head}: {msg}", kind=getattr(e, "kind", None))
+    raise err from e
 
 
 # ---- geometry builders: (geometry, construction) lists and their constraints -----------------
@@ -785,5 +893,5 @@ def tools(session):
                "frame": frame, "state_of": state_of, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
-               "font_file": _font, "text_outlines": text_outlines}
+               "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)

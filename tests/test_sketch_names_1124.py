@@ -196,6 +196,9 @@ class UsedSketchNote(unittest.TestCase):
     out["read"] = call("sketch_state", {"sketch": "Sketch 2"})
     sk3.InList, sk4.InList = [mk("Pocket", "Pocket", "PartDesign::Pocket"), body], [mk("Pocket001", "Pocket 2", "PartDesign::Pocket"), body]
     out["allUsed"] = call("sketch_add", {"sketch": "Sketch 2"})
+    pad2.Profile = (sk2, [""])
+    out["profile"] = call("sketch_add", {"sketch": "Sketch 2"})
+    out["profileRead"] = call("sketch_state", {"sketch": "Sketch 2"})
     print(json.dumps(out))
 ''')
         err, r = got["used"]
@@ -204,7 +207,10 @@ class UsedSketchNote(unittest.TestCase):
                                           "Sketch 4, Sketch 3. If you meant Sketch 4, use history_undo, then give sketch: \"Sketch 4\".")
         self.assertNotIn("sketchNote", got["unused"][1])
         self.assertNotIn("sketchNote", got["read"][1])  # a read changes nothing
-        self.assertNotIn("sketchNote", got["allUsed"][1])
+        # Blind QA, 24 Nov: holes went into a Pad's own sketch, then that sketch was pocketed. Every used sketch gets the note.
+        self.assertEqual(got["allUsed"][1]["sketchNote"], "Note: Sketch 2 is used by Pad 2; adding to it changes Pad 2.")
+        self.assertEqual(got["profile"][1]["sketchNote"], "Note: Sketch 2 is the profile of Pad 2; adding to it changes Pad 2.")
+        self.assertNotIn("sketchNote", got["profileRead"][1])
 
 
 if __name__ == "__main__":

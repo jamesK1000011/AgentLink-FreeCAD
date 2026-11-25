@@ -1074,6 +1074,7 @@
    "readers": [
     "V",
     "body",
+    "body_extent",
     "body_of",
     "bounds",
     "broken",
@@ -1090,6 +1091,7 @@
     "geo_of_edge",
     "gid",
     "is_tuple",
+    "item_error",
     "line",
     "make_constraint",
     "offset_out",

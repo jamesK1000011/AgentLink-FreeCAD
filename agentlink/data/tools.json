@@ -8115,7 +8115,7 @@
   },
   "sketch_new": {
    "group": "sketch",
-   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal. reversed: true reverses the normal. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world. On a face, face is the form that picks it again.",
+   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal. reversed: true reverses the normal. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world. On a face, face is the form that picks it again. bodyExtent: the box of the body's solid in the sketch's own x/y, { x: [min, max], y: [min, max] } (mm). It is not there when the body has no solid.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8210,13 +8210,14 @@
      ]
     },
     {"refuse": {"fmt": "The sketch would not attach to {what}. Nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset. FreeCAD said: {status_words(sk)}"}, "code": "failed", "when": "=not sk.isValid()"},
+    {"let": {"ext": "=body_extent(b, sk)"}},
     {"do": "=note_sketch(sk)"}
    ],
-   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=what", "face": {"when": "=pick", "value": "=pick"}, "offset": {"when": "=off", "value": "=off"}, "frame": "=frame(sk.Placement)", "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
+   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=what", "face": {"when": "=pick", "value": "=pick"}, "offset": {"when": "=off", "value": "=off"}, "frame": "=frame(sk.Placement)", "bodyExtent": {"when": "=ext", "value": "=ext"}, "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
   },
   "sketch_add": {
    "group": "sketch",
-   "description": "Add geometry to a sketch: rectangle, circle, line, arc, slot, polygon, ellipse, point and more, in its own x/y (mm). Angles are deg, counter-clockwise from +x. items: [{ kind, …, construction, dims, name }]. A rectangle or a circle is one item, not four lines. The kinds follow. line {from, to}. polyline {points, closed}. arc {center, radius, start, end}: always ccw from start to end. arc3 {points: start, through, end}. circle {center, radius|diameter}. circle3 {points: three on it}. ellipse {center, major, minor (full sizes), rotation}. parabola {vertex, focal, rotation, from, to}. hyperbola {center, major, minor (semi-axes), rotation, from, to}. bspline {points it goes through, closed}. Or bspline {interpolate: false, points its poles, degree}. rectangle {center|corner, size [w,h]}. rounded_rectangle {…, radius}. polygon {center, radius (to corners), sides, rotation}. slot {from, to (end centres), radius}. arc_slot {center, radius (its middle), width, start, end}. point {at}. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints. The tool does not join separate items to each other; sketch_constrain coincident or tangent does that. dims: true adds its sizes as constraints. With name, they are <name>_width, _height, _d, _r, _length; param_bind binds these. Answer: added [{ ids, constraints, dims }] and state. ids: geometry ids from 0, in the order made. The last id of a polygon is its construction circle. constraints: [first, last] ids. state: dof, closedWires, openVertices, readyForFeature. Vertices: 1 start, 2 end, 3 centre.",
+   "description": "Add geometry to a sketch: rectangle, circle, line, arc, slot, polygon, ellipse, point and more, in its own x/y (mm). Angles are deg, counter-clockwise from +x. items: [{ kind, …, construction, dims, name }]. A rectangle or a circle is one item, not four lines. The kinds follow. line {from, to}. polyline {points, closed}. arc {center, radius, start, end}: always ccw from start to end. arc3 {points: start, through, end}. circle {center, radius|diameter}. circle3 {points: three on it}. ellipse {center, major, minor (full sizes), rotation}. parabola {vertex, focal, rotation, from, to}. hyperbola {center, major, minor (semi-axes), rotation, from, to}. bspline {points it goes through, closed}. Or bspline {interpolate: false, points its poles, degree}. rectangle {center|corner, size [w,h]}. rounded_rectangle {…, radius}. center puts the middle of the shape on that point. A shape at center [0, 0] goes to the two sides of the sketch origin. corner is the lower-left corner of a rectangle. Use corner to start a shape at an edge of the body (sketch_new gives bodyExtent). polygon {center, radius (to corners), sides, rotation}. slot {from, to (end centres), radius}. arc_slot {center, radius (its middle), width, start, end}. point {at}. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints. The tool does not join separate items to each other; sketch_constrain coincident or tangent does that. dims: true adds its sizes as constraints. With name, they are <name>_width, _height, _d, _r, _length; param_bind binds these. Answer: added [{ ids, constraints, dims }] and state. ids: geometry ids from 0, in the order made. The last id of a polygon is its construction circle. constraints: [first, last] ids. state: dof, closedWires, openVertices, readyForFeature. Vertices: 1 start, 2 end, 3 centre.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8250,40 +8251,46 @@
      "index": "n",
      "steps": [
       {"refuse": {"fmt": "items[{n}]: an object {{ kind, … }}."}, "when": "=not is_dict(it)"},
-      {"let": {"G, C, D": "=build(it)", "cons": "=bool(it.get('construction'))", "ids": "=[]", "cids": "=[]", "dims": "={}"}},
       {
-       "each": "g",
-       "in": "=G",
-       "steps": [
-        {"push": {"ids": "=sk.addGeometry(g[1], True) if is_tuple(g) else sk.addGeometry(g, cons)"}}
-       ]
-      },
-      {
-       "each": "t",
-       "in": "=C",
-       "steps": [
-        {"push": {"cids": "=sk.addConstraint(constraint(remap(t, ids)))"}}
-       ]
-      },
-      {
-       "when": "=it.get('dims')",
-       "then": [
-        {
-         "each": "name, t",
-         "in": "=D",
-         "steps": [
-          {"let": {"ci": "=sk.addConstraint(constraint(remap(t, ids)))"}},
-          {"do": "=sk.renameConstraint(ci, str(it.name) + '_' + name)", "when": "=it.get('name')"},
-          {"do": "=dims.update({name: ci})"}
-         ]
-        }
-       ]
-      },
-      {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}},
-      {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"},
-      {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"},
-      {"put": {"dimsNote": "=str(it.get('kind')) + ': no size to dimension here; sketch_constrain adds one.'"}, "into": "r", "when": "=it.get('dims') and not dims"},
-      {"push": {"out": "=r"}}
+       "try": [
+          {"let": {"G, C, D": "=build(it)", "cons": "=bool(it.get('construction'))", "ids": "=[]", "cids": "=[]", "dims": "={}"}},
+          {
+           "each": "g",
+           "in": "=G",
+           "steps": [
+            {"push": {"ids": "=sk.addGeometry(g[1], True) if is_tuple(g) else sk.addGeometry(g, cons)"}}
+           ]
+          },
+          {
+           "each": "t",
+           "in": "=C",
+           "steps": [
+            {"push": {"cids": "=sk.addConstraint(constraint(remap(t, ids)))"}}
+           ]
+          },
+          {
+           "when": "=it.get('dims')",
+           "then": [
+            {
+             "each": "name, t",
+             "in": "=D",
+             "steps": [
+              {"let": {"ci": "=sk.addConstraint(constraint(remap(t, ids)))"}},
+              {"do": "=sk.renameConstraint(ci, str(it.name) + '_' + name)", "when": "=it.get('name')"},
+              {"do": "=dims.update({name: ci})"}
+             ]
+            }
+           ]
+          },
+          {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}},
+          {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"},
+          {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"},
+          {"put": {"dimsNote": "=str(it.get('kind')) + ': no size to dimension here; sketch_constrain adds one.'"}, "into": "r", "when": "=it.get('dims') and not dims"},
+          {"push": {"out": "=r"}}
+       ],
+       "on": "error",
+       "except": [{"do": "=item_error(n, error)"}]
+      }
      ]
     },
     {"do": "=doc().recompute()"},

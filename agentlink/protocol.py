@@ -1102,6 +1102,7 @@ class Server:
                     except Exception:
                         pass
                 self._oriented = False
+                self._ran = []  # a new conversation: no call of it ran yet (again_before)
                 now = getattr(self, "instructions_now", None)
                 if now is not None:
                     # Made again at each connect: the guide list is read from
@@ -1184,10 +1185,15 @@ class Server:
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
         from . import around
 
+        seen = again_before(self, params)
         with _as_user(s), _acting(s), _hang_trace(s, params.get("name")), _progress_for(self, params):
-            result = self._call(params)
+            result = seen["refusal"] if seen and seen.get("refusal") else self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
+        try:
+            again_after(self, params, result, seen)
+        except Exception:  # noqa: BLE001 - a record only
+            pass
         try:
             repeat_words(self, params.get("name"), result, params.get("arguments"))
         except Exception:  # noqa: BLE001 - words only
@@ -1344,7 +1350,7 @@ class Server:
         if sk is not None and name in SKETCH_GEOMETRY_TOOLS and isinstance(result, dict) and not result.get("isError"):
             from .families import pd_common
 
-            note = pd_common.used_sketch_note(sk)
+            note = pd_common.used_sketch_note(sk, tool=name)
         if not filled and not note:
             return
         content = (result or {}).get("content") or []
@@ -1665,6 +1671,184 @@ class Server:
         if trace:
             err["trace"] = trace
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
+
+
+# ---- the same changing call again: refused ----------------------------------
+#
+# Blind QA, 24 Nov: a small local model sent the same sketch_add 13 times; each
+# answered ok and added the same geometry again (DoF 32 → 274), and the repeat
+# stop counts only refusals. Another sent a whole batch again, doc_new too, and
+# had a second document. So a changing call with the same tool and the same
+# arguments (canonical_call) as one of the last AGAIN_WINDOW changing calls that
+# went through and made something (objects, sketch geometry, a document) is
+# refused, and the refusal counts toward the repeat stop. Not for the tools
+# where the same call again is normal (AGAIN_FREE); and an undo, a redo, a
+# restore, a rollback, a removal or another document (AGAIN_CLEARS) clears the
+# record, as does a new conversation. A record whose objects are gone counts
+# no more. The person's calls (session.by "person") are not looked at.
+
+AGAIN_WINDOW = 10
+# The same call again is normal: the history (undo, redo …), recompute, saves,
+# the view and the window, toggles and settings, runners of other calls (each
+# of their calls is looked at itself), and a new sketch (a second sketch on
+# the same plane, for the next feature, is a common step).
+AGAIN_FREE = frozenset(("recompute", "doc_save", "doc_save_all",
+                        "selection", "show", "workbench", "menu_run", "cmd_run", "dialog_answer", "queue_go", "batch", "fast", "pick",
+                        "cookbook_run", "sketch_new"))
+AGAIN_FREE_PREFIXES = ("view_", "camera_", "gui_", "window_", "pref_", "history_", "app_", "approve_")
+# A call that went through of one of these, or of any history_ tool (undo,
+# redo, a restore), clears the record.
+AGAIN_CLEARS = frozenset(("doc_new", "doc_switch", "doc_close", "doc_open", "doc_revert", "feature_remove", "object_delete", "sketch_edit"))
+# Looked at though they change no open document: a new document is made.
+AGAIN_ALSO = frozenset(("doc_new",))
+
+
+def _again_looked_at(server, name, args):
+    """Whether a call of tool name with args is one the record looks at."""
+    if not isinstance(name, str) or name in AGAIN_FREE or name.startswith(AGAIN_FREE_PREFIXES):
+        return False
+    if name in AGAIN_ALSO:
+        return True
+    tool = server.tools.get(name)
+    if tool is None:
+        return False
+    try:
+        return bool(tool.changes_for(args if isinstance(args, dict) else {}))
+    except Exception:  # noqa: BLE001
+        return bool(getattr(tool, "changes", False))
+
+
+def _by_person(s):
+    return s is not None and getattr(s, "by", "agent") == "person"
+
+
+def _still_there(made):
+    """Whether what a recorded call made is all still there."""
+    try:
+        import FreeCAD
+
+        docs = FreeCAD.listDocuments()
+        for kind, doc, name, _label, ids in made:
+            d = docs.get(doc)
+            if d is None:
+                return False
+            if kind == "object" and d.getObject(name) is None:
+                return False
+            if kind == "geometry":
+                sk = d.getObject(name)
+                if sk is None or len(getattr(sk, "Geometry", None) or ()) <= max(ids):
+                    return False
+        return True
+    except Exception:  # noqa: BLE001 - not known: kept
+        return True
+
+
+def _made_words(made):
+    """What a recorded call made, short: labels, "Sketch geometry 4-7", a
+    document's name."""
+    parts = []
+    for kind, _doc, _name, label, ids in made:
+        if kind == "document":
+            parts.append(f"document {label}")
+        elif kind == "geometry":
+            ids = sorted(ids)
+            parts.append(f"{label} geometry {ids[0]}" + (f"-{ids[-1]}" if len(ids) > 1 else ""))
+        else:
+            parts.append(label)
+    return ", ".join(parts[:4] + ([f"{len(parts) - 4} more"] if len(parts) > 4 else []))
+
+
+def _remove_words(made):
+    """The tools that take back what a recorded call made."""
+    out = []
+    geo = [(label, sorted(ids)) for kind, _d, _n, label, ids in made if kind == "geometry"]
+    if geo:
+        out.append(f"sketch_edit {{ sketch: \"{geo[0][0]}\", delete: {geo[0][1]} }}")
+    if any(m[0] == "object" for m in made):
+        out.append("feature_remove (a feature of a body) or object_delete")
+    if any(m[0] == "document" for m in made):
+        out.append("doc_close")
+    return " or ".join(out) or "history_undo"
+
+
+def again_before(server, params):
+    """Before a call: the refusal of a changing call sent again exactly
+    (refusal), or what again_after needs to record it. None when the call
+    is not looked at."""
+    s = server.session
+    name = plain_name(server, params.get("name"))
+    if s is None or _by_person(s) or name in LIVE_NAMES_TOOLS:
+        return None
+    server._seq = getattr(server, "_seq", 0) + 1
+    args = params.get("arguments") or {}
+    if not _again_looked_at(server, name, args):
+        return {"seq": server._seq, "name": name, "looked": False}
+    call = canonical_call(args)
+    ran = getattr(server, "_ran", None) or []
+    for rec in reversed(ran):
+        if rec["name"] == name and rec["call"] == call and rec["made"] and _still_there(rec["made"]):
+            ago = server._seq - rec["seq"]
+            msg = (f"This call ran before with the same tool and arguments, and answered ok (made: {_made_words(rec['made'])}; "
+                   f"calls since then: {ago - 1}). If it runs again, it adds the same again. Nothing was done. "
+                   f"Change it, or remove what you do not want: {_remove_words(rec['made'])}.")
+            return {"refusal": server.refusal("invalid_state", msg, outcome="not_started")}
+    doc = getattr(s, "doc", None)
+    try:
+        names0 = {o.Name for o in doc.Objects} if doc is not None else set()
+    except Exception:  # noqa: BLE001
+        names0 = None
+    return {"seq": server._seq, "name": name, "looked": True, "call": call, "doc": doc, "names0": names0}
+
+
+def _answer_body(result):
+    content = (result or {}).get("content") or []
+    if not content or content[0].get("type") != "text":
+        return None
+    try:
+        body = json.loads(content[0]["text"])
+    except ValueError:
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def again_after(server, params, result, seen):
+    """After a call: the record cleared (AGAIN_CLEARS, a rollback) or the
+    call put on it with what it made."""
+    if not seen or seen.get("refusal") or not isinstance(result, dict) or result.get("isError"):
+        return
+    name = seen["name"]
+    ran = getattr(server, "_ran", None)
+    if ran is None:
+        ran = server._ran = []
+    body = _answer_body(result) if name in AGAIN_ALSO or seen.get("looked") else None
+    if name in AGAIN_CLEARS or name.startswith("history_"):
+        del ran[:]
+    if not seen.get("looked"):
+        return
+    s = server.session
+    made = []
+    doc = seen.get("doc")
+    if name in AGAIN_ALSO:
+        if body and isinstance(body.get("document"), str):
+            made.append(("document", body["document"], body["document"], body.get("label") or body["document"], ()))
+    elif doc is not None and doc is getattr(s, "doc", None) and seen.get("names0") is not None:
+        try:
+            made += [("object", doc.Name, o.Name, o.Label, ()) for o in doc.Objects if o.Name not in seen["names0"]]
+        except Exception:  # noqa: BLE001
+            pass
+    if body and doc is not None and isinstance(body.get("added"), list) and isinstance(body.get("sketch"), str):
+        sk = next((o for o in getattr(doc, "Objects", ()) if o.Label == body["sketch"] and o.TypeId == "Sketcher::SketchObject"), None)
+        ids = [i for r in body["added"] if isinstance(r, dict) for i in (r.get("ids") or []) if isinstance(i, int)]
+        if sk is not None and ids:
+            made.append(("geometry", doc.Name, sk.Name, sk.Label, ids))
+    ran.append({"name": name, "call": seen["call"], "seq": seen["seq"], "made": made})
+    del ran[:-AGAIN_WINDOW]
+
+
+def again_clear(server):
+    """The record cleared: a batch's or a block's rollback took calls back."""
+    if server is not None and getattr(server, "_ran", None):
+        del server._ran[:]
 
 
 # ---- the same refusal again: a stop by progress ----------------------------

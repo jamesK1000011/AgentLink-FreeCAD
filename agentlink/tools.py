@@ -249,6 +249,10 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
     warning or rollbackNote where they apply."""
     out = {}
     undone, foreign = changes.undo_own(start, made, own)
+    # What the calls made is taken back: the same calls may be sent again (protocol.again_before).
+    from .protocol import again_clear
+
+    again_clear(getattr(s, "server", None))
     if foreign is None:
         left = take_back(start, None, names0)
         if left:
