@@ -2157,12 +2157,11 @@ def repeat_words(server, name, result, args=None):
     call = canonical_call(args)
     last = state.get(name)
     progress = ""
-    # The same refusal: the same code and the same failing keys. The same
-    # call counts only when its words (numbers out) are the same too: the
-    # document can change under the same call, and a new reason is progress
-    # (1i, 24 Nov).
     words = re.sub(r"\d+(\.\d+)?", "#", strip_kind(msg))
-    if last is not None and last["code"] == code and (last["keys"] == keys or (last["call"] == call and last.get("words") == words)):
+    # The same refusal is the same code with the same words (numbers out).
+    # The same place with new words is a new problem: the call changed
+    # something (QA 1126e: "same refusal as before" on a new error).
+    if last is not None and last["code"] == code and last.get("words") == words:
         n = last["n"] + 1
         first = last["first"]
     else:

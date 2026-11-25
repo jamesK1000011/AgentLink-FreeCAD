@@ -469,6 +469,7 @@ tests/test_local_client.py
 tests/test_local_fixes_1123.py
 tests/test_loft_findings.py
 tests/test_loft_spans.py
+tests/test_loose_material_1126e.py
 tests/test_lost_face_1124.py
 tests/test_material.py
 tests/test_mcp_contract.py
@@ -524,6 +525,7 @@ tests/test_rename_pd_1124.py
 tests/test_renames_1124_r3.py
 tests/test_renames_4_7_9.py
 tests/test_render_sizing.py
+tests/test_repeat_words_1126e.py
 tests/test_report_watch.py
 tests/test_restart_temp_copy.py
 tests/test_rider_calldone.py
