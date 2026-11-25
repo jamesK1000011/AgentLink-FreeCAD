@@ -1314,7 +1314,9 @@ def check(session, tool, m, args=None):
     try:
         import FreeCAD
 
-        if FreeCAD.GuiUp:
+        from . import nexthint
+
+        if FreeCAD.GuiUp and nexthint.on():  # the NextHints switch
             from .tools import next_hint
 
             nxt = next_hint(session, news_only=True)

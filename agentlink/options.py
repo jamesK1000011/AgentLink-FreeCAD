@@ -413,7 +413,7 @@ def push(session, out):
     the session, and their line put beside the health's next (on a batch's
     answer itself: never inside a batch). Never raises."""
     try:
-        if getattr(session, "batch_now", None) is not None or not isinstance(out, dict) or not enabled():
+        if getattr(session, "batch_now", None) is not None or not isinstance(out, dict) or not enabled() or not nexthint.on():
             return out
         ln = line(remember(session, build(session)))
         if not ln:
@@ -431,6 +431,8 @@ def push(session, out):
 def state_field(session):
     """{ options } for session_state, or {}. Never raises."""
     try:
+        if not nexthint.on():
+            return {}
         got = public(remember(session, build(session)))
         return {"options": got} if got else {}
     except Exception:  # noqa: BLE001

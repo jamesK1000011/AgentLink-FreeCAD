@@ -43,6 +43,27 @@ EXTRA = {}
 _cache = {}
 
 
+PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
+PREF = "NextHints"
+ENV = "AGENTLINK_NEXT_HINTS"
+
+
+def on():
+    """Whether the likely-next hints are given: the health's "next" line
+    and the numbered options of a changing call's answer, and the likely
+    next tools of session_state's next. The person's preference NextHints
+    (Mod/AgentLink, bool, on); AGENTLINK_NEXT_HINTS=0 turns them off (test
+    runs). A refusal keeps its own guidance either way."""
+    if os.environ.get(ENV, "1").strip().lower() in ("0", "false", "off", "no"):
+        return False
+    try:
+        import FreeCAD
+
+        return bool(FreeCAD.ParamGet(PREFS).GetBool(PREF, True))
+    except Exception:  # noqa: BLE001 - no FreeCAD here, or a stand-in without settings
+        return True
+
+
 def _cut(text, n):
     text = " ".join(str(text or "").split())
     return text if len(text) <= n else text[:max(1, n - 1)].rstrip() + "…"

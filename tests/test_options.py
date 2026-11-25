@@ -382,7 +382,10 @@ class Switch(Base):
         self.assertEqual(got["error"]["code"], "unavailable")
         os.environ["AGENTLINK_OPTIONS"] = "on"
         got, _ = call(server, "pd_pad", {"length": 3})
-        self.assertIn("options", got["health"])
+        # The same health as the last pad's is "nothing new" (once.quiet_health):
+        # its options then stand in the answer itself.
+        self.assertEqual(got["health"], "nothing new")
+        self.assertIn("options", got)
 
     def test_the_static_list_does_not_change(self):
         self.assertNotIn("pick", staticbase.BASE)

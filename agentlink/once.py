@@ -27,12 +27,23 @@ the answer:
     there (or any value, where the key's value is constant by what it is);
   - health: the advice HEALTH_TODOS names, and the standing part of the
     verdict (the objects still failing from before), given again when it
-    changes.
+    changes; and a changing call's whole health, as "nothing new", when
+    its finding is the one last given and all is well (quiet_health).
 A refusal is never touched: its words are what to do next.
 """
+import json
 import re
 
 MIN_CHARS = 60
+
+# A changing call's health whose finding is the one last given (quiet_health):
+# the check ran, and there is nothing new to say (owner, 25 Nov: a small
+# model reads the top of an ok answer, and a verdict given again on each
+# step buried the one that changed).
+NOTHING_NEW = "nothing new"
+# Keys of a health reading that are not its finding: timing, the hints put
+# beside it, the status bar's text.
+HEALTH_ASIDE = {"ms", "msBy", "overlapPairs", "saidBefore", "options", "appliesNow", "statusBar"}
 
 # Coded tools' standing keys: { tool: { key: values or None (any value) } }.
 # Filled with the literal texts where a key also carries words that change.
@@ -165,12 +176,42 @@ def thin(st, tool, out, rule=None):
     named = [k for k in gone if (name, k) not in QUIET]
     if named:
         out["saidBefore"] = sorted(set(out.get("saidBefore") or []) | set(named))
-    if isinstance(out.get("health"), dict):
+    if isinstance(out.get("health"), dict) and not quiet_health(st, tool, out):
         thin_health(st, out["health"])
     for reading in (out.get("state"), out):
         if isinstance(reading, dict) and "dof" in reading:
             thin_dof(st, reading)
     return out
+
+
+def health_content(h):
+    """The part of a health reading that is the check's own finding: the
+    key a repeat is told by (no timing, no hints beside it, no status bar
+    text, which changes as the window does)."""
+    return json.dumps({k: v for k, v in h.items() if k not in HEALTH_ASIDE}, sort_keys=True, default=str)
+
+
+def quiet_health(st, tool, out):
+    """A changing tool's health given as NOTHING_NEW when its finding is
+    the one last given in this conversation and all is well (ok true). The
+    check itself ran: only its words are left out. A reading that differs,
+    or one that is not ok (a failure, a broken object, a dialog), is given
+    whole and is then the last one given. The lines beside it (options,
+    appliesNow) move to the answer itself. Explicit reads (body_check,
+    session_state …) do not change the document, and keep theirs whole.
+    True when the health was left out."""
+    h = out.get("health")
+    if not isinstance(h, dict) or not getattr(tool, "changes", False) or getattr(tool, "name", tool) == "batch":
+        return False
+    key = health_content(h)
+    if h.get("ok") is not True or key != st.get("health"):
+        st["health"] = key
+        return False
+    out["health"] = NOTHING_NEW
+    for k in ("options", "appliesNow"):
+        if k in h and k not in out:
+            out[k] = h[k]
+    return True
 
 
 def thin_dof(st, reading):

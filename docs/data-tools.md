@@ -344,6 +344,8 @@ and a hit that applies does not overtake one that could not be told.
   filter, since one helper cannot be stopped half-way. Timed as `appliesNow` (inside a call's `ms`) and `appliesMeter`
   in `agentlink/around.py`.
 - *Off:* preference `AppliesNow` = false (Mod/AgentLink), or `AGENTLINK_APPLIES=off`. The readings on request stay.
+- The likely-next hints beside it (`next`, `options`): preference `NextHints` = false (Mod/AgentLink), or
+  `AGENTLINK_NEXT_HINTS=0`. A refusal keeps its own guidance.
 
 **The meter** (the overfit measure). Every call records what the filter's last reading said of the tool (applies, not,
 notChecked, notEvaluated) and what happened: answered; refused by a leading check, by a later one, or otherwise. A

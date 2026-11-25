@@ -1084,7 +1084,72 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
                 # the top of an ok answer and moves on; the numbers follow it).
                 head = {k: out[k] for k in ("feature", "type") if k in out}
                 out = {**head, "where": out["where"], **{k: v for k, v in out.items() if k not in head and k != "where"}}
+    out = with_changed(session, body, out, before)
     return picks.finish(session, tool, out, recompute=False)
+
+
+# ---- what changed since the body's last reading (owner, 25 Nov) ----------------------------
+# Each feature's answer gives the whole body again (volume, area, faces,
+# solids, box, bounds); a small model read the same numbers each step and
+# missed the one that moved. changed says only what moved, from the last
+# reading of the same body in this conversation.
+
+CHANGED_KEYS = ("volume", "faces", "solids", "box", "bounds")
+
+
+def _num(x):
+    return f"{round(x, 2):g}"
+
+
+def changed_words(old, new):
+    """What moved from one body reading to the next, in one short line:
+    "volume +5250, box z 5→40, faces 6→14"; "" when nothing did."""
+    parts = []
+    try:
+        if isinstance(old.get("volume"), (int, float)) and isinstance(new.get("volume"), (int, float)):
+            d = new["volume"] - old["volume"]
+            if abs(d) > max(0.01, 1e-7 * max(abs(old["volume"]), abs(new["volume"]))):
+                parts.append(f"volume {'+' if d > 0 else '-'}{_num(abs(d))}")
+        ob, nb = old.get("box"), new.get("box")
+        if isinstance(ob, (list, tuple)) and isinstance(nb, (list, tuple)) and len(ob) == len(nb) == 3:
+            moved = [f"{ax} {_num(a)}→{_num(b)}" for ax, a, b in zip("xyz", ob, nb) if abs(b - a) > 1e-3]
+            if moved:
+                parts.append("box " + ", ".join(moved))
+        for k in ("faces", "solids"):
+            if isinstance(old.get(k), int) and isinstance(new.get(k), int) and old[k] != new[k]:
+                parts.append(f"{k} {old[k]}→{new[k]}")
+        if old.get("bounds") and new.get("bounds") and old["bounds"] != new["bounds"] and not any(p.startswith("box ") for p in parts):
+            parts.append(f"bounds now {new['bounds']}")  # moved, the same size
+    except Exception:  # noqa: BLE001 - a reading only
+        return ""
+    return ", ".join(parts)
+
+
+def with_changed(session, body, out, before):
+    """out with changed right after where (or after feature and type),
+    from the last reading of this body kept in the session; the reading
+    kept for the next one. No line on the body's first reading, or when the
+    body changed since it by another way (before, the volume when this
+    call began, is not the kept one): the line would compare with the
+    wrong shape. Never raises."""
+    try:
+        from .. import once
+
+        kept = once.state(session).setdefault("bodies", {})
+        key = (getattr(getattr(body, "Document", None), "Name", ""), body.Name)
+        last = kept.get(key)
+        kept[key] = {k: out[k] for k in CHANGED_KEYS if k in out}
+        if not last or before is None or not isinstance(last.get("volume"), (int, float)):
+            return out
+        if abs(last["volume"] - before) > max(0.01, 1e-6 * max(abs(before), 1.0)):
+            return out
+        words = changed_words(last, out)
+        if not words:
+            return out
+        lead = [k for k in ("feature", "type", "where") if k in out]
+        return {**{k: out[k] for k in lead}, "changed": words, **{k: v for k, v in out.items() if k not in lead}}
+    except Exception:  # noqa: BLE001 - a reading only
+        return out
 
 
 # ---- where a feature's material went (24 Nov QA) -------------------------------------------

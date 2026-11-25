@@ -253,6 +253,7 @@ docs/workflow/session.md
 package.xml
 pyproject.toml
 scripts/hardening_status.py
+scripts/next_hint_use.py
 scripts/release.py
 scripts/stats.py
 scripts/ste_check.py
@@ -431,6 +432,7 @@ tests/test_guideidx.py
 tests/test_guides.py
 tests/test_health.py
 tests/test_health_fc.py
+tests/test_health_news_1125.py
 tests/test_heavy_findings_1118.py
 tests/test_heavy_memory.py
 tests/test_hidden_parts.py

@@ -26,7 +26,9 @@ BODY = '''
     if first is not None:
         timelimit._first[0] = first - 125      # two minutes and a bit since the first call
     early = tools._time_state()
-    early_verdict = call("probe_make", {"name": "E"})[1]["health"]["verdict"]
+    # A health the same as the last one given is "nothing new" (once.quiet_health).
+    verdict = lambda h: h.get("verdict") if isinstance(h, dict) else h
+    early_verdict = verdict(call("probe_make", {"name": "E"})[1]["health"])
     if first is not None:
         timelimit._first[0] = first - 965      # sixteen minutes and a bit: past half of 30
     state = tools._time_state()   # session_state's own field (session_state needs FreeCAD's version: not on the stand-in)
@@ -34,8 +36,8 @@ BODY = '''
     inside = call("batch", {"calls": [mk("B"), mk("C")]})[1]
     print(json.dumps({"before": before, "started": first is not None, "state": state.get("time"),
                       "early": early.get("time"), "earlyVerdict": early_verdict,
-                      "verdict": made["health"]["verdict"], "batch": inside.get("health", {}).get("verdict"),
-                      "rows": [r.get("result", {}).get("health", {}).get("verdict") for r in inside.get("results", []) if isinstance(r, dict)]}))
+                      "verdict": verdict(made["health"]), "batch": verdict(inside.get("health", {})),
+                      "rows": [verdict(r.get("result", {}).get("health", {})) for r in inside.get("results", []) if isinstance(r, dict)]}))
 '''
 
 

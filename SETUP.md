@@ -72,6 +72,8 @@ tool call. `session_state` then shows `time: N of M minutes used`. From half
 the limit on, the health verdict of each changing answer ends with the same words.
 Not set: nothing is shown. Do not set it for normal use.
 
+Likely-next hints (the health's `next` and the numbered `options`) are on by default: the person's preference `NextHints` (Mod/AgentLink) = false, or `AGENTLINK_NEXT_HINTS=0` in the server's `env` for a test run, turns them off.
+
 The person restarts the client. Done when the client lists the
 `agentlink-freecad` server with tools such as `session_state`.
 

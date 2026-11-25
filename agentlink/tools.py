@@ -1754,7 +1754,9 @@ def next_state(session):
     # The likely next tools, from the document's own state; none while a
     # dialog is in front (answering it is the next step).
     tools_now = []
-    if not state.get("dialog"):
+    from . import nexthint
+
+    if not state.get("dialog") and nexthint.on():  # the NextHints switch
         _facts, tools_now = next_picks(session, state, gui)
     state["rules"] = [p["rule"] for p in tools_now]
     return state, tools_now
