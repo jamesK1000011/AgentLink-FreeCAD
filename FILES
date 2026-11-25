@@ -45,8 +45,6 @@ agentlink/data/guide_words.schema.json
 agentlink/data/nexthint.json
 agentlink/data/nexthint.schema.json
 agentlink/data/readers.json
-agentlink/data/readers.json
-agentlink/data/readers.json
 agentlink/data/readers.schema.json
 agentlink/data/ste.json
 agentlink/data/stock.json
@@ -103,8 +101,6 @@ agentlink/families/porting.py
 agentlink/families/refs.py
 agentlink/families/robot.py
 agentlink/families/sheet.py
-agentlink/families/sketch.py
-agentlink/families/sketch.py
 agentlink/families/sketch.py
 agentlink/families/sketch_more.py
 agentlink/families/std_more.py
@@ -246,11 +242,7 @@ docs/listing.md
 docs/packaging.md
 docs/records.md
 docs/stats/STATS.md
-docs/stats/STATS.md
-docs/stats/STATS.md
 docs/stats/addons.json
-docs/stats/stats.json
-docs/stats/stats.json
 docs/stats/stats.json
 docs/workflow/README.md
 docs/workflow/addons.md
@@ -490,8 +482,6 @@ tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
-tests/test_needs.py
-tests/test_needs.py
 tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py
