@@ -1090,6 +1090,7 @@
     "ext_count",
     "face_pick",
     "face_pick_said",
+    "far_joins",
     "frame",
     "geo_kind",
     "geo_of_edge",
@@ -1119,6 +1120,7 @@
    "changers": [
     "build",
     "clashing",
+    "fresh",
     "state_of",
     "text_outlines"
    ],

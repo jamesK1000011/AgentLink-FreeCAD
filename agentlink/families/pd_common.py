@@ -131,9 +131,25 @@ def sketch_in_edit(doc):
     return o
 
 
-def note_made_sketch(session, sk):
-    """Record sk as the sketch this session's agent made last (sketch_new)."""
-    if session is None or sk is None or getattr(session, "by", "agent") != "agent":
+def note_made_sketch(session, sk, asked=None):
+    """Record sk as the sketch this session's agent made last (sketch_new).
+    asked: the name the call gave. When another object had it, sk got
+    "asked 2" (Session.unique, as every tool that makes an object does): the
+    answer's filled says so, and the later calls of the same batch that
+    name asked get sk (26 Nov QA: they drew into the old sketch)."""
+    if session is None or sk is None:
+        return
+    if isinstance(asked, str) and asked and sk.Label != asked and not _dry():
+        got = getattr(session, "filled_now", None)
+        if isinstance(got, list):
+            got.append(f"name={sk.Label} (the name {asked} was taken; this sketch is {sk.Label})")
+        alias = session.__dict__.get("_batch_aliases") if hasattr(session, "__dict__") else None
+        if isinstance(alias, dict):
+            try:
+                alias[(sk.Document.Name, asked)] = sk.Name
+            except Exception:  # noqa: BLE001
+                pass
+    if getattr(session, "by", "agent") != "agent":
         return
     try:
         rec = getattr(session, "made_sketch", None)
@@ -142,6 +158,17 @@ def note_made_sketch(session, sk):
         rec[sk.Document.Name] = sk.Name
     except Exception:
         pass
+
+
+def renamed_sketch(session, doc, ref):
+    """The sketch that sketch_new made in this batch in place of the taken
+    name ref, or None."""
+    try:
+        alias = session.__dict__.get("_batch_aliases") if session is not None else None
+        name = alias.get((doc.Name, ref)) if isinstance(alias, dict) else None
+        return doc.getObject(name) if name else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def made_sketch(session, doc):
@@ -203,6 +230,10 @@ def sketch_of(doc, ref, body=None, session=None):
             raise ToolError("invalid_input", f"sketch: there is no sketch{where} yet. sketch_new makes one.")
         why = "No sketch is open in edit, and you made none here. " if session is not None else ""
         raise ToolError("invalid_input", f"sketch: say which. {why}The sketches{where}, unused first and newest first: {sketch_list(sk)}.")
+    o = renamed_sketch(session, doc, ref)
+    if o is not None and any(o is x for x in sk):
+        note_named(session, o)
+        return o
     for o in sk:
         if ref in (o.Label, o.Name) or o.Label.lower() == str(ref).lower():
             note_named(session, o)
@@ -1007,6 +1038,35 @@ def fit_hint(hint, error=""):
     return re.sub(r";$", ".", " ".join(parts).strip())
 
 
+_CONNECTOR_END = re.compile(r"(?:\s*(?:[,;:]|\b(?:or|and|then|with)\b))+\s*$", re.I)
+
+
+def drop_phrase(text, phrase):
+    """text without the clauses that say phrase (the refusal said it once
+    already). Clauses are the parts of a sentence between semicolons. A
+    clause keeps its words before phrase, less a last "or", "and", comma or
+    colon; a sentence with nothing left goes. So no sentence is cut mid-way
+    (26 Nov run: "put the sketch on the face it enters, or." from "…, or
+    reversed: true.")."""
+    if not text or phrase not in text:
+        return text
+    out = []
+    for s in re.split(r"(?<=[.!?])\s+", text.strip()):
+        if phrase not in s:
+            out.append(s)
+            continue
+        end = s[-1] if s[-1] in ".!?" else "."
+        kept = []
+        for c in re.split(r"\s*;\s*", s[:-1] if s[-1] in ".!?" else s):
+            if phrase in c:
+                c = _CONNECTOR_END.sub("", c[:c.find(phrase)]).strip()
+            if c:
+                kept.append(c)
+        if kept:
+            out.append("; ".join(kept) + end)
+    return " ".join(out)
+
+
 def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
     """Recompute; refuse (the call's transaction is rolled back) if the
     feature or anything after it failed; else the body's reading."""
@@ -1081,8 +1141,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
                 # The side words say which way (or that the outline is beside
                 # the body): the card's own reversed words would say it twice,
                 # or point away from the fix (26 Nov QA).
-                hint = re.sub(r"[;,]?\s*reversed: true[^.;]*[.;]?", ".", hint).replace("..", ".").strip()
-                hint = "" if hint == "." else hint
+                hint = drop_phrase(hint, "reversed: true")
             raise ToolError("failed", f"{feat.Label} {what}.{(' ' + side) if side else ''} Nothing was kept. {hint}".strip())
         if must_change == "changed" and abs(delta) <= tol:
             # A fillet or chamfer may add material (an inside corner, concave)
@@ -1096,7 +1155,21 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
                 head = {k: out[k] for k in ("feature", "type") if k in out}
                 out = {**head, "where": out["where"], **{k: v for k, v in out.items() if k not in head and k != "where"}}
     out = with_changed(session, body, out, before)
+    if out.get("volume") is not None:
+        note_answered(session, body)
     return picks.finish(session, tool, out, recompute=False)
+
+
+def note_answered(session, body):
+    """This answer gives body's reading (volume, box, solids) after the
+    recompute: the session counts it as a measure of that body once the
+    change is kept (Session.note_answered; agentlink/measured.py)."""
+    try:
+        got = session.__dict__.get("_answered")
+        if isinstance(got, list):
+            got.append(body.Label)
+    except Exception:  # noqa: BLE001 - a stand-in session
+        pass
 
 
 # ---- what changed since the body's last reading (owner, 25 Nov) ----------------------------
@@ -1241,40 +1314,67 @@ def where_went(feat, body, delta, tol=0.01):
         if reg.isNull() or reg.Volume <= tol:
             return {}
         out = {"removed": span_text(reg.BoundBox)}
-        lids, sides = [], []
         diag = max(old.BoundBox.DiagonalLength, 1.0)
         # The old body's surface, not its solid: a point inside a solid is at
         # distance 0 from it (live, 25 Nov: a hollow's inner walls were listed).
         skin = Part.Compound(list(old.Faces))
-        for f in list(reg.Faces)[:WHERE_LIDS]:
-            # A face of the removed region that lies on the body's old
-            # surface is where the cut opens the body; the others are the
-            # new walls inside it.
-            try:
-                u0, u1, v0, v1 = f.ParameterRange
-                p = f.valueAt((u0 + u1) / 2, (v0 + v1) / 2)
-                if not f.isInside(p, 1e-6, True):
-                    p = f.CenterOfMass
-                if skin.distToShape(Part.Vertex(p))[0] > 1e-4 * diag:
-                    continue
-                n = f.normalAt(*f.Surface.parameter(p))
-                # Outward from the removed region (and so from the old body)
-                # whatever the face's orientation: a step along it is outside.
-                step = 1e-3 * diag
-                if reg.isInside(p + n * step, 1e-7, False):
-                    n = -n
-                w = side_word((n.x, n.y, n.z), (p.x, p.y, p.z))
-            except Exception:  # noqa: BLE001 - one face not read
-                continue
-            if w not in lids:
-                lids.append(w)
-                sides.append(side_key((n.x, n.y, n.z), (p.x, p.y, p.z)))
+        lids, sides = _lids(reg, skin, diag)
         out["opens"] = lids or ["nothing: the cut is closed inside the body"]
         out["where"] = removed_sentence(sides, _bbt(reg.BoundBox))
+        pieces = [x for x in reg.Solids if x.Volume > tol]
+        if len(pieces) > 1:
+            # 26 Nov QA: two notches in one pocket came back as one box that
+            # "goes all the way through along x". Each piece apart.
+            out["where"] = pieces_sentence(pieces, skin, diag)
         out.update(profile_results(feat, reg, old, tol, cut=True))
         return out
     except Exception as e:  # noqa: BLE001 - a reading only
         return {"where": f"not worked out ({type(e).__name__})"}
+
+
+PIECES_SHOWN = 4  # separate pieces of one cut said one by one
+
+
+def _lids(reg, skin, diag):
+    """(the side words, side_key's) of the faces of the removed region reg
+    that lie on the old body's surface skin: where the cut opens the body."""
+    lids, sides = [], []
+    for f in list(reg.Faces)[:WHERE_LIDS]:
+        # A face of the removed region that lies on the body's old
+        # surface is where the cut opens the body; the others are the
+        # new walls inside it.
+        try:
+            u0, u1, v0, v1 = f.ParameterRange
+            p = f.valueAt((u0 + u1) / 2, (v0 + v1) / 2)
+            if not f.isInside(p, 1e-6, True):
+                p = f.CenterOfMass
+            if skin.distToShape(Part.Vertex(p))[0] > 1e-4 * diag:
+                continue
+            n = f.normalAt(*f.Surface.parameter(p))
+            # Outward from the removed region (and so from the old body)
+            # whatever the face's orientation: a step along it is outside.
+            step = 1e-3 * diag
+            if reg.isInside(p + n * step, 1e-7, False):
+                n = -n
+            w = side_word((n.x, n.y, n.z), (p.x, p.y, p.z))
+        except Exception:  # noqa: BLE001 - one face not read
+            continue
+        if w not in lids:
+            lids.append(w)
+            sides.append(side_key((n.x, n.y, n.z), (p.x, p.y, p.z)))
+    return lids, sides
+
+
+def pieces_sentence(pieces, skin, diag):
+    """"2 separate cuts: x -15..-10, y …: the cut opens on +y …; …" for a
+    removed region in several solids."""
+    words = []
+    for x in pieces[:PIECES_SHOWN]:
+        _w, sides = _lids(x, skin, diag)
+        said = removed_sentence(sides, _bbt(x.BoundBox))
+        words.append(f"{span_text(x.BoundBox)}: {said[0].lower()}{said[1:].rstrip('.')}")
+    more = f"; and {len(pieces) - PIECES_SHOWN} more" if len(pieces) > PIECES_SHOWN else ""
+    return f"{len(pieces)} separate cuts: " + "; ".join(words) + more + "."
 
 
 def _g(x):
@@ -1346,6 +1446,7 @@ def removed_sentence(sides, reg):
 
 
 PROFILES_SHOWN = 12  # profiles of one sketch looked at one by one
+NOT_CUT = "holesNotCut"  # profile_results' count for pd_hole's answer, taken out by holes_cut
 PROFILE_FEATURES = ("PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Hole")
 
 
@@ -1394,12 +1495,13 @@ def profile_results(feat, reg, old, tol, cut=True):
         bb = old.BoundBox
         span = 2 * max(bb.DiagonalLength, reg.BoundBox.DiagonalLength, 1.0) + bb.Center.Length + reg.BoundBox.Center.Length
         verb = "cut" if cut else "added"
-        idle = []
+        idle, idle_circles = [], 0
         for words, f in got:
             n = f.normalAt(0, 0)
             prism = f.translated(n * -span).extrude(n * (2 * span))
             if prism.common(reg).Volume > tol:
                 continue
+            idle_circles += words.startswith("the circle")
             if not cut:
                 idle.append(f"{words} adds nothing (inside the body already)")
             elif prism.common(old).Volume > tol:
@@ -1410,9 +1512,24 @@ def profile_results(feat, reg, old, tol, cut=True):
         head = f"{n_all} profiles" + (f" ({len(got)} looked at)" if n_all > len(got) else "")
         if not idle:
             return {"profiles": f"{head}: {'both' if did == 2 else 'all ' + str(did)} {verb}."}
-        return {"profiles": f"{head}: " + "; ".join(idle) + f"; {did} {verb}."}
+        out = {"profiles": f"{head}: " + "; ".join(idle) + f"; {did} {verb}."}
+        if getattr(feat, "TypeId", "") == "PartDesign::Hole":
+            # The holes not drilled (26 Nov QA: "holes: 2" when one circle of
+            # two was off the body): pd_hole's answer counts only those cut
+            # (holes_cut). FreeCAD keeps such a hole feature, so no refusal.
+            out[NOT_CUT] = idle_circles
+        return out
     except Exception:  # noqa: BLE001 - a reading only: left out
         return {}
+
+
+def holes_cut(spots, out):
+    """pd_hole's holes: the spots the sketch gives, less the circles that
+    cut nothing (profile_results); that count is taken out of the answer."""
+    try:
+        return max(int(spots) - int(out.pop(NOT_CUT, 0) or 0), 0)
+    except Exception:  # noqa: BLE001
+        return spots
 
 
 def _profile_of(o):

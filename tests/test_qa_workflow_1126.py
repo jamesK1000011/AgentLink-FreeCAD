@@ -57,7 +57,7 @@ class AResentBatch(unittest.TestCase):
         self.assertEqual(b["refused"]["call"], 0)
         self.assertTrue(b["refused"]["error"].startswith(protocol.AGAIN_WORDS), b["refused"]["error"])
         note = b["note"]
-        self.assertIn("Calls 0-2 (doc_new, probe_make, probe_make) ran in your last batch and are kept: do not send them again.", note)
+        self.assertIn("Calls 0-2 (doc_new, probe_make, probe_make) ran before and are kept: do not send them again.", note)
         self.assertIn("Next: send a new batch with only calls 3, 4, in order: probe_pad, probe_make.", note)
         self.assertNotIn("(fixed)", note)
         # The record stays after a refused batch that made nothing: the same list again is caught again.
@@ -70,7 +70,7 @@ class AResentBatch(unittest.TestCase):
     call("batch", {"calls": calls})
     print(json.dumps(call("batch", {"calls": calls})[1]))
 ''')
-        self.assertIn("Calls 0, 1 (doc_new, probe_make) ran in your last batch and are kept", got["note"])
+        self.assertIn("Calls 0, 1 (doc_new, probe_make) ran before and are kept", got["note"])
         self.assertIn("Next: nothing of this list is left to send.", got["note"])
 
     def test_a_plain_refusal_keeps_its_note(self):

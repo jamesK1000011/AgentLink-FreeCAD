@@ -37,7 +37,7 @@ class Table(unittest.TestCase):
     def test_every_fact_and_value_is_one_the_reader_gives(self):
         known = {"document": {"empty", "objects"}, "failing": {True, False}, "selection": {"edge", "face", "vertex", "object"},
                  "selectionIn": {"body", "other"}, "editing": {"sketch", "other"}, "dof": {"free", "full"}, "page": {True},
-                 "assembly": {"empty", "unjointed", "jointed"}, "body": {"none", "empty", "sketch-empty", "sketch-open", "sketch-closed", "features"},
+                 "assembly": {"empty", "unjointed", "jointed"}, "body": {"none", "empty", "sketch-empty", "sketch-open", "sketch-not-ready", "sketch-closed", "features"},
                  "features": {"none", "some"}, "lastFeature": None, "workbench": None}
         for rid, rule in nexthint.load().items():
             for cond in (rule["when"], rule.get("unless") or {}):

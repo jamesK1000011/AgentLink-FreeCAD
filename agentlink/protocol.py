@@ -704,6 +704,17 @@ def orient_text(got):
     return ORIENT_HEAD + json.dumps(got, ensure_ascii=False, separators=(",", ":"))
 
 
+# The keys of a batch step (and of the batch) that come with arguments
+# when a direct call is sent in the step's form.
+WRAP_KEYS = frozenset(("rollback", "stopOnError"))
+
+
+def names_tool(v, tool):
+    """Whether v names this tool: its own name, or the name with a client's
+    prefix (agentlink_tool_find, mcp__agentlink__tool_find)."""
+    return isinstance(v, str) and bool(tool) and (v == tool or v.endswith("_" + tool))
+
+
 def check_input(schema, args, tool=None):
     """Unknown keys and missing required ones refused by name, as the
     answers name them: what the agent got wrong and what is allowed.
@@ -714,13 +725,25 @@ def check_input(schema, args, tool=None):
     read_as = []
     # The inputs wrapped as a batch step wraps them ({arguments: {…}} on a
     # direct call; live, 22 Nov: a local model, five times in one run):
-    # taken from inside, when arguments is the only key and not a field here.
+    # taken from inside, when arguments is not a field here and the other
+    # keys are only the step's own (tool: this tool's name; rollback,
+    # stopOnError of the batch). 26 Nov QA: { tool: "agentlink_tool_find",
+    # arguments: {…} } got tool_find's own card, and get { arguments: { what } }
+    # "what: required". Other keys with it: refused by name.
     inner = args.get("arguments")
     # Not on the approval tools: they take the pending call exactly, shape too.
-    if set(args) == {"arguments"} and "arguments" not in props and isinstance(inner, dict) and tool not in STRICT_SHAPE:
-        args.clear()
-        args.update(inner)
-        read_as.append("inputs taken from inside arguments (a direct call takes them at the top level)")
+    if "arguments" in args and "arguments" not in props and isinstance(inner, dict) and tool not in STRICT_SHAPE:
+        others = [k for k in args if k != "arguments"]
+        if all(k in WRAP_KEYS or (k == "tool" and names_tool(args[k], tool)) for k in others):
+            args.clear()
+            args.update(inner)
+            read_as.append("inputs taken from inside arguments (a direct call takes them at the top level)"
+                           + (f"; ignored {', '.join(others)}" if others else ""))
+        else:
+            first = next(iter(inner), None)
+            form = f"{tool} {{ {first}: … }}" if tool and first else "{ field: … }"
+            raise ToolError("invalid_input", f"inputs go at the top level of a direct call: {form}, not inside arguments. "
+                                             "Only a batch step takes { tool, arguments }.")
     required = set(schema.get("required", []))
     empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
     for k in empty:
@@ -771,8 +794,26 @@ def check_input(schema, args, tool=None):
     for k, v in list(args.items()):
         spec = props.get(k)
         if isinstance(spec, dict) and v is not None:
+            number_goes(k, spec, v, props, args)
             args[k] = _typed(f"input.{k}", spec, v)
     return read_as
+
+
+# A word field given a number that belongs in a number field of the same
+# tool (26 Nov QA: pd_pad extent: 5 refused five times, and the words never
+# said where the depth goes): { word field: number field }.
+NUMBER_GOES = {"extent": "length"}
+
+
+def number_goes(k, spec, v, props, args):
+    """Refuse a number in a word field with the field it goes in, when the
+    tool has that number field and it is not given."""
+    to = NUMBER_GOES.get(k)
+    if (to and spec.get("type") == "string" and isinstance(v, (int, float)) and not isinstance(v, bool)
+            and (props.get(to) or {}).get("type") == "number" and to not in args):
+        words = str(spec.get("description") or "").strip().rstrip(".")
+        words = re.sub(r"\s*\(default\)", "", words)
+        raise ToolError("invalid_input", f"input.{k}: {k} takes a word ({words}); a depth goes in {to}: {{ {to}: {v:g} }}.")
 
 
 _PY = {"string": (str,), "number": (int, float), "integer": (int,), "boolean": (bool,), "array": (list,), "object": (dict,)}
@@ -1914,7 +1955,8 @@ def again_after(server, params, result, seen):
     filled, sk = getattr(server, "_acted", None) or ([], None)
     now = getattr(s, "doc", None)
     ran.append({"name": name, "call": seen["call"], "seq": seen["seq"], "made": made, "doc": getattr(now, "Name", None),
-                "sketch": getattr(sk, "Name", None) if sk is not None else None, "filled": bool(filled), "token": _token(now) if now is not None else None})
+                "sketch": getattr(sk, "Name", None) if sk is not None else None, "filled": bool(filled), "token": _token(now) if now is not None else None,
+                "step": body.get("step") if isinstance(body, dict) and isinstance(body.get("step"), int) else None})
     del ran[:-AGAIN_WINDOW]
 
 

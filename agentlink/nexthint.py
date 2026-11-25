@@ -84,9 +84,15 @@ MAX_NAMES = 6        # real names kept in a fact that lists them (bodies, sketch
 # from its dress-ups and patterns by the rules themselves (data/nexthint.json).
 
 
+MAX_LOOPS = 12      # closed wires of one sketch past which the meeting test is not run
+
+
 def _sketch_progress(sk):
-    """sketch-empty (no geometry), sketch-closed (every wire closed) or
-    sketch-open, of a sketch no feature uses yet."""
+    """sketch-empty (no geometry), sketch-closed (every wire closed and the
+    sketch ready for a feature), sketch-not-ready (every wire closed, but
+    the solver flags constraints or two closed loops meet: sketch_state's
+    readyForFeature is false) or sketch-open, of a sketch no feature uses
+    yet."""
     try:
         if int(sk.GeometryCount) == 0:
             return "sketch-empty"
@@ -94,9 +100,41 @@ def _sketch_progress(sk):
         pass
     try:
         wires = sk.Shape.Wires
-        return "sketch-closed" if wires and all(w.isClosed() for w in wires) else "sketch-open"
+        if not (wires and all(w.isClosed() for w in wires)):
+            return "sketch-open"
     except Exception:  # noqa: BLE001 - a null shape: nothing closed yet
         return "sketch-open"
+    return "sketch-not-ready" if _not_ready(sk, wires) else "sketch-closed"
+
+
+def _not_ready(sk, wires):
+    """Whether a sketch whose wires are all closed is still not ready for a
+    feature, as sketch_state's readyForFeature reads it (26 Nov QA: options
+    gave pd_pad while readyForFeature was false): the solver's last reading
+    names conflicting, redundant or malformed constraints, or two closed
+    loops cross or touch (a loop inside another, apart from it, is a hole).
+    Cheap reads only; False when one cannot be read."""
+    try:
+        for k in ("ConflictingConstraints", "RedundantConstraints", "MalformedConstraints"):
+            if getattr(sk, k, None):
+                return True
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        loops = list(wires)
+        if len(loops) < 2 or len(loops) > MAX_LOOPS:
+            return False
+        size = max(sk.Shape.BoundBox.DiagonalLength, 1.0)
+        for i in range(len(loops)):
+            for j in range(i + 1, len(loops)):
+                a, b = loops[i], loops[j]
+                if not a.BoundBox.intersect(b.BoundBox):
+                    continue
+                if a.distToShape(b)[0] <= 1e-6 * size:
+                    return True
+    except Exception:  # noqa: BLE001 - not read: the wires' reading stands
+        return False
+    return False
 
 
 def facts(doc, state=None, gui=None):

@@ -261,6 +261,8 @@ SHAPE = {"volume": ("measure", "volume", "mm³"), "area": ("measure", "area", "m
          "min": ("measure", "min", "mm"), "max": ("measure", "max", "mm"),
          "mass": ("measure_mass", "mass", "g"), "centerOfMass": ("measure_mass", "centerOfMass", "mm"),
          "density": ("measure_mass", "density", "g/cm³"), "inertia": ("measure_mass", "inertia", "g·mm²")}
+# Readings of a body's check, not of get (body_check gives them).
+CHECK_WORDS = {"solids", "solid", "valid", "isvalid", "closed"}
 SKETCH = {"dof": None, "closedWires": None, "openVertices": None, "readyForFeature": None, "conflicting": None, "redundant": None,
           "malformed": None}
 ELEMENT = re.compile(r"^(Edge|Face|Vertex)\d+$")
@@ -457,6 +459,11 @@ def read(server, session, what):
             raise ToolError("not_found", f"{w}: {tool} gave no {key} for {o.Label}.")
         _measured(session, o, head)
         return (_walk(got[key], rest[1:], w), unit if len(rest) == 1 else None)
+    if head.lower() in CHECK_WORDS and hasattr(o, "Shape") and not _has_prop(o, head):
+        # 26 Nov QA: get Body.solids and Body.valid were sent to object_get,
+        # which does not give them either.
+        raise ToolError("not_found", f"{w}: get does not read {head}. body_check {{ body: \"{o.Label}\" }} gives solids, valid and closed "
+                                     f"(with volume and box); get gives {o.Label}.volume, .area and .size.")
     got = _reader(server, "object_get", {"object": o.Name, "filter": [head]})
     entry = (got.get("properties") or {}).get(head)
     if not isinstance(entry, dict):

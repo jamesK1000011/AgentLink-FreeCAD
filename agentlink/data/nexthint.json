@@ -2,7 +2,7 @@
  "$schema": "nexthint.schema.json",
  "dataVersion": "1.1.0",
  "licence": "CC-BY-4.0",
- "about": "The likely next tools by the document's own state, for the \"next\" hint of session_state and the health check and for tool_groups { now: true } (agentlink/nexthint.py). Each entry is a rule: when (facts that must all hold; a list means any of its values), unless (facts of which none may hold), suggest (up to four tools, likeliest first, each with a few words on why) and weight (0-100: the heaviest matching rules come first; a failing recompute 100, the selection 80-90, a sketch in edit 70-85, an assembly 45, or 72 in the Assembly workbench, a drawing page in front 75, the body's progress 30-66). The facts, read cheaply from the document and the window: document (empty | objects), failing (true | false), selection (edge | face | vertex | object), selectionIn (body: the picked object is a Part Design body or one of its features | other), editing (sketch | other), dof (free | full), page (true: a drawing page is in front), assembly (empty | unjointed | jointed), body (none | empty | sketch-empty | sketch-open | sketch-closed | features: its newest sketch that no feature uses has no geometry, open wires or only closed ones; else it has features), features (none | some), lastFeature (the tip's type in lower case: pad, pocket, fillet …), workbench (FreeCAD's class name). A tool that is not installed, or whose FreeCAD command is on the active workbench's toolbars and reports itself inactive, is passed over; at most three are said. An add-on adds rules for its own tools with NEXT on its family module ({ id: entry } of this same shape). A suggested tool with arguments is also an option (agentlink/options.py): a ready call whose arguments the state settles (arguments: values, or expressions of the hub's checked language read with facts, the real names facts() gives), its open inputs (ask: arg, unit mm or deg, a sample used only for the check, words that stand for it) and live choices (the real bodies, sketches and faces). Each option is checked with its filled arguments by the tool's own leading checks before it is shown; at most four are given, bound to the step; pick { option, fill } runs one.",
+ "about": "The likely next tools by the document's own state, for the \"next\" hint of session_state and the health check and for tool_groups { now: true } (agentlink/nexthint.py). Each entry is a rule: when (facts that must all hold; a list means any of its values), unless (facts of which none may hold), suggest (up to four tools, likeliest first, each with a few words on why) and weight (0-100: the heaviest matching rules come first; a failing recompute 100, the selection 80-90, a sketch in edit 70-85, an assembly 45, or 72 in the Assembly workbench, a drawing page in front 75, the body's progress 30-66). The facts, read cheaply from the document and the window: document (empty | objects), failing (true | false), selection (edge | face | vertex | object), selectionIn (body: the picked object is a Part Design body or one of its features | other), editing (sketch | other), dof (free | full), page (true: a drawing page is in front), assembly (empty | unjointed | jointed), body (none | empty | sketch-empty | sketch-open | sketch-not-ready | sketch-closed | features: its newest sketch that no feature uses has no geometry, open wires, closed wires that are not ready for a feature (the solver flags constraints, or two loops meet) or closed wires that are ready; else it has features), features (none | some), lastFeature (the tip's type in lower case: pad, pocket, fillet …), workbench (FreeCAD's class name). A tool that is not installed, or whose FreeCAD command is on the active workbench's toolbars and reports itself inactive, is passed over; at most three are said. An add-on adds rules for its own tools with NEXT on its family module ({ id: entry } of this same shape). A suggested tool with arguments is also an option (agentlink/options.py): a ready call whose arguments the state settles (arguments: values, or expressions of the hub's checked language read with facts, the real names facts() gives), its open inputs (ask: arg, unit mm or deg, a sample used only for the check, words that stand for it) and live choices (the real bodies, sketches and faces). Each option is checked with its filled arguments by the tool's own leading checks before it is shown; at most four are given, bound to the step; pick { option, fill } runs one.",
  "entries": {
   "recompute-failing": {
    "when": {
@@ -291,6 +291,12 @@
    "when": {
     "editing": "sketch",
     "dof": "full"
+   },
+   "unless": {
+    "body": [
+     "sketch-open",
+     "sketch-not-ready"
+    ]
    },
    "suggest": [
     {
@@ -729,6 +735,51 @@
    "weight": 65,
    "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
    "date": "2026-11-22"
+  },
+  "body-sketch-not-ready": {
+   "when": {
+    "body": "sketch-not-ready"
+   },
+   "suggest": [
+    {
+     "tool": "sketch_state",
+     "why": "closed, but not ready for a feature: read its todo",
+     "arguments": {
+      "sketch": "=facts.sketchName"
+     },
+     "choices": {
+      "sketch": "=facts.sketches"
+     }
+    },
+    {
+     "tool": "sketch_edit",
+     "why": "fix what its todo names",
+     "arguments": {
+      "sketch": "=facts.sketchName"
+     },
+     "ask": [
+      {
+       "arg": "deleteConstraints"
+      }
+     ],
+     "choices": {
+      "sketch": "=facts.sketches"
+     }
+    },
+    {
+     "tool": "sketch_validate",
+     "why": "find bad constraints and ends that touch",
+     "arguments": {
+      "sketch": "=facts.sketchName"
+     },
+     "choices": {
+      "sketch": "=facts.sketches"
+     }
+    }
+   ],
+   "weight": 66,
+   "source": "Agent Link's own ranking (26 Nov blind QA: no feature for a sketch that is not ready)",
+   "date": "2026-11-26"
   },
   "body-sketch-closed-first": {
    "when": {

@@ -204,20 +204,26 @@ NEAR_GAP = 0.1
 # them collapses the outline. The words say to use an arc in its place.
 ROUND_NEAR = 0.05
 ROUND_NEAR_MM = 3.0
+# Two open ends closer than this (mm, or this share of the outline's size)
+# are one joint: said as a gap to close before any other words of them.
+TINY_GAP_MM = 0.01
+TINY_GAP = 1e-4
 
 
 def _at(p):
     return f"({geo.r3(p[0]):g}, {geo.r3(p[1]):g})"
 
 
-def open_end_words(ends, curves, size, dist, rounds=()):
+def open_end_words(ends, curves, size, dist, rounds=(), joined=None):
     """The todo words for the open ends of a sketch's outline, one phrase
     each (a curve with both ends loose: one phrase). ends: [(gid, kind,
     pos, (x, y))], pos 1 start / 2 end; curves: the ids of the outline's
     curves; size: the outline's size (its box's diagonal, mm); dist(gid,
     (x, y)): mm from that curve to the point; rounds: the ids of its full
     circles. [] when an end is on another curve (a branch: branch_words
-    says it)."""
+    says it). joined: a list that gets ((gid, (x, y)), (gid2, (x2, y2)))
+    for each two ends the words say to join (branch_words then says
+    nothing more of that point)."""
     tol = 1e-6 * max(size, 1.0)
     gap = max(NEAR_GAP * size, tol)
     rgap = min(max(ROUND_NEAR * size, ROUND_NEAR_MM), gap)
@@ -227,8 +233,42 @@ def open_end_words(ends, curves, size, dist, rounds=()):
         near_ = [(dist(c, p), c) for c in rounds if c != gid]
         return min(near_) if near_ else (math.inf, None)
 
-    by_round = {(gid, pos): round_of(gid, p) for gid, _k, pos, p in ends}
     near, rnd, loose, pairs = [], [], {}, set()
+
+    def pair(gid, kind, pos, p, d, g2, k2, s2, q):
+        key = tuple(sorted(((gid, pos), (g2, s2))))
+        if key not in pairs:
+            pairs.add(key)
+            if joined is not None:
+                joined.append(((gid, p), (g2, q)))
+            near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: "
+                        "sketch_constrain coincident joins them")
+
+    # Two ends a hair apart are one joint left open: the coincident words
+    # first, always (26 Nov QA: an end 0.001 mm from the next one got the
+    # round-end words of a hole circle nearby, and the real fix was hidden).
+    tiny = max(TINY_GAP_MM, TINY_GAP * size, tol)
+    paired = set()
+    for gid, kind, pos, p in ends:
+        others = [(math.dist(p, q), g2, k2, s2, q) for g2, k2, s2, q in ends if (g2, s2) != (gid, pos) and g2 != gid]
+        d, g2, k2, s2, q = min(others) if others else (math.inf, None, None, None, None)
+        if tol < d <= tiny:
+            pair(gid, kind, pos, p, d, g2, k2, s2, q)
+            paired |= {(gid, pos), (g2, s2)}
+    ends = [e for e in ends if (e[0], e[2]) not in paired]
+    by_round = {(gid, pos): round_of(gid, p) for gid, _k, pos, p in ends}
+    # Heuristic: a circle is a round end drawn as a full circle only when the
+    # ends of two or more other curves come near it. One end near a circle
+    # is near a hole (a pin hole inside a round end, 26 Nov QA), not a
+    # round end: its own words below say what is open there.
+    came = {}
+    for gid, _k, pos, _p in ends:
+        rd, rc = by_round[(gid, pos)]
+        if rc is not None and rd <= rgap:
+            came.setdefault(rc, set()).add(gid)
+    for key, (rd, rc) in list(by_round.items()):
+        if rc is not None and rd <= rgap and rd > tol and len(came.get(rc, ())) < 2:
+            by_round[key] = (math.inf, None)
     for gid, kind, pos, p in ends:
         rd, rc = by_round[(gid, pos)]
         if rd <= rgap:
@@ -238,11 +278,7 @@ def open_end_words(ends, curves, size, dist, rounds=()):
         others = [(math.dist(p, q), g2, k2, s2, q) for g2, k2, s2, q in ends if g2 != gid and by_round[(g2, s2)][0] > rgap]
         d, g2, k2, s2, q = min(others) if others else (math.inf, None, None, None, None)
         if d <= gap:
-            key = tuple(sorted(((gid, pos), (g2, s2))))
-            if key not in pairs:
-                pairs.add(key)
-                near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: "
-                            "sketch_constrain coincident joins them")
+            pair(gid, kind, pos, p, d, g2, k2, s2, q)
             continue
         if any(dist(g, p) <= tol for g in curves if g != gid):
             continue  # on another curve: a branch, which branch_words says
@@ -272,13 +308,26 @@ def _names(items):
     return ", ".join(out)
 
 
-def branch_words(ends, curves, size, dist, rounds=()):
+def branch_words(ends, curves, size, dist, rounds=(), joins=()):
     """The todo words for each point where a wire branches: three or more
     edges meet there (an outline has two at each joint), as the ends of
     curves and the curves that pass through it. ends: [(gid, kind, pos,
     (x, y))], every end of the open curves; curves: {gid: kind}; size and
-    dist as open_end_words; rounds: the ids of the full circles."""
+    dist as open_end_words; rounds: the ids of the full circles; joins:
+    open_end_words' joined, the ends it says to join."""
     tol = 1e-6 * max(size, 1.0)
+
+    def joined(g, p, other):
+        # An end at p that the gap words join to an end of curve other: that
+        # curve passes through p only because its own end is a hair away
+        # (blind QA, 26 Nov: "a wire branches there" and "0.003 mm from the
+        # end of line 3: coincident joins them" for one joint). One point,
+        # one message: the gap words, whose fix is right.
+        for (a, pa), (b, pb) in joins:
+            if (a in g and b == other and math.dist(pa, p) <= tol) or (b in g and a == other and math.dist(pb, p) <= tol):
+                return True
+        return False
+
     spots = []
     for gid, kind, _pos, p in ends:
         for q, at_ in spots:
@@ -290,7 +339,7 @@ def branch_words(ends, curves, size, dist, rounds=()):
     words, round_ = [], False
     for p, at_ in spots:
         mine = {g for _k, g in at_}
-        through = [(curves[g], g) for g in curves if g not in mine and dist(g, p) <= tol]
+        through = [(curves[g], g) for g in curves if g not in mine and dist(g, p) <= tol and not joined(mine, p, g)]
         if len(at_) + 2 * len(through) < 3:
             continue
         who = _names(at_)
@@ -354,11 +403,11 @@ def _outline(sk):
     return curves, ends, rounds, size, dist
 
 
-def _branch_words(sk):
+def _branch_words(sk, joins=()):
     """branch_words for sketch sk; [] when it cannot be read."""
     try:
         curves, ends, rounds, size, dist = _outline(sk)
-        return branch_words(ends, curves, size, dist, rounds)
+        return branch_words(ends, curves, size, dist, rounds, joins)
     except Exception:  # noqa: BLE001 - no reading: the general todo stays
         return []
 
@@ -406,7 +455,7 @@ def _cross_words(sk, wires):
         return []
 
 
-def _open_end_words(sk, openv):
+def _open_end_words(sk, openv, joined=None):
     """open_end_words for sketch sk: its open ends (openv, the sketch's own
     x/y) matched to the curves they end, by id. [] when one is not matched."""
     ends = []
@@ -433,10 +482,33 @@ def _open_end_words(sk, openv):
         return sk.Geometry[i].toShape().distToShape(Part.Vertex(V(p[0], p[1], 0)))[0]
 
     rounds = [i for i in curves if _geo_kind(sk.Geometry[i]) == "Circle"]
-    return open_end_words(ends, curves, size, dist, rounds)
+    return open_end_words(ends, curves, size, dist, rounds, joined)
+
+
+def fresh(sk):
+    """Sketch sk's Shape (its wires) built again from its geometry and
+    constraints now. FreeCAD builds a sketch's Shape only when the sketch
+    recomputes; solve() moves the geometry and keeps the old Shape (blind
+    QA, 26 Nov: sketch_constrain gave the open ends of the call before).
+    A stand-in without recompute is left as it is. Not while a batch holds
+    the document's recompute (agentlink/hold.py: the held answer leaves the
+    wires out, and the build comes at the end). Never raises."""
+    try:
+        if getattr(getattr(sk, "Document", None), "RecomputesFrozen", False) is True:
+            return
+    except Exception:  # noqa: BLE001
+        pass
+    if callable(getattr(sk, "recompute", None)):
+        try:
+            sk.recompute()
+        except Exception:  # noqa: BLE001 - the solver's reading below says what is wrong
+            pass
 
 
 def state_of(sk):
+    # Every sketch tool's state comes from here: the Shape is built again
+    # first, so the wires and open ends are those of the sketch as it is now.
+    fresh(sk)
     code = sk.solve()
     conflicting = [i - 1 for i in (getattr(sk, "ConflictingConstraints", None) or [])]
     redundant = [i - 1 for i in (getattr(sk, "RedundantConstraints", None) or [])]
@@ -480,7 +552,9 @@ def state_of(sk):
         if conflicting or redundant or malformed or code != 0:
             why.append("fix the constraints named (sketch_edit deleteConstraints)")
         if openv or (wires and closed < len(wires)):
-            said = _branch_words(sk) + _open_end_words(sk, openv)
+            joins = []
+            gaps = _open_end_words(sk, openv, joins)
+            said = _branch_words(sk, joins) + gaps
             why += said or ["close the open wires: coincident constraints at the open vertices"]
         why += cross
         if not wires:
@@ -835,9 +909,98 @@ def con_keys(c, i):
     return c
 
 
+# The vertices each kind of sketch geometry has (FreeCAD's PointPos: 1 start,
+# 2 end, 3 centre). A kind not named here is not checked.
+VERTICES = {"Line": (1, 2), "Circle": (3,), "Ellipse": (3,), "Point": (1,), "BSplineCurve": (1, 2),
+            "Arc": (1, 2, 3), "ArcOfEllipse": (1, 2, 3), "ArcOfHyperbola": (1, 2, 3), "ArcOfParabola": (1, 2, 3)}
+VERTEX_WORDS = {1: "start point", 2: "end point", 3: "centre"}
+
+
+def vertex_words(sk, g, p):
+    """Why point [g, p] is not a point of geometry g, or None. FreeCAD takes
+    such a constraint, and then its solver reads it as malformed (blind QA,
+    26 Nov: a coincident on "the start of circle 0" came back as
+    over-constrained)."""
+    if p is None or not (0 <= g < len(sk.Geometry)):
+        return None
+    k = _geo_kind(sk.Geometry[g])
+    has = VERTICES.get(k)
+    if has is None or p in has:
+        return None
+    kind = k.lower()
+    name = f"{kind} {g}"
+    if has == (3,):
+        return (f"{name} has no start or end point; use its centre, [{g}, 3], or the {kind} itself, {g} "
+                f"(point_on_object, refs [[g, v], {g}], puts point v of curve g on the {kind})")
+    if has == (1,):
+        return f"{name} has only one vertex: [{g}, 1]"
+    pts = ", ".join("[%d, %d] its %s" % (g, v, VERTEX_WORDS[v]) for v in has)
+    return f"{name} has no {VERTEX_WORDS[p]} (vertex {p}); its points are {pts}"
+
+
+# Heuristic (blind QA, 26 Nov: coincident pairs that joined points about 170
+# mm apart in a 200 mm crank, and the outline folded over): a coincident
+# whose two points were farther apart than this share of the sketch's size
+# (NEAR_GAP's share: nearer is a gap to close) and whose solve moved a point
+# that far is named in the todo, so the shape is checked.
+FAR_JOIN = NEAR_GAP
+
+
+def far_joins(sk, ts):
+    """[(words of the two points, (x1, y1), (x2, y2), gap mm, limit mm)] for
+    each Coincident in constraint tuples ts whose points are now farther
+    apart than FAR_JOIN of the sketch's size; [] on any error."""
+    out = []
+    try:
+        try:
+            size = sk.Shape.BoundBox.DiagonalLength
+        except Exception:  # noqa: BLE001
+            size = 0.0
+        limit = max(FAR_JOIN * size, 1e-3)
+        for t in ts:
+            if t[0] != "Coincident" or len(t) < 5:
+                continue
+            a, b = sk.getPoint(t[1], t[2]), sk.getPoint(t[3], t[4])
+            d = math.dist((a.x, a.y), (b.x, b.y))
+            if d > limit:
+                out.append(((t[1], t[2], t[3], t[4]), (a.x, a.y), (b.x, b.y), d, limit))
+    except Exception:  # noqa: BLE001 - a reading only
+        return []
+    return out
+
+
+def far_join_words(st, sk, far):
+    """st (state_of's) with the todo words first for each far join whose
+    solve moved one of its points more than the limit: "coincident joined
+    the end of arc 0 (0.9, 20) and the start of line 3 (170.7, -12.5), 172
+    mm apart: the shape moved; check it". Never raises."""
+    words = []
+    try:
+        for (g1, p1, g2, p2), a, b, d, limit in far:
+            try:
+                na, nb = sk.getPoint(g1, p1), sk.getPoint(g2, p2)
+                moved = max(math.dist(a, (na.x, na.y)), math.dist(b, (nb.x, nb.y)))
+            except Exception:  # noqa: BLE001 - not read: said, as the join was far
+                moved = d
+            if moved <= limit:
+                continue
+            words.append(f"coincident joined {ref_words(sk, g1, p1)} {_at(a)} and {ref_words(sk, g2, p2)} {_at(b)}, "
+                         f"{geo.r3(d):g} mm apart: the shape moved; check it")
+    except Exception:  # noqa: BLE001
+        return st
+    if words:
+        st = dict(st)
+        st["todo"] = "; ".join(words + ([st["todo"]] if st.get("todo") else []))
+    return st
+
+
 def make_constraint(sk, c):
     t = str(c.get("type", "")).lower().replace("_", "").replace("-", "")
     refs = [_ref(r, f"refs[{i}]") for i, r in enumerate(c.get("refs") or [])]
+    for g, p in refs:
+        why = vertex_words(sk, g, p)
+        if why:
+            raise ToolError("invalid_input", f"({t}): {why}. Nothing was added.")
     val = c.get("value")
     pts = [r for r in refs if r[1] is not None]
     n = len(refs)
@@ -1085,7 +1248,7 @@ def tools(session):
     # What the tools' entries (agentlink/data/tools.json) call by name.
     helpers = {"doc": doc, "finish": lambda tool, read, recompute=True: picks.finish(s, tool, read, recompute=recompute),
                "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps), "unique": lambda label, *own: s.unique(label, *own),
-               "body": lambda ref: pc.pd_body(doc(), ref), "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b, s), "note_sketch": lambda sk: pc.note_made_sketch(s, sk), "status_words": pc.status_words, "body_of": pc.body_of,
+               "body": lambda ref: pc.pd_body(doc(), ref), "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b, s), "note_sketch": lambda sk, asked=None: pc.note_made_sketch(s, sk, asked), "status_words": pc.status_words, "body_of": pc.body_of,
                "body_reading": pc.body_reading, "broken": pc.newly_broken, "plane_ref": lambda *x: pc.plane_ref(*x), "face_pick": lambda *x: pc.face_pick(*x), "face_pick_said": lambda *x: pc.face_pick_said(*x), "support_prop": pc.support_prop, "plane_mode": pc.plane_mode,
                "version": lambda: ".".join(FreeCAD.Version()[:3]),
                # FreeCAD's own
@@ -1093,7 +1256,7 @@ def tools(session):
                "line": lambda a, b: Part.LineSegment(a, b), "wire": lambda edges: Part.Wire(edges), "sort_edges": lambda edges: Part.sortEdges(edges),
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
-               "frame": frame, "state_of": state_of, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
+               "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}

@@ -159,7 +159,7 @@ class TheRule(unittest.TestCase):
     def test_sketch_new_records_and_the_families_pass_the_session(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             steps = json.load(f)["entries"]["sketch_new"]["steps"]
-        self.assertEqual(steps[-1], {"do": "=note_sketch(sk)"})
+        self.assertEqual(steps[-1], {"do": "=note_sketch(sk, a.get('name'))"})
         for fam in ("sketch", "sketch_more", "feature", "feature_more"):
             with open(os.path.join(ROOT, "agentlink", "families", fam + ".py"), encoding="utf-8") as f:
                 self.assertIn("pc.sketch_of(doc(), ref, b, s)" if fam != "sketch_more" else "pc.sketch_of(doc(), ref, None, s)", f.read(), fam)

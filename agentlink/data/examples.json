@@ -207,7 +207,8 @@
    "forms": {
     "edges": {
      "type": "line",
-     "axis": "z"
+     "axis": "z",
+     "outside": true
     }
    },
    "arguments": {

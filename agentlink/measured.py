@@ -24,8 +24,9 @@ colour, a setting) does not hold the save.
 
 A measure: body_check, measure or measure_mass of a body (or a PartDesign
 feature) alone, object_get of a body's Shape (or all its properties),
-session_state, get of a body's volume, area, size, mass … or Shape, and a
-fast block's own end reading. Other reads (a sketch, an edge, a distance
+session_state, get of a body's volume, area, size, mass … or Shape, a
+fast block's own end reading, and a feature's own answer (its body's
+volume, box and solids after the recompute: answered). Other reads (a sketch, an edge, a distance
 between two things, a property) are not.
 
 AGENTLINK_MEASURE_GATE=0 (or off, false, no) turns the gate off.
@@ -166,6 +167,25 @@ def measured(session, rec, sigs):
     rec["sigs"] = dict(sigs or {})
 
 
+def answered(session, rec, sigs_now, labels):
+    """A changing call whose own answer read these bodies (a feature's
+    answer: volume, box, solids, from the recomputed body; 26 Nov QA: a
+    save right after a fillet's answer was refused). Their numbers now
+    become the ones compared with. The document counts as measured only
+    when no other body moved since its last measure: a body this answer did
+    not read still holds the save."""
+    if rec.get("sigs") is None:
+        return
+    sigs = dict(rec["sigs"])
+    now = dict(sigs_now or {})
+    for label in labels:
+        if label in now:
+            sigs[label] = now[label]
+    rec["sigs"] = sigs
+    if not differs(sigs, now):
+        rec["measured"] = _seq(session)
+
+
 def differs(before, now):
     """The body labels whose numbers are not as they were: changed, made or
     removed. before None (not read): every body now."""
@@ -195,5 +215,6 @@ def gate_words(rec, label, now, mine):
     names = ", ".join(bodies[:8]) + (f" and {len(bodies) - 8} more" if len(bodies) > 8 else "")
     return (f"{label} changed after it was last measured (step {rec.get('step', '?')}): read its geometry first, then save. "
             f"Changed: {names}. "
-            f"body_check {{ body: \"{first}\" }} or get {{ what: \"{first}.volume\" }} measures it; the answer gives volume, box and solids. "
+            f"body_check {{ body: \"{first}\" }} measures it: its answer gives volume, box and solids. "
+            f"get {{ what: \"{first}.volume\" }} (or .size, .area) measures it too. "
             "Nothing was saved.")

@@ -6883,7 +6883,7 @@
   },
   "pd_hole": {
    "group": "feature",
-   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. Put the sketch on the face that the holes go into. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: default true, the tap-drill size; cosmetic unless modelThread. threaded: false makes a clearance hole (fit close|normal|loose). depth: mm | \"through\". drillPoint: flat|angled. cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes, diameter, thread, cut. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a hole with its thread as data (threaded, no modelThread) and the thread on the drawing. Model a thread only for a printed thread. modelThread makes nothing when reversed or not through.",
+   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. Put the sketch on the face that the holes go into. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: default true, the tap-drill size; cosmetic unless modelThread. threaded: false makes a clearance hole (fit close|normal|loose). depth: mm | \"through\". drillPoint: flat|angled. cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes (the number it drilled), diameter, thread, cut. For two or more circles, profiles names each circle that cut nothing. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a hole with its thread as data (threaded, no modelThread) and the thread on the drawing. Model a thread only for a printed thread. modelThread makes nothing when reversed or not through.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7027,7 +7027,7 @@
     "via": "settle",
     "with": ["=b", "=f", "pd_hole", "=before", "cut", "The hole goes against the sketch's normal: put the sketch on the face it enters, or reversed: true."],
     "then": [
-     {"put": {"holes": "=spots", "diameter": "=num_json(f.Diameter)"}},
+     {"put": {"holes": "=holes_cut(spots, out)", "diameter": "=num_json(f.Diameter)"}},
      {"put": {"thread": "=f.ThreadSize + (' (cosmetic)' if f.Threaded and not get(f, 'ModelThread', False) else '' if f.Threaded else ' clearance')"}, "when": "=thread"},
      {"put": {"cut": "={'type': f.HoleCutType, 'diameter': num_json(f.HoleCutDiameter), 'depth': num_json(f.HoleCutDepth)}"}, "when": "=cut"}
     ]
@@ -7035,7 +7035,7 @@
   },
   "pd_fillet": {
    "group": "feature",
-   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. { type: \"line\", axis: \"z\", outside: true } is only the outside vertical corners. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An outside (convex) edge loses material; an inside (concave) edge gets material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
+   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\", outside: true } is the outside vertical corners. Without outside, { type: \"line\", axis: \"z\" } is every vertical edge, inside corners too. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An outside (convex) edge loses material; an inside (concave) edge gets material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8231,7 +8231,7 @@
     },
     {"refuse": {"fmt": "The sketch would not attach to {what}. Nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset. FreeCAD said: {status_words(sk)}"}, "code": "failed", "when": "=not sk.isValid()"},
     {"let": {"ext": "=body_extent(b, sk)"}},
-    {"do": "=note_sketch(sk)"}
+    {"do": "=note_sketch(sk, a.get('name'))"}
    ],
    "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=on_words(what, sk.Placement) if 'face' in a else what", "face": {"when": "=pick", "value": "=pick"}, "picked": {"when": "=picked", "value": "=picked"}, "offset": {"when": "=off", "value": "=off"}, "axes": "=axes(sk.Placement)", "frame": "=frame(sk.Placement)", "bodyExtent": {"when": "=ext", "value": "=ext"}, "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
   },
@@ -8534,7 +8534,7 @@
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)", "cs": "=a.constraints"}},
     {"refuse": "constraints: a list, [{ type: \"distance\", refs: [[0, 1], [0, 2]], value: 30, name: \"len\" }, …] — the types and their refs are in sketch_constrain's description.", "when": "=not is_list(cs) or not cs"},
-    {"let": {"before": "=len(sk.Constraints)", "ng": "=len(sk.Geometry)", "ne": "=ext_count(sk)", "added": "=[]"}},
+    {"let": {"before": "=len(sk.Constraints)", "ng": "=len(sk.Geometry)", "ne": "=ext_count(sk)", "added": "=[]", "far": "=[]"}},
     {
      "try": [
       {
@@ -8561,6 +8561,7 @@
           {"refuse": {"fmt": "constraints[{i}] {error.message}"}}
          ]
         },
+        {"let": {"far": "=far + far_joins(sk, ts)"}},
         {
          "each": "t",
          "in": "=ts",
@@ -8585,6 +8586,9 @@
       {
        "when": "=bad or st['solver'] != 'solved'",
        "then": [
+        {"let": {"bent": "=[x for x in st.get('malformed', []) if x >= before]"}},
+        {"let": {"bentw": "='; '.join([con_words(sk, i) for i in bent])"}, "when": "=bent"},
+        {"refuse": {"fmt": "FreeCAD's solver cannot use these new constraints of {sk.Label} (malformed constraints): {bentw}. Nothing was added. Check each ref's geometry kind and vertex against sketch_state: a line has vertices 1 and 2, a circle only 3, an arc 1, 2 and 3."}, "code": "invalid_input", "when": "=bent"},
         {"let": {"who": "=clashing(sk)"}},
         {
          "when": "=who",
@@ -8597,7 +8601,8 @@
         {"let": {"news": "=[con_words(sk, i) for i in (bad or added)]", "olds": "=[con_words(sk, i) for i in clash] or '—'"}},
         {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}, against existing {olds}. Nothing was added — drop one, or sketch_edit deleteConstraints the old one first."}, "code": "invalid_state"}
        ]
-      }
+      },
+      {"let": {"st": "=far_join_words(st, sk, far)"}, "when": "=far"}
      ],
      "reraise": true,
      "except": [
@@ -8608,7 +8613,8 @@
         {"do": "=sk.delConstraint(ci)"}
        ]
       },
-      {"do": "=sk.solve()"}
+      {"do": "=sk.solve()"},
+      {"do": "=fresh(sk)"}
      ]
     }
    ],

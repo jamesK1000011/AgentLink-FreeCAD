@@ -483,7 +483,7 @@ def tools(session):
                "edge_words": pc.edge_words, "plane_ref": lambda *x: pc.plane_ref(*x), "axis_ref": lambda *x: pc.axis_ref(*x), "support_prop": pc.support_prop,
                "ref_snapshot": pc.ref_snapshot, "repair_refs": pc.repair_refs, "broken": pc.newly_broken,
                # the family's
-               "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots,
+               "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots, "holes_cut": pc.holes_cut,
                "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body,
                "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec, "path_closed": path_closed, "closed_tube_words": closed_tube_words,
                "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options}

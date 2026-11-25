@@ -229,7 +229,7 @@ def _span_words(idx):
     return ", ".join(out)
 
 
-def ran_before(server, calls, k):
+def ran_before(server, calls, k, steps=None):
     """The indices (in calls) from k on of the calls that ran before and are
     kept: the same tool with the same arguments as a call that went through
     in the last batch (its kept calls) or as a changing call on the repeat
@@ -240,21 +240,30 @@ def ran_before(server, calls, k):
     send)."""
     from .protocol import _still_there, canonical_call
 
-    kept = list(getattr(server, "_batch_kept", None) or [])
+    kept = [(x[0], x[1], x[2] if len(x) > 2 else None) for x in getattr(server, "_batch_kept", None) or []]
     for rec in getattr(server, "_ran", None) or []:
         if rec.get("made") and _still_there(rec["made"]):
-            kept.append((rec["name"], rec["call"]))
+            kept.append((rec["name"], rec["call"], rec.get("step")))
     out, used = [], set()
     for j in range(k, len(calls)):
         c = calls[j] if isinstance(calls[j], dict) else {}
         if c.get("bad") is not None:
             continue
         key = (plain_name(server, c.get("tool")), canonical_call(c.get("arguments")))
-        hit = next((m for m, x in enumerate(kept) if m not in used and x == key), None)
+        hit = next((m for m, x in enumerate(kept) if m not in used and x[:2] == key), None)
         if hit is not None:
             used.add(hit)
             out.append(j)
+            if steps is not None and isinstance(kept[hit][2], int):
+                steps.append(kept[hit][2])
     return out
+
+
+def _row_step(r):
+    """The history step a batch row's answer gives, or None."""
+    res = r.get("result") if isinstance(r, dict) else None
+    st = res.get("step") if isinstance(res, dict) else None
+    return st if isinstance(st, int) and not isinstance(st, bool) else None
 
 
 _STATUS_WORDS = {"not_started": "it changed nothing", "rolled_back": "its own change was taken back",
@@ -283,7 +292,11 @@ def _refused_note(ref, rows, calls, first, k, out, mine):
     if before:
         # Refused as a repeat: the calls of this list that ran before and
         # are kept are named, and the next list leaves them out.
-        parts.append(f"Calls {_span_words([first + j for j in before])} ({_tool_names(calls, before)}) ran in your last batch and are kept: do not send them again.")
+        # "before", not "in your last batch" (26 Nov QA: they ran in batches
+        # before that one): with their history steps where they are known.
+        when = sorted(set(mine.get("ranBeforeSteps") or ()))
+        at = f" (step{'s' if len(when) > 1 else ''} {_span_words(when)})" if when else ""
+        parts.append(f"Calls {_span_words([first + j for j in before])} ({_tool_names(calls, before)}) ran before{at} and are kept: do not send them again.")
         resend = [j for j in resend if j not in before]
     if mine.get("file"):
         parts.append(f"Next: fix call {first + k} in the file, then batch {{ path: \"{mine['file']}\", start: {first + k} }}.")
@@ -495,6 +508,7 @@ class Session:
             undo0 = changes.undo_names(start)
             watch = changes.open()
             self.before_change()
+            self.__dict__["_answered"] = []  # the bodies this call's own answer reads (note_answered)
             self.doc.openTransaction(tool.name)
         try:
             out = fn()
@@ -526,6 +540,7 @@ class Session:
         if self.doc is start and made:
             self.tx += 1
             self.note_change()
+            self.note_answered()
         try:
             self.agent_docs.add(self.doc.Name)
         except Exception:
@@ -617,6 +632,19 @@ class Session:
                 from . import measured
 
                 measured.measured(self, measured.record(self), self.measure_sigs())
+        except Exception:
+            pass
+
+    def note_answered(self):
+        """After a change: the bodies whose reading the call's own answer
+        gave (a feature's answer, pd_common.settle) count as measured
+        (measured.answered)."""
+        try:
+            labels = self.__dict__.pop("_answered", None) or []
+            if labels and self._measure_on():
+                from . import measured
+
+                measured.answered(self, measured.record(self), self.measure_sigs(), labels)
         except Exception:
             pass
 
@@ -2665,7 +2693,17 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         calls, inner = _flatten_batches(a.get("calls"))
         if inner:
             a = {**a, "calls": calls}
-        out = _batch_core(a)
+        # The names sketch_new gave in place of a taken one, for the later
+        # calls of this batch (pd_common.sketch_of; 26 Nov QA: "Upright"
+        # became "Upright 2", and the next calls drew into the old Upright).
+        outer = "_batch_aliases" not in s.__dict__
+        if outer:
+            s.__dict__["_batch_aliases"] = {}
+        try:
+            out = _batch_core(a)
+        finally:
+            if outer:
+                s.__dict__.pop("_batch_aliases", None)
         if inner and isinstance(out, dict):
             out["flattened"] = (f"{inner} batch{'es' if inner > 1 else ''} inside the calls ran as part of this one, in order, "
                                 "with this batch's rollback and budget (theirs are not read); calls count from 0 through the whole list.")
@@ -3074,7 +3112,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 from .protocol import canonical_call
 
                 kept = (getattr(server, "_batch_kept", None) or []) + [
-                    (plain_name(server, calls[j].get("tool")), canonical_call(calls[j].get("arguments")))
+                    (plain_name(server, calls[j].get("tool")), canonical_call(calls[j].get("arguments")), _row_step(r))
                     for j, r in enumerate(rows) if j < n and isinstance(r, dict) and r.get("ok") and not r.get("takenBack")]
                 server._batch_kept = kept[-BATCH_KEPT:]
             if not stop:
@@ -3094,7 +3132,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # Refused as a repeat: which calls of this list ran before,
                 # read before a rollback clears the record.
                 try:
-                    mine["ranBefore"] = ran_before(server, calls, k)
+                    mine["ranBeforeSteps"] = []
+                    mine["ranBefore"] = ran_before(server, calls, k, mine["ranBeforeSteps"])
                 except Exception:  # noqa: BLE001 - words only
                     pass
             if hold is not None and hold.active:
