@@ -7072,7 +7072,7 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_fillet", "=before", "changed", "A radius larger than a face beside the edge fails, and edges that are already smooth (tangent) cannot be rounded: try smaller, or fewer edges."],
+    "with": ["=b", "=f", "pd_fillet", "=before", "changed", "='A radius larger than a face beside the edge fails, and edges that are already smooth (tangent) cannot be rounded: try smaller, or fewer edges. The edges it took: ' + '; '.join(seen[:8]) + '.'"],
     "then": [
      {"put": {"on": "=seen"}}
     ]
@@ -7126,7 +7126,7 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_chamfer", "=before", "changed", "A chamfer wider than a face beside the edge fails: try smaller."],
+    "with": ["=b", "=f", "pd_chamfer", "=before", "changed", "='A chamfer wider than a face beside the edge fails: try smaller. The edges it took: ' + '; '.join(seen[:8]) + '.'"],
     "then": [
      {"put": {"on": "=seen"}}
     ]

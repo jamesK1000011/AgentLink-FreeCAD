@@ -2267,6 +2267,13 @@ def _try_next(server, name, keys, n, card):
     except Exception:  # noqa: BLE001
         example = None
     field = _field(keys)
+    # An example whose values are all "<name>" holes shows no form to copy
+    # (QA 1126k: "copy the card's example" for pd_fillet's "<edges>").
+    hole = lambda v: isinstance(v, str) and v.startswith("<") and v.endswith(">")  # noqa: E731
+    if example is not None:
+        given = [v for v in (example.get("arguments") or {}).values()]
+        if not given or all(hole(v) for v in given) or (field and hole((example.get("arguments") or {}).get(field))):
+            example = None
     if example is not None:
         val = (example.get("arguments") or {}).get(field) if field else None
         if val is not None:

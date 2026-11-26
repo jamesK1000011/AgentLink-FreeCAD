@@ -119,6 +119,17 @@ class Fixes(unittest.TestCase):
 ''')
         self.assertEqual(got, "Body Part (internal name Body), hidden")
 
+    def test_repeat_words_skip_a_placeholder_example(self):
+        got = in_a_process(SETUP + '''
+    import types
+    from agentlink import protocol, examples
+    examples.for_tool = lambda name, a: {"example": {"tool": name, "arguments": {"body": "B", "edges": "<edges>", "radius": "<radius>"}}}
+    examples.load = lambda: {"pd_fillet": {}}
+    print(json.dumps(protocol._try_next(types.SimpleNamespace(), "pd_fillet", ["input.edges"], 3, "tool_find { tool: \\"pd_fillet\\" }")))
+''')
+        self.assertNotIn("copy the card's example", got)
+        self.assertIn("read the form of edges on the card", got, got)
+
     def test_cards_say_it(self):
         e = entries()
         self.assertIn("solvedAway: the radii and centres that the solve changed", e["sketch_constrain"]["description"])

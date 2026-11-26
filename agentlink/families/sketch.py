@@ -1058,9 +1058,15 @@ def item_over(sk, ids):
             inv = pl.inverse().toMatrix()
             under, own = geo.bound_box(com.transformed(inv)), geo.bound_box(Part.Face(wire))
             span = lambda b: f"x {_mm(b.XMin)}..{_mm(b.XMax)}, y {_mm(b.YMin)}..{_mm(b.YMax)}"  # noqa: E731
+            # Which side of the sketch holds it (QA 1126k: circles "over the
+            # body" with all of it against the normal, and the pocket cut
+            # the other way). z is the sketch's own: along its normal.
+            tol = 1e-6
+            side = ("along the normal" if under.ZMin >= -tol else "against the normal" if under.ZMax <= tol else "on both sides of the sketch")
+            depth = f"{side} (z {_mm(under.ZMin)}..{_mm(under.ZMax)} from the sketch)"
             if span(under) == span(own):
-                return f"over the body: material under {span(own)}, the same box as the item's"
-            return f"partly over the body: material under {span(under)} of the item's {span(own)}"
+                return f"over the body: material under {span(own)}, the same box as the item's, {depth}"
+            return f"partly over the body: material under {span(under)} of the item's {span(own)}, {depth}"
         return (f"off the body: no material of {body.Label} under it on either side of the sketch "
                 f"(the body: {pc.span_text(bb)})")
     except Exception:  # noqa: BLE001 - a reading only

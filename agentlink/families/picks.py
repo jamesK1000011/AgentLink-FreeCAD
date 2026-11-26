@@ -529,6 +529,18 @@ def made_record(o):
     return get(MADE_PROP), get(HID_PROP), labels
 
 
+def remove_whole(doc, o):
+    """Remove o, and when it is a group (a PartDesign Body) the objects it
+    holds too. QA 1126k: part_boolean removed a Body, and its sketch and
+    pad were left in the document with no body."""
+    try:
+        if hasattr(o, "removeObjectsFromDocument"):
+            o.removeObjectsFromDocument()
+    except Exception:  # noqa: BLE001 - the object itself still goes
+        pass
+    doc.removeObject(o.Name)
+
+
 def bake(session, base, shape, name=None, consumed=(), keep=False):
     """Put a modelling result in the document as a plain shape: into the base
     when it is one (a Part::Feature) and no new name is asked, else as a new
@@ -567,7 +579,7 @@ def bake(session, base, shape, name=None, consumed=(), keep=False):
                     o.Visibility = False
                     hid.append(o)
             else:
-                doc.removeObject(o.Name)
+                remove_whole(doc, o)
         doc.recompute()
         # The holder and what FreeCAD made with the Body for it (its
         # FeatureBase "BaseFeature", its Origin): object_delete of the
@@ -595,7 +607,7 @@ def bake(session, base, shape, name=None, consumed=(), keep=False):
                 o.Visibility = False
                 hid.append(o)
         else:
-            doc.removeObject(o.Name)
+            remove_whole(doc, o)
     doc.recompute()
     if out is not base:
         relabelled = {base.Name: base.Label[:-len(" (input)")]} if (name is None and base is not None and base.Label.endswith(" (input)") and base in hid) else {}
