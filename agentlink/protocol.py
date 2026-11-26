@@ -2087,7 +2087,8 @@ def example_words(tool, code, message):
     # A list of items of kinds (sketch_add items): an example of another kind
     # than the one the error is about misleads (QA 1126e: a rounded_rectangle
     # radius refusal showed an arc).
-    about = re.match(r"(?:[\w.]+\[\d+\]: )?([a-z][a-z0-9_]*)\.\w", str(message or ""))
+    about = (re.match(r"(?:[\w.]+\[\d+\]: )?([a-z][a-z0-9_]*)\.\w", str(message or ""))
+             or re.search(r'\bkind "([^"]+)"', str(message or "")))
     if about and isinstance(val, list) and val and all(isinstance(x, dict) and "kind" in x for x in val):
         if about.group(1) not in {x["kind"] for x in val}:
             return ""

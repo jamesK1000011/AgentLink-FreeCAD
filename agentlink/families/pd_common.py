@@ -1395,9 +1395,10 @@ def took_from(feat, body, reg, tol=1e-6):
         group = list(getattr(body, "Group", None) or [])
         before = group[:group.index(feat)] if feat in group else group
         for f in before:
-            if not (hasattr(f, "isDerivedFrom") and f.isDerivedFrom("PartDesign::FeatureAddSub")):
-                continue
-            if str(getattr(f, "AddSubType", "")) != "Additive":
+            # Additive by its type (FreeCAD 1.1 keeps AddSubType in C++ only:
+            # live, 26 Nov, no such property on a Pad).
+            t = str(getattr(f, "TypeId", ""))
+            if not (t in ("PartDesign::Pad", "PartDesign::Revolution") or t.startswith("PartDesign::Additive")):
                 continue
             sh = getattr(f, "AddSubShape", None)
             if sh is None or sh.isNull():

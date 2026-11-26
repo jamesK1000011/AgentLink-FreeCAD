@@ -25,6 +25,12 @@ class ExampleOfTheRightKind(unittest.TestCase):
                                      "items[0]: rounded_rectangle.radius: over 0 and under half the short side (27.0 mm).")
         self.assertEqual(got, "")
 
+    def test_unknown_kind_gives_no_example(self):
+        from agentlink import protocol
+
+        got = protocol.example_words(self.tool(), "invalid_input", 'items[0]: kind "fillet" is not a sketch shape: pd_fillet makes it on the body.')
+        self.assertEqual(got, "")
+
     def test_same_kind_keeps_the_example(self):
         from agentlink import protocol
 
@@ -111,13 +117,11 @@ class TookFrom(unittest.TestCase):
                     return type("C", (), {"Volume": min(self.v, other.v) if other.v != 9 else 0})()
 
             class F:
-                def __init__(self, label, kind, v, add="Additive"):
-                    self.Label, self.kind, self.AddSubType, self.AddSubShape = label, kind, add, Sh(v)
-                def isDerivedFrom(self, t):
-                    return self.kind == "addsub"
+                def __init__(self, label, t, v):
+                    self.Label, self.TypeId, self.AddSubShape = label, t, Sh(v)
 
-            pad, pad2, sk, other = F("Pad", "addsub", 150), F("Pad 2", "addsub", 46), F("Sketch", "sketch", 1), F("Pad 3", "addsub", 9)
-            pocket = F("Pocket", "addsub", 0, "Subtractive")
+            pad, pad2, sk, other = F("Pad", "PartDesign::Pad", 150), F("Pad 2", "PartDesign::AdditiveBox", 46), F("Sketch", "Sketcher::SketchObject", 1), F("Pad 3", "PartDesign::Pad", 9)
+            pocket = F("Pocket", "PartDesign::Pocket", 0)
             body = type("B", (), {"Group": [sk, pad, pad2, other, pocket], "Placement": Pl()})()
             print(json.dumps(pc.took_from(pocket, body, Sh(196))))
         ''')
