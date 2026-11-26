@@ -8197,7 +8197,7 @@
    "runner": "steps",
    "steps": [
     {"let": {"b": "=body(a.body)"}},
-    {"refuse": "No plane or face was given. Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face ({ side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body's solid).", "when": "=not ('plane' in a or 'face' in a)"},
+    {"refuse": "No plane or face was given. Give plane (XY, XZ, YZ, a datum plane's name or a face's name as shape_query gives it) or face ({ side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body's solid). +z is the top, -z the bottom.", "when": "=not ('plane' in a or 'face' in a)"},
     {"refuse": "=both_given(a.plane, a.face)", "when": "=('plane' in a) and ('face' in a)"},
     {"let": {"pick, picked": "=face_pick_said(b, a.face) if 'face' in a else (None, None)"}},
     {"let": {"label": "=unique(a.name or 'Sketch')", "sk": "=b.newObject('Sketcher::SketchObject', 'Sketch')"}},
