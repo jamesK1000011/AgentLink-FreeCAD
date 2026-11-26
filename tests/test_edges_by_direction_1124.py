@@ -60,7 +60,7 @@ class Cards(unittest.TestCase):
 
     def test_pocket_leads_with_where_the_cut_goes(self):
         d = self.e["pd_pocket"]["description"]
-        fact = "The pocket starts on its sketch's plane and goes into the body, against the sketch's normal."
+        fact = "The pocket starts on its sketch's plane and cuts against the sketch's normal, whichever side the body is on."
         self.assertTrue(d.startswith("Pocket a closed sketch out of the body. " + fact), d)
         self.assertIn("To cut from below, sketch on the bottom face.", d)
         for later in ("sides:", "taper:", "extent:"):

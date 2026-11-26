@@ -410,8 +410,8 @@ class Pieces(unittest.TestCase):
     pc._lids = lambda reg, skin, diag: ([], [(2, -1, -5.0)])
     print(json.dumps([pc.pieces_sentence([a, b], None, 60.0), pc.pieces_sentence([a] * 6, None, 60.0)]))
 ''')
-        self.assertEqual(got[0], "2 separate cuts: x -17.5..-12.5, y -2.5..2.5, z -5..0: the cut opens on -z (z -5) and goes 5 mm deep; "
-                                 "x 12.5..17.5, y -2.5..2.5, z -5..0: the cut opens on -z (z -5) and goes 5 mm deep.")
+        self.assertEqual(got[0], "2 separate cuts: x -17.5..-12.5, y -2.5..2.5, z -5..0: the cut opens on -z (the bottom, z -5) and goes 5 mm deep; "
+                                 "x 12.5..17.5, y -2.5..2.5, z -5..0: the cut opens on -z (the bottom, z -5) and goes 5 mm deep.")
         self.assertTrue(got[1].startswith("6 separate cuts: "))
         self.assertTrue(got[1].endswith("; and 2 more."), got[1])
 

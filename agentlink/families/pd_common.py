@@ -1608,7 +1608,10 @@ def removed_sentence(sides, reg):
         signs.setdefault(ax, {})[sg] = at
     through = [ax for ax in sorted(signs) if len(signs[ax]) == 2]
     ends = [(ax, sg, at) for ax in sorted(signs) if ax not in through for sg, at in sorted(signs[ax].items(), reverse=True)]
-    deep = [(f"{'+' if sg > 0 else '-'}{'xyz'[ax]} ({'xyz'[ax]} {_g(at)})", _g(reg[2 * ax + 1] - reg[2 * ax])) for ax, sg, at in ends]
+    # +z and -z with FreeCAD's own names, Top and Bottom (QA 1126j: a model
+    # took +z for the bottom).
+    face = {(2, 1): "the top, ", (2, -1): "the bottom, "}
+    deep = [(f"{'+' if sg > 0 else '-'}{'xyz'[ax]} ({face.get((ax, sg), '')}{'xyz'[ax]} {_g(at)})", _g(reg[2 * ax + 1] - reg[2 * ax])) for ax, sg, at in ends]
     parts = []
     if through:
         parts.append("goes all the way through along " + _and(["xyz"[ax] for ax in through]))

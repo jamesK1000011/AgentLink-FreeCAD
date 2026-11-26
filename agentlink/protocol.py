@@ -1160,6 +1160,8 @@ class Server:
                     except Exception:
                         pass
                 self._oriented = False
+                self._read_as_said = set()  # nor a readAs given, nor a card read
+                self._cards_read = set()
                 self._ran = []  # a new conversation: no call of it ran yet (again_before)
                 self._batch_kept = []  # nor a batch (tools.ran_before)
                 now = getattr(self, "instructions_now", None)
@@ -1187,6 +1189,8 @@ class Server:
                 approvals.note_client(client, ((msg.get("params") or {}).get("clientInfo") or {}))
                 # A new conversation on the window link: its first answer orients again.
                 self._oriented = False
+                self._read_as_said = set()
+                self._cards_read = set()
                 result = {}
             elif method == "tools/list":
                 from . import staticbase
@@ -1659,7 +1663,15 @@ class Server:
             return self.refusal("failed", failed_words(name, e), _test_trace(), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
         if read_as and isinstance(out, dict):
             # Fields given by another common name (FIELD_ALIASES): what was read.
-            out["readAs"] = read_as_words(read_as)
+            # The same words for the same tool are given once a conversation,
+            # then named in saidBefore (QA 1126i: in 9 of 10 answers of a run).
+            words = read_as_words(read_as)
+            said = self.__dict__.setdefault("_read_as_said", set())
+            if (name, words) in said:
+                out["saidBefore"] = sorted(set(out.get("saidBefore") or []) | {"readAs"})
+            else:
+                said.add((name, words))
+                out["readAs"] = words
         if isinstance(out, dict) and not self._oriented and getattr(self.session, "batch_now", None) is None:
             # The first answer of a conversation says where the agent is,
             # once (a session_state is that read itself).
@@ -2118,10 +2130,12 @@ def note_cards(server, out):
         out = out or {}
         # Cards come under tools, cards or results, by how tool_find was asked
         # (QA 1126i: a card given with words was later "not read").
-        hits = list(out.get("tools") or []) + list(out.get("cards") or [])
+        def of(d):
+            return list(d.get("tools") or []) + list(d.get("cards") or []) + ([d["card"]] if isinstance(d.get("card"), dict) else [])
+        hits = of(out)
         for r in out.get("results") or []:
             if isinstance(r, dict):
-                hits += list(r.get("tools") or []) + list(r.get("cards") or [])
+                hits += of(r)
         for h in hits:
             if isinstance(h, dict) and h.get("tool") and h.get("description"):
                 got.add(h["tool"])

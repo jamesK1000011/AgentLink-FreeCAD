@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from test_hubfix2 import in_a_process  # noqa: E402
-from test_qa_sketch_1124 import SETUP, entries  # noqa: E402
+from test_qa_sketch_1124 import SERVER, SETUP, entries  # noqa: E402
 
 
 class Fixes(unittest.TestCase):
@@ -60,6 +60,33 @@ class Fixes(unittest.TestCase):
     print(json.dumps(sketch.solved_away(sk, before)))
 ''')
         self.assertEqual(got, ["arc 1: radius 12.5 → 12.465"])
+
+    def test_card_under_results_card(self):
+        got = in_a_process(SETUP + '''
+    import types
+    from agentlink import protocol
+    srv = types.SimpleNamespace()
+    protocol.note_cards(srv, {"results": [{"find": "x", "tools": [], "card": {"tool": "pd_fillet", "description": "z"}}]})
+    print(json.dumps(sorted(srv._cards_read)))
+''')
+        self.assertEqual(got, ["pd_fillet"])
+
+    def test_read_as_once_then_said_before(self):
+        got = in_a_process(SERVER + '''
+    a = call("probe_make", {"arguments": {"name": "A"}})[1]
+    b = call("probe_make", {"arguments": {"name": "B"}})[1]
+    print(json.dumps([a.get("readAs"), b.get("readAs"), b.get("saidBefore")]))
+''')
+        self.assertIn("inside arguments", got[0])
+        self.assertIsNone(got[1])
+        self.assertIn("readAs", got[2])
+
+    def test_tool_find_empty_fields_are_left_out(self):
+        got = in_a_process(SERVER + '''
+    r = call("tool_find", {"tool": "", "queries": [], "limit": 0, "group": "", "words": "pad"})
+    print(json.dumps([r[0], sorted(r[1])]))
+''')
+        self.assertFalse(got[0], got)
 
     def test_cards_say_it(self):
         e = entries()

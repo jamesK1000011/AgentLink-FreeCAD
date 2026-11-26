@@ -1035,9 +1035,17 @@ def item_over(sk, ids):
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
         bb = geo.bound_box(body.Shape)
         d = bb.DiagonalLength + face.BoundBox.DiagonalLength + 1.0
-        v = face.translated(n * -d).extrude(n * (2 * d)).common(body.Shape).Volume
-        if v > 1e-6:
-            return "over the body"
+        com = face.translated(n * -d).extrude(n * (2 * d)).common(body.Shape)
+        if com.Volume > 1e-6:
+            # Where, in the sketch's own x/y (QA 1126j: "over the body" when
+            # a quarter of the outline was over it). Exact boxes of the
+            # material under it and of the item itself.
+            inv = pl.inverse().toMatrix()
+            under, own = geo.bound_box(com.transformed(inv)), geo.bound_box(Part.Face(wire))
+            span = lambda b: f"x {_mm(b.XMin)}..{_mm(b.XMax)}, y {_mm(b.YMin)}..{_mm(b.YMax)}"  # noqa: E731
+            if span(under) == span(own):
+                return f"over the body: material under {span(own)}, the same box as the item's"
+            return f"partly over the body: material under {span(under)} of the item's {span(own)}"
         return (f"off the body: no material of {body.Label} under it on either side of the sketch "
                 f"(the body: {pc.span_text(bb)})")
     except Exception:  # noqa: BLE001 - a reading only

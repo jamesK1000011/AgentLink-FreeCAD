@@ -3536,6 +3536,9 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         return run
 
     def tool_find(a):
+        # An empty value asks for nothing: "", [], {}, 0 and false count as
+        # left out (QA 1126j: a client filled every field with its default).
+        a = {k: v for k, v in (a or {}).items() if not (v is None or v is False or v == 0 and not isinstance(v, bool) or v in ("", [], {}))}
         if a.get("listing"):
             # What the client is shown now: count, tokens, names; to: the whole listing as tools/list sends it.
             from . import staticbase
