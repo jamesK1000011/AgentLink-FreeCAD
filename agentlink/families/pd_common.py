@@ -1620,6 +1620,34 @@ def outside_text(label, prof, body, normal, tol=1e-6):
             ". Move the outline over the body (its position, not its direction).")
 
 
+def under_words(sk, body, n, pl=None):
+    """Whether any material of the body lies under the sketch's outline, on
+    either side of its plane: the outline swept through the whole body and
+    cut with its solid (exact, from the kernel). QA 1126f: an outline inside
+    the body's box but over no material got "check that the sketch
+    overlaps it" ten times. None when material is under it, or when it
+    cannot be told."""
+    try:
+        import Part
+
+        shape = sk.Shape.copy()
+        if pl is not None:
+            shape.Placement = pl  # the sketch in world coordinates, as the body's solid
+        wires = [w for w in shape.Wires if w.isClosed()]
+        if not wires:
+            return None
+        face = Part.Face(wires, "Part::FaceMakerBullseye")
+        bb = body.Shape.BoundBox
+        d = bb.DiagonalLength + face.BoundBox.DiagonalLength + 1.0
+        prism = face.translated(n * -d).extrude(n * (2 * d))
+        if prism.common(body.Shape).Volume > 1e-6:
+            return None
+        return (f" No material of {body.Label} lies under the outline of {sk.Label} ({span_text(face.BoundBox)}), on either side of the sketch: "
+                f"the body's box is {span_text(bb)}, but the body has no material at this spot. Move the outline onto the body's material, or check the body's shape.")
+    except Exception:  # noqa: BLE001 - advice only
+        return None
+
+
 def cut_side_words(feat, body):
     """Where a cut that cut nothing went, against where the body is: the
     sketch's normal, and the side of the sketch the body lies on (live,
@@ -1654,7 +1682,7 @@ def cut_side_words(feat, body):
         where = "on the side its normal points to" if side > 0 else "on the side opposite its normal"
         # A pocket goes against the normal, reversed along it.
         fix = (f" reversed: {'false' if rev else 'true'} sends the cut that way." if (side > 0) != rev else
-               " The cut went toward the body: check that the sketch overlaps it (its position, not its side).")
+               (under_words(sk, body, n, pl) or " The cut went toward the body: check that the sketch overlaps it (its position, not its side)."))
         return f"The sketch {sk.Label}'s normal is {normal}, and the body is {where}." + fix
     except Exception:  # noqa: BLE001 - advice only
         return ""

@@ -565,7 +565,7 @@ SKETCH_KIND_WORDS = {"spline": "bspline", "rect": "rectangle", "square": "rectan
 KIND_VALUE = {"from": [0, 0], "to": [40, 0], "center": [0, 0], "corner": [0, 0], "radius": 10, "size": [40, 20], "start": 0, "end": 90,
               "points": [[0, 0], [20, 10], [40, 0]], "sides": 6, "at": [0, 0], "major": 40, "minor": 20, "width": 4}
 KIND_VALUES = {"rounded_rectangle": {"radius": 4}, "slot": {"radius": 5}, "arc_slot": {"radius": 20}}
-KIND_OPTIONAL = {"rotation", "closed", "construction", "dims", "name", "interpolate", "degree"}
+KIND_OPTIONAL = {"rotation", "closed", "construction", "dims", "name", "interpolate", "degree", "radius2"}
 
 
 def sketch_kinds(server):
@@ -1864,6 +1864,26 @@ def _default_sketch(s, doc):
         return None
 
 
+def _given_names(args):
+    """The text values of a call's arguments (names and labels it gave),
+    two characters or more, at any depth."""
+    out = set()
+
+    def walk(v):
+        if isinstance(v, str):
+            if len(v) >= 2:
+                out.add(v)
+        elif isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+
+    walk(args)
+    return out
+
+
 def _named_sketch(s, doc, ref):
     """The sketch the name ref takes now: the batch's rename (sketch_new gave
     a taken name a new one) first, then the label or the object name."""
@@ -2062,6 +2082,13 @@ def example_words(tool, code, message):
     val = examples.field_example(getattr(tool, "name", None), field)
     if val is None:
         return ""
+    # A list of items of kinds (sketch_add items): an example of another kind
+    # than the one the error is about misleads (QA 1126e: a rounded_rectangle
+    # radius refusal showed an arc).
+    about = re.match(r"(?:[\w.]+\[\d+\]: )?([a-z][a-z0-9_]*)\.\w", str(message or ""))
+    if about and isinstance(val, list) and val and all(isinstance(x, dict) and "kind" in x for x in val):
+        if about.group(1) not in {x["kind"] for x in val}:
+            return ""
     shown = compact(val)
     if len(shown) > 160 and isinstance(val, list) and val:
         shown = "[" + compact(val[0]) + ", …]"
@@ -2176,7 +2203,14 @@ def repeat_words(server, name, result, args=None):
     call = canonical_call(args)
     last = state.get(name)
     progress = ""
-    words = re.sub(r"\d+(\.\d+)?", "#", strip_kind(msg))
+    words = strip_kind(msg)
+    # The names the call itself gave (a sketch, a body, a label) are masked
+    # as numbers are: a new name for the same fault is the same refusal
+    # (QA 1126f: eight "cut nothing" refusals, each with a new sketch name,
+    # never counted as one).
+    for v in sorted(_given_names(args), key=len, reverse=True):
+        words = re.sub(r"(?<!\w)" + re.escape(v) + r"(?!\w)", "@", words)
+    words = re.sub(r"\d+(\.\d+)?", "#", words)
     # The same refusal is the same code with the same words (numbers out).
     # The same place with new words is a new problem: the call changed
     # something (QA 1126e: "same refusal as before" on a new error).

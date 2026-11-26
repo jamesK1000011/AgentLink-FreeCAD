@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # The sketch tools on a real FreeCAD: skipped where it cannot be imported.
+import math
 import unittest
 
 from _pd_base import HAVE, Base
@@ -104,6 +105,23 @@ class SketchTools(Base):
         self.assertIn("split", sp["done"][0])
         e = self.refused("sketch_edit", {"sketch": "Cuts", "fillet": {"at": [0, 1], "radius": 0}})
         self.assertIn("radius", e["message"])
+
+
+    def test_10_slot_with_two_radii(self):
+        """Two round ends of different sizes joined by the exact tangents
+        (QA 1126e: no model could draw this outline)."""
+        self.ok("pd_body_new", {"name": "Crank"})
+        self.ok("sketch_new", {"body": "Crank", "plane": "XY", "name": "Arm"})
+        add = self.ok("sketch_add", {"sketch": "Arm", "items": [{"kind": "slot", "from": [0, 0], "to": [170, 0], "radius": 20, "radius2": 12.5}]})
+        self.assertEqual(add["state"]["solver"], "solved", add)
+        self.assertEqual(add["state"]["closedWires"], 1, add)
+        pad = self.ok("pd_pad", {"body": "Crank", "sketch": "Arm", "length": 15})
+        L, a = math.sqrt(170 ** 2 - 7.5 ** 2), math.asin(7.5 / 170)
+        area = (20 + 12.5) * L + 20 ** 2 * (math.pi / 2 + a) + 12.5 ** 2 * (math.pi / 2 - a)
+        self.assertAlmostEqual(pad["volume"], 15 * area, delta=1)
+        self.assertEqual([round(x, 2) for x in pad["box"]], [202.5, 40.0, 15.0])
+        e = self.refused("sketch_add", {"sketch": "Arm", "items": [{"kind": "slot", "from": [0, 0], "to": [5, 0], "radius": 20, "radius2": 10}]})
+        self.assertIn("one round end is inside the other", e["message"])
 
 
 if __name__ == "__main__":

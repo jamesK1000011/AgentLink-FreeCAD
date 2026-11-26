@@ -356,7 +356,7 @@ class ItemIndex(unittest.TestCase):
         return (["same"] if it["kind"] == "same" else ["ok"]), [], []
     helpers = {"sketch_of": lambda ref: sk, "build": build, "is_tuple": lambda x: isinstance(x, tuple), "constraint": lambda t: t,
                "remap": lambda t, ids: t, "item_error": sketch.item_error, "doc": lambda: types.SimpleNamespace(recompute=lambda: 0),
-               "state_of": lambda sk: {}}
+               "state_of": lambda sk: {}, "arc_points": lambda sk, ids: []}
     try:
         runners.run_steps("sketch_add", {"steps": e["steps"]}, {"items": %r}, helpers)
         print(json.dumps(["ok", len(sk.geo)]))

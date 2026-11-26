@@ -47,7 +47,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 24 Nov, blind QA: + item_error (sketch_add's failed item by its index), body_extent (sketch_new's bodyExtent), sketch readers.
 # 24 Nov QA, edges by direction: + edge_words (feature reader: each edge given, in a short line).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch readers), axes (sketch_more reader).
-PIN = "6840b8340d2a04b7267465f7d64d0013dc4bf7452abf85e988d241beeb901232"
+# 26 Nov: sketch.arc_points (a reader: the arc points in sketch_add answers, QA 1126f).
+PIN = "5cdaa039cb6156a93bd586b82d68acd88cbd0873a1c84b41f6edf19044b36070"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -399,7 +400,8 @@ class Census(unittest.TestCase):
 # 781: window_snapshot checks its width first (efficiency design D1, 22 Nov).
 # 787: pd_datum_plane and pd_mirrored check plane or face (both; a face as plane; a plane as face) first (rename set 8, 24 Nov).
 # 784: object_set's three property/value refusals went with { property, value } (rename set 10, 24 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 786, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 787: sketch_new refuses no plane and no face on its own (QA 1126e, 26 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 787, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

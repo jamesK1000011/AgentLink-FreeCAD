@@ -66,7 +66,7 @@ STANDING = re.compile(r"^\d+ objects? still failing from before this call: ")
 # a feature but not fully constrained: its count is the reading's dof, the
 # rest is standing. Inside any answer's state (sketch_add, sketch_edit,
 # sketch_constrain …), and sketch_state's own answer.
-DOF_NOTE = "it pads as drawn, but edits may move it — dimension and fix it for a parametric part."
+DOF_NOTE = "it pads as drawn. Its sizes are not constraints yet: an edit can move it. dims: true on an item adds its sizes as constraints."
 DOF_LINE = re.compile(r"^\d+ degrees of freedom: " + re.escape(DOF_NOTE) + "$")
 
 # Left-out words that are not named in saidBefore: they say how Agent Link

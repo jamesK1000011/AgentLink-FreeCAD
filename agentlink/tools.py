@@ -991,14 +991,25 @@ class Session:
                "bodies": [{k: b[k] for k in ("name", "volume", "box") if k in b} for b in bodies[:8]]}
         if len(bodies) > 8:
             got["moreBodies"] = len(bodies) - 8
+        # A body with no solid yet is not in bodies (they are parts with a
+        # shape): named here, so "bodies: []" does not read as "no body"
+        # (QA 1126f).
+        try:
+            empty = [o.Label for o in self.doc.Objects if o.TypeId == "PartDesign::Body" and (o.Shape.isNull() or not o.Shape.Solids)]
+        except Exception:  # noqa: BLE001
+            empty = []
+        if empty:
+            got["emptyBodies"] = empty[:8]
         opts = self._options_state().get("options")
         if opts:
             got["options"] = opts
-        got["note"] = (("The agent's document is one an agent made. " if mine else
-                        f"{self.doc.Label} is an empty start document that Agent Link made, not the person's. " if is_start_doc(self.doc) else
-                        f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
-                       + "For new work, make a document of its own: batch { calls: [{ tool: \"doc_new\", arguments: { name } }] }. "
-                       "session_state reads all of this again.")
+        # In a document an agent made, the work goes on there: "make a
+        # document of its own" read as an order to start again (QA 1126f).
+        got["note"] = ((f"An agent made {self.doc.Label}: keep working in it. doc_new is only for other work. " if mine else
+                        (f"{self.doc.Label} is an empty start document that Agent Link made, not the person's. " if is_start_doc(self.doc) else
+                         f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
+                        + "For new work, make a document of its own: batch { calls: [{ tool: \"doc_new\", arguments: { name } }] }. ")
+                       + "session_state reads all of this again.")
         return got
 
     def session_state(self, a):

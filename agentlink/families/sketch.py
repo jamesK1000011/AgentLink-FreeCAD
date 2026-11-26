@@ -726,23 +726,36 @@ def build(item):
     if k == "slot":
         p1, p2 = pc.vec2(item.get("from"), "from"), pc.vec2(item.get("to"), "to")
         r = float(item.get("radius", 0))
+        r2 = float(item.get("radius2", r) if item.get("radius2") is not None else r)
         d = p2 - p1
-        if r <= 0 or d.Length < 1e-6:
-            raise ToolError("invalid_input", "slot: from and to (its two end centres, apart), radius (half its width), mm.")
+        if r <= 0 or r2 <= 0 or d.Length < 1e-6:
+            raise ToolError("invalid_input", "slot: from and to (its two end centres, apart), radius (the round end at from), radius2 (the round end at to; the same as radius when left out), mm.")
+        if d.Length <= abs(r - r2) + 1e-6:
+            raise ToolError("invalid_input", f"slot: the ends are {pc._g(d.Length)} mm apart, but the radii differ by {pc._g(abs(r - r2))} mm: one round end is inside the other. Move the ends apart or make the radii closer.")
         t = math.atan2(d.y, d.x)
-        n = V(-math.sin(t), math.cos(t), 0)
+        # The outer tangent lines touch each round end where its outward
+        # normal is at t +- beta, with cos(beta) = (r - r2) / length (exact;
+        # beta is 90 deg when the radii are equal, the plain slot).
+        b = math.acos(max(-1.0, min(1.0, (r - r2) / d.Length)))
+        uu = V(math.cos(t + b), math.sin(t + b), 0)
+        ul = V(math.cos(t - b), math.sin(t - b), 0)
         G = [
-            _arc(p1, r, t + math.pi / 2, t + 1.5 * math.pi),  # 0 arc at from: +n to -n
-            _arc(p2, r, t - math.pi / 2, t + math.pi / 2),  # 1 arc at to: -n to +n
-            _line(p1 - n * r, p2 - n * r),  # 2
-            _line(p2 + n * r, p1 + n * r),  # 3
+            _arc(p1, r, t + b, t - b + 2 * math.pi),  # 0 round end at from: upper to lower, round the back
+            _arc(p2, r2, t - b, t + b),  # 1 round end at to: lower to upper
+            _line(p1 + ul * r, p2 + ul * r2),  # 2
+            _line(p2 + uu * r2, p1 + uu * r),  # 3
         ]
-        C += [("Tangent", 0, 2, 2, 1), ("Tangent", 2, 2, 1, 1), ("Tangent", 1, 2, 3, 1), ("Tangent", 3, 2, 0, 1), ("Equal", 0, 1)]
-        if abs(d.y) < 1e-9:
-            C.append(("Horizontal", 2))
-        elif abs(d.x) < 1e-9:
-            C.append(("Vertical", 2))
-        D += [("r", ("Radius", 0, r)), ("length", ("Distance", 0, 3, 1, 3, d.Length))]
+        C += [("Tangent", 0, 2, 2, 1), ("Tangent", 2, 2, 1, 1), ("Tangent", 1, 2, 3, 1), ("Tangent", 3, 2, 0, 1)]
+        if abs(r - r2) < 1e-9:
+            C.append(("Equal", 0, 1))
+            if abs(d.y) < 1e-9:
+                C.append(("Horizontal", 2))
+            elif abs(d.x) < 1e-9:
+                C.append(("Vertical", 2))
+            D += [("r", ("Radius", 0, r))]
+        else:
+            D += [("r", ("Radius", 0, r)), ("r2", ("Radius", 1, r2))]
+        D += [("length", ("Distance", 0, 3, 1, 3, d.Length))]
         return G, C, D
     if k == "arc_slot":
         c = pc.vec2(item.get("center", [0, 0]), "center")
@@ -938,6 +951,26 @@ def vertex_words(sk, g, p):
         return f"{name} has only one vertex: [{g}, 1]"
     pts = ", ".join("[%d, %d] its %s" % (g, v, VERTEX_WORDS[v]) for v in has)
     return f"{name} has no {VERTEX_WORDS[p]} (vertex {p}); its points are {pts}"
+
+
+def arc_points(sk, ids):
+    """For each arc among geometry ids: its id and its start, through (the
+    middle of the arc) and end points in the sketch's x/y, so the side it
+    bulges to is plain (QA 1126f: both arcs of a crank on the inside, and
+    the answer said only the ids). [] on any error."""
+    out = []
+    try:
+        for g in ids:
+            c = sk.Geometry[g]
+            if type(c).__name__ != "ArcOfCircle":
+                continue
+            a0, a1 = c.FirstParameter, c.LastParameter
+            p = [c.value(a0), c.value((a0 + a1) / 2), c.value(a1)]
+            out.append({"id": g, "from": [round(p[0].x, 3), round(p[0].y, 3)], "through": [round(p[1].x, 3), round(p[1].y, 3)],
+                        "to": [round(p[2].x, 3), round(p[2].y, 3)]})
+    except Exception:  # noqa: BLE001
+        return []
+    return out
 
 
 # Heuristic (blind QA, 26 Nov: coincident pairs that joined points about 170
@@ -1259,7 +1292,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
+               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)
