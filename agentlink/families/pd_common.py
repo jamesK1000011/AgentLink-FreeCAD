@@ -1385,6 +1385,13 @@ def where_went(feat, body, delta, tol=0.01):
                 return {}
             nb, ob = _bbt(geo.bound_box(reg)), _bbt(geo.bound_box(old))
             out = {"added": span_text(geo.bound_box(reg)), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
+            # The feature's own extent, when only part of it is new (QA 1126i:
+            # "added z 5..40" read as an upright 35 mm tall, not 40).
+            own = own_shape(feat, body)
+            if own is not None:
+                spans = span_text(geo.bound_box(own))
+                if spans != out["added"]:
+                    out["spans"] = f"{feat.Label} itself spans {spans}; added is only the part of it that is new."
             pos = position_sentence(nb, ob)
             if pos:
                 out["where"] += " " + pos
@@ -1733,17 +1740,29 @@ def outside_text(label, prof, body, normal, tol=1e-6):
             ". Move the outline over the body (its position, not its direction).")
 
 
+def own_shape(feat, body):
+    """The feature's own solid (its AddSubShape) in the frame of the body's
+    Shape; None when it has none."""
+    try:
+        sh = getattr(feat, "AddSubShape", None)
+        if sh is None or sh.isNull():
+            return None
+        sh = sh.copy()
+        sh.Placement = body.Placement.multiply(sh.Placement)
+        return sh
+    except Exception:  # noqa: BLE001 - a reading only
+        return None
+
+
 def covered_words(feat, body):
     """" Its shape (x …) lies inside Pad 2 (from BaseSketch); the body is
     x …" — the earlier features whose own material holds the new feature's
     shape (exact: its AddSubShape cut with each one's). QA 1126i: "added no
     material" with no word of what filled the space, and a 339 s turn."""
     try:
-        sh = getattr(feat, "AddSubShape", None)
-        if sh is None or sh.isNull():
+        sh = own_shape(feat, body)
+        if sh is None:
             return ""
-        sh = sh.copy()
-        sh.Placement = body.Placement.multiply(sh.Placement)
         got = []
         for v, label in took_from_raw(feat, body, sh):
             o = next((f for f in body.Group if f.Label == label), None)
