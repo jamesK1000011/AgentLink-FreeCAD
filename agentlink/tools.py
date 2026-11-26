@@ -898,7 +898,11 @@ class Session:
 
     def unique(self, label, own=None):
         """label, or "label 2" … when another object has it (own: the object being named, which does not count)."""
-        taken = {o.Label for o in self.doc.Objects if o is not own}
+        # Other objects' internal names are taken too: a label that is one
+        # object's name makes every reference to it ambiguous (QA 1126h:
+        # sketch_new labelled a sketch "Sketch" while BaseSketch's internal
+        # name was Sketch).
+        taken = {o.Label for o in self.doc.Objects if o is not own} | {o.Name for o in self.doc.Objects if o is not own}
         if label not in taken:
             return label
         n = 2
@@ -3111,7 +3115,10 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 if out.get("buildFailed"):
                     ref["buildFailed"] = True
                 else:
-                    ref.update({"code": err.get("code"), "kind": err.get("kind"), "error": strip_kind(err.get("message"))})
+                    # The card shown once stays in the call's own row, not twice (live, 26 Nov).
+                    from .protocol import CARD_MARK
+
+                    ref.update({"code": err.get("code"), "kind": err.get("kind"), "error": strip_kind(err.get("message")).split(CARD_MARK)[0]})
                 out["refused"] = ref
                 out["notRun"] = list(range(first + k + 1, first + n))
                 out["next"] = first + k

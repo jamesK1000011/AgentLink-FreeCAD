@@ -2079,11 +2079,17 @@ def same_sketch(s, tool, args, out):
     each call that went through cleared the repeat count). A fact only:
     nothing is refused."""
     try:
+        # Only the tools that edit a sketch's own geometry or constraints
+        # (live, 26 Nov: a pad and a new sketch were said to change nothing).
+        if not tool.name.startswith("sketch_") or tool.name in ("sketch_new", "sketch_state"):
+            return
         name = (out.get("sketch") if isinstance(out.get("sketch"), str) else None) or (args or {}).get("sketch")
         doc = getattr(s, "doc", None)
         if not isinstance(name, str) or doc is None:
             return
-        sk = doc.getObject(name) or next(iter(doc.getObjectsByLabel(name)), None)
+        # The label first: the answer names the sketch by its label (live,
+        # 26 Nov: "Sketch" was another sketch's internal name).
+        sk = next(iter(doc.getObjectsByLabel(name)), None) or doc.getObject(name)
         if sk is None or not hasattr(sk, "Geometry"):
             return
         seen = s.__dict__.setdefault("_sketch_seen", {})
