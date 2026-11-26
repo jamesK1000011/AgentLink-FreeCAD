@@ -142,7 +142,7 @@ class Vertices(unittest.TestCase):
 class Fillet(unittest.TestCase):
     def test_outside_corners_lead_and_the_plain_form_is_said_once(self):
         d = entries()["pd_fillet"]["description"]
-        self.assertIn('{ type: "line", axis: "z", outside: true } is the outside vertical corners.', d)
+        self.assertIn('edges: [{ "type": "line", "axis": "z", "outside": true }] is the outside vertical corners (an object, not a string).', d)
         self.assertEqual(d.count('{ type: "line", axis: "z" }'), 1)
         self.assertIn("inside corners too", d)
         self.assertEqual(entries("examples.json")["pd_fillet"]["forms"]["edges"], {"type": "line", "axis": "z", "outside": True})

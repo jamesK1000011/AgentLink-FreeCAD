@@ -64,7 +64,7 @@ class Branches(unittest.TestCase):
     print(json.dumps(sketch.branch_words(ends, {0: "circle", 2: "line", 4: "line"}, 183.0, dist_of(geo), [0])))
 ''')
         self.assertEqual(got, ["lines 2 and 4 meet circle 0 at (157.5, 0): a wire branches there; an outline has two edges at each joint, "
-                               "so use an arc there, not a full circle"])
+                               "so use an arc there, not a full circle (two round ends joined by straight sides are one slot item: slot { from, to, radius, radius2 })"])
 
     def test_three_ends_at_one_point_and_one_end_on_a_line(self):
         got = in_a_process(GEO + '''
@@ -218,7 +218,7 @@ class Ready(unittest.TestCase):
         self.assertFalse(got["readyForFeature"])
         self.assertNotIn("coincident joins them", got["todo"])
         self.assertEqual(got["todo"], "line 2 meets circle 0 at (0, -10): a wire branches there; an outline has two edges at each joint, "
-                                      "so use an arc there, not a full circle; line 2 meets circle 1 at (60, -6); line 3 meets circle 1 at (60, 6); "
+                                      "so use an arc there, not a full circle (two round ends joined by straight sides are one slot item: slot { from, to, radius, radius2 }); line 2 meets circle 1 at (60, -6); line 3 meets circle 1 at (60, 6); "
                                       "line 3 meets circle 0 at (0, 10)")
 
 
@@ -227,7 +227,8 @@ class Words(unittest.TestCase):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]
         d = e["sketch_add"]["description"]
-        self.assertIn("Round ends joined by straight sides: draw arcs, not full circles. A full circle is a closed loop of its own.", d)
+        self.assertIn("Other round ends joined by straight sides: draw arcs, not full circles. A full circle is a closed loop of its own.", d)
+        self.assertIn("Two round ends joined by straight tangent sides, equal or not: slot { from, to, radius, radius2 }", d)
         self.assertIn("sketch_constrain tangent on their two end points [[line, v], [arc, v]]", d)
         self.assertIn("It is false for an open wire, a branch, or closed loops that cross or touch.", e["sketch_state"]["description"])
         with open(os.path.join(ROOT, "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:

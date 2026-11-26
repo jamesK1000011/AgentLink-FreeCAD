@@ -1369,6 +1369,13 @@ def where_went(feat, body, delta, tol=0.01):
             # 26 Nov QA: two notches in one pocket came back as one box that
             # "goes all the way through along x". Each piece apart.
             out["where"] = pieces_sentence(pieces, skin, diag)
+        else:
+            # Where the cut sits on each axis of the body, as for added
+            # material (QA 1126g: a hollow meant to be centred sat at one
+            # corner, and the answer named only the sides it opened).
+            pos = position_sentence(_bbt(geo.bound_box(reg)), _bbt(geo.bound_box(old)))
+            if pos:
+                out["where"] = (out["where"] + " " + pos).strip()
         took = took_from(feat, body, reg, tol)
         if took:
             out["from"] = took
@@ -1680,6 +1687,28 @@ def outside_text(label, prof, body, normal, tol=1e-6):
             ". Move the outline over the body (its position, not its direction).")
 
 
+def material_sides(sk, body, n, pl=None):
+    """(volume along the normal, volume against it) of the body's material
+    under the sketch's outline (the outline swept each way through the
+    body, cut with its solid; exact). (None, None) when it cannot be told."""
+    try:
+        import Part
+
+        shape = sk.Shape.copy()
+        if pl is not None:
+            shape.Placement = pl
+        wires = [w for w in shape.Wires if w.isClosed()]
+        if not wires:
+            return None, None
+        face = Part.Face(wires, "Part::FaceMakerBullseye")
+        d = geo.bound_box(body.Shape).DiagonalLength + face.BoundBox.DiagonalLength + 1.0
+        front = face.extrude(n * d).common(body.Shape).Volume
+        back = face.extrude(n * -d).common(body.Shape).Volume
+        return front, back
+    except Exception:  # noqa: BLE001 - advice only
+        return None, None
+
+
 def under_words(sk, body, n, pl=None):
     """Whether any material of the body lies under the sketch's outline, on
     either side of its plane: the outline swept through the whole body and
@@ -1738,10 +1767,27 @@ def cut_side_words(feat, body):
         normal = f"{'+' if axis[2] > 0 else '-'}{axis[0]}"
         rev = bool(getattr(feat, "Reversed", False))
         if abs(side) < 1e-6:
-            return f"The sketch {sk.Label}'s normal is {normal}; the body's centre is in the sketch's plane."
+            # Which side of the sketch has material under the outline
+            # (exact, QA 1126g: "the body's centre is in the sketch's plane"
+            # gave no way on).
+            front, back = material_sides(sk, body, n, pl)
+            said = f"The sketch {sk.Label}'s normal is {normal}; the body's centre is in the sketch's plane."
+            if front is None:
+                return said
+            if front > 1e-6 and back > 1e-6:
+                return said + f" Under the outline there is material on both sides of the sketch ({_g(front)} mm³ along the normal, {_g(back)} mm³ against it)."
+            if front > 1e-6:
+                return said + f" Under the outline the material is on the side the normal points to ({normal}): reversed: true cuts it."
+            if back > 1e-6:
+                return said + f" Under the outline the material is on the side opposite the normal: reversed: false (the default) cuts it."
+            return said + (under_words(sk, body, n, pl) or "")
         where = "on the side its normal points to" if side > 0 else "on the side opposite its normal"
-        # A pocket goes against the normal, reversed along it.
-        fix = (f" reversed: {'false' if rev else 'true'} sends the cut that way." if (side > 0) != rev else
+        # A pocket goes against the normal, reversed along it. The words say
+        # what the call sent (QA 1126g: "reversed: false sends the cut that
+        # way" after reversed: true was read as the tool ignoring it).
+        flip = (f" You sent reversed: true, so the cut went along the normal, away from the body: reversed: false (or leave it out) sends it into the body."
+                if rev else " reversed: true sends the cut that way.")
+        fix = (flip if (side > 0) != rev else
                (under_words(sk, body, n, pl) or " The cut went toward the body: check that the sketch overlaps it (its position, not its side)."))
         return f"The sketch {sk.Label}'s normal is {normal}, and the body is {where}." + fix
     except Exception:  # noqa: BLE001 - advice only

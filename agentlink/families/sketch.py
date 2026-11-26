@@ -353,7 +353,7 @@ def branch_words(ends, curves, size, dist, rounds=(), joins=()):
     if len(words) > 4:
         words = words[:4] + [f"and {len(words) - 4} more points where a wire branches"]
     # The why, once: on the first point.
-    words[0] += ": a wire branches there; an outline has two edges at each joint" + (", so use an arc there, not a full circle" if round_ else "")
+    words[0] += ": a wire branches there; an outline has two edges at each joint" + (", so use an arc there, not a full circle (two round ends joined by straight sides are one slot item: slot { from, to, radius, radius2 })" if round_ else "")
     return words
 
 
@@ -969,6 +969,12 @@ def arc_points(sk, ids):
     try:
         for g in ids:
             c = sk.Geometry[g]
+            if type(c).__name__ == "Circle":
+                # A full circle: its centre, radius and diameter (QA 1126g: a
+                # 13 mm hole drawn as radius 13).
+                r = float(c.Radius)
+                out.append({"id": g, "center": [round(c.Center.x, 3), round(c.Center.y, 3)], "r": round(r, 3), "d": round(2 * r, 3)})
+                continue
             if type(c).__name__ != "ArcOfCircle":
                 continue
             a0, a1 = c.FirstParameter, c.LastParameter

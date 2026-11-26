@@ -247,7 +247,7 @@ class Cards(unittest.TestCase):
     def test_fillet_card_sorts_the_sides(self):
         d = self.e["pd_fillet"]["description"]
         self.assertNotIn("both are correct", d)
-        self.assertIn('{ type: "line", axis: "z", outside: true }', d)
+        self.assertIn('{ "type": "line", "axis": "z", "outside": true }', d)
         self.assertIn("outside: true", self.e["pd_chamfer"]["description"])
 
     def test_shape_query_takes_outside(self):

@@ -48,7 +48,7 @@ class Cards(unittest.TestCase):
         self.assertNotIn("Save it at once", d)
         self.assertIn("built and measured", d)
         self.assertIn("body_check, measure or get", d)
-        self.assertIn("measured since the last change", card("doc_save")["description"])  # the rule it agrees with
+        self.assertIn("only after a read of its geometry since the last change", card("doc_save")["description"])  # the rule it agrees with
 
     def test_pd_body_new_starts_with_what_a_beginner_needs(self):
         d = card("pd_body_new")["description"]

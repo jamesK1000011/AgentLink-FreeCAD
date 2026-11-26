@@ -56,7 +56,7 @@ class SlotCard(unittest.TestCase):
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             d = json.load(f)["entries"]["sketch_add"]["description"]
         self.assertIn("slot {from, to (end centres), radius, radius2", d)
-        self.assertIn("equal or not (radius2)", d)
+        self.assertIn("Two round ends joined by straight tangent sides, equal or not: slot { from, to, radius, radius2 }", d)
 
 
 class RepeatMasksGivenNames(unittest.TestCase):
