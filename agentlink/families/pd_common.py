@@ -1127,7 +1127,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         # Where the body is, not only its size (24 Nov QA: a centred
         # sketch on XZ gave the right size 40 as z -20..20, in 7 of 9 runs).
         try:
-            out["bounds"] = span_text(body.Shape.BoundBox)
+            out["bounds"] = span_text(geo.bound_box(body.Shape))
         except Exception:  # noqa: BLE001 - a reading only
             pass
     if before is not None and "volume" in out:
@@ -1313,8 +1313,8 @@ def where_went(feat, body, delta, tol=0.01):
             reg = new.cut(old)
             if reg.isNull() or reg.Volume <= tol:
                 return {}
-            nb, ob = _bbt(reg.BoundBox), _bbt(old.BoundBox)
-            out = {"added": span_text(reg.BoundBox), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
+            nb, ob = _bbt(geo.bound_box(reg)), _bbt(geo.bound_box(old))
+            out = {"added": span_text(geo.bound_box(reg)), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
             pos = position_sentence(nb, ob)
             if pos:
                 out["where"] += " " + pos
@@ -1326,7 +1326,7 @@ def where_went(feat, body, delta, tol=0.01):
         reg = old.cut(new)
         if reg.isNull() or reg.Volume <= tol:
             return {}
-        out = {"removed": span_text(reg.BoundBox)}
+        out = {"removed": span_text(geo.bound_box(reg))}
         diag = max(old.BoundBox.DiagonalLength, 1.0)
         # The old body's surface, not its solid: a point inside a solid is at
         # distance 0 from it (live, 25 Nov: a hollow's inner walls were listed).
@@ -1637,12 +1637,12 @@ def under_words(sk, body, n, pl=None):
         if not wires:
             return None
         face = Part.Face(wires, "Part::FaceMakerBullseye")
-        bb = body.Shape.BoundBox
+        bb = geo.bound_box(body.Shape)
         d = bb.DiagonalLength + face.BoundBox.DiagonalLength + 1.0
         prism = face.translated(n * -d).extrude(n * (2 * d))
         if prism.common(body.Shape).Volume > 1e-6:
             return None
-        return (f" No material of {body.Label} lies under the outline of {sk.Label} ({span_text(face.BoundBox)}), on either side of the sketch: "
+        return (f" No material of {body.Label} lies under the outline of {sk.Label} ({span_text(geo.bound_box(face))}), on either side of the sketch: "
                 f"the body's box is {span_text(bb)}, but the body has no material at this spot. Move the outline onto the body's material, or check the body's shape.")
     except Exception:  # noqa: BLE001 - advice only
         return None
@@ -1665,7 +1665,7 @@ def cut_side_words(feat, body):
             return (f"The sketch {sk.Label} is the profile of {others[0].Label} already, so it lies on the body's own face. "
                     "A hole or pocket needs a sketch of its own, on the face it goes into: sketch_new { face: { at, normal } }, then sketch_add.")
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
-        bb = body.Shape.BoundBox
+        bb = geo.bound_box(body.Shape)
         # First: does the outline lie over the body at all, across the
         # sketch's plane? (live, 23 Nov: holes at y +15 beside a plate at
         # y -30..0 got the direction words three times.)

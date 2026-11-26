@@ -50,7 +50,7 @@ def body_extent(b, sk):
         shape = b.Shape
         if shape is None or shape.isNull() or not shape.Solids:
             return None
-        bb = shape.BoundBox
+        bb = geo.bound_box(shape)  # exact, not the box of the view's triangles
         pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
         inv = pl.inverse()
     except Exception:  # noqa: BLE001 - no reading: nothing said
@@ -837,7 +837,14 @@ def build(item):
         h = Part.Hyperbola(c + V(math.cos(t), math.sin(t), 0) * a_, c + V(-math.sin(t), math.cos(t), 0) * b_, c)
         u0, u1 = float(item.get("from", -1)), float(item.get("to", 1))
         return [Part.ArcOfHyperbola(h, min(u0, u1), max(u0, u1))], C, D
-    raise ToolError("invalid_input", "kind: line, polyline, arc, arc3, circle, circle3, ellipse, parabola, hyperbola, bspline, rectangle, rounded_rectangle, polygon, slot or point.")
+    # The wrong value is said back, and a PartDesign feature's name is told
+    # apart from a sketch shape (QA 1126f: kind "fillet" in sketch_add).
+    kinds = "line, polyline, arc, arc3, circle, circle3, ellipse, parabola, hyperbola, bspline, rectangle, rounded_rectangle, polygon, slot, arc_slot or point"
+    said = str(k)
+    feature = {"fillet": "pd_fillet", "chamfer": "pd_chamfer", "pad": "pd_pad", "pocket": "pd_pocket", "hole": "pd_hole", "extrude": "pd_pad"}.get(said.lower())
+    if feature:
+        raise ToolError("invalid_input", f'kind "{said}" is not a sketch shape: {feature} makes it on the body, from a sketch or its edges. The sketch kinds: {kinds}.')
+    raise ToolError("invalid_input", f'kind "{said}" is not a sketch_add kind. The kinds: {kinds}.')
 
 
 def _ccw(cu, start, end, mid):

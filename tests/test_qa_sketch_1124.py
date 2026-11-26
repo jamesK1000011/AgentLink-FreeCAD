@@ -349,6 +349,8 @@ class ItemIndex(unittest.TestCase):
             return 0
     sk = Sk()
     def build(it):
+        if it["kind"] in ("fillet", "blob"):
+            return sketch.build(it)
         if it["kind"] == "bad":
             raise ToolError("invalid_input", "circle: radius (or diameter), mm.")
         if it["kind"] == "num":
@@ -371,6 +373,15 @@ class ItemIndex(unittest.TestCase):
         self.assertEqual(self.run_add([{"kind": "num"}]), ["invalid_input", "items[0]: size: not a number"])
         self.assertEqual(self.run_add([{"kind": "line"}, 5]), ["invalid_input", "items[1]: an object { kind, … }."])
         self.assertEqual(self.run_add(ok), ["ok", 4])
+
+    def test_a_wrong_kind_is_said_back(self):
+        """QA 1126f: kind "fillet" in sketch_add got the kind list only."""
+        got = self.run_add([{"kind": "fillet"}])
+        self.assertEqual(got[0], "invalid_input")
+        self.assertIn('items[0]: kind "fillet" is not a sketch shape: pd_fillet makes it on the body', got[1])
+        got = self.run_add([{"kind": "blob"}])
+        self.assertIn('kind "blob" is not a sketch_add kind. The kinds: line,', got[1])
+        self.assertIn("arc_slot", got[1])
 
 
 class BodyExtent(unittest.TestCase):

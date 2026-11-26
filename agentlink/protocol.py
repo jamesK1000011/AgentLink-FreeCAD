@@ -390,7 +390,9 @@ FIELD_ALIASES = {
 # after the fields.
 WRONG_FIELD_WORDS = {
     "sketch_add": {"body": 'sketch_add takes sketch, not body: a sketch is already in a body. '
-                           'Example: { "sketch": "Sketch", "items": [{ "kind": "rectangle", "center": [0, 0], "size": [40, 20] }] }.'},
+                           'Example: { "sketch": "Sketch", "items": [{ "kind": "rectangle", "center": [0, 0], "size": [40, 20] }] }.',
+                   # Keys of each item, not of the call (QA 1126f: input.dims).
+                   **{k: f"{k} is a key of each item, not of the call: items: [{{ kind, …, {k} }}]." for k in ("dims", "construction", "name", "kind")}},
 }
 
 # A field that means something only beside another one (per tool: field ->

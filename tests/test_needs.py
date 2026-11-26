@@ -48,7 +48,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 24 Nov QA, edges by direction: + edge_words (feature reader: each edge given, in a short line).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch readers), axes (sketch_more reader).
 # 26 Nov: sketch.arc_points (a reader: the arc points in sketch_add answers, QA 1126f).
-PIN = "5cdaa039cb6156a93bd586b82d68acd88cbd0873a1c84b41f6edf19044b36070"
+# 26 Nov: optimalBoundingBox is a read (geometry.bound_box): import_row, shape_row, box_of, reading, bodies_now, stats … read.
+PIN = "21978ba05153bd07847f6fe8dc5147a717f89ebaca39ec6f6a8bff1ced4d2a1e"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -60,7 +61,7 @@ PIN = "5cdaa039cb6156a93bd586b82d68acd88cbd0873a1c84b41f6edf19044b36070"
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
 # 22 Nov, face selectors: + face_pick (a sketch reader).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch), axes (sketch_more); up_frame is not a reader (it makes a placement).
-COUNTS = {"readers": 937, "changers": 160, "families": 37}
+COUNTS = {"readers": 948, "changers": 160, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -401,7 +402,8 @@ class Census(unittest.TestCase):
 # 787: pd_datum_plane and pd_mirrored check plane or face (both; a face as plane; a plane as face) first (rename set 8, 24 Nov).
 # 784: object_set's three property/value refusals went with { property, value } (rename set 10, 24 Nov).
 # 787: sketch_new refuses no plane and no face on its own (QA 1126e, 26 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 787, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 26 Nov: optimalBoundingBox is a read: 3 tools no longer blocked (2 complete, 1 needs arguments; 1 more with no check).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 787, "noArgument": 38, "blocked": 108, "needsArguments": 196, "complete": 74, "noCheck": 64}
 
 
 class Agreement(unittest.TestCase):
