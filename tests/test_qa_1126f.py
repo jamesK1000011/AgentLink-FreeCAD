@@ -128,5 +128,67 @@ class TookFrom(unittest.TestCase):
         self.assertEqual(got, ["Pad: 150 mm³", "Pad 2: 46 mm³"])
 
 
+class CardOnFirstRefusal(unittest.TestCase):
+    """The first refusal of a tool whose card was not read shows the card
+    once (QA 1126g)."""
+
+    def server(self):
+        from agentlink.protocol import Server, Tool, ToolError
+
+        def bad(a):
+            raise ToolError("invalid_input", "length: over 0.")
+
+        def find(a):
+            return {"tools": [{"tool": "pd_x", "description": "Pad it."}]}
+
+        obj = {"type": "object", "properties": {"n": {"type": "integer"}}}
+        return Server("t", "0", [Tool("pd_x", "Pad it. length: mm.", obj, bad, changes=True), Tool("tool_find", "f.", {"type": "object", "properties": {}}, find)])
+
+    def call(self, srv, name, args=None):
+        import json
+
+        r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args or {}}})["result"]
+        return json.loads(r["content"][0]["text"])
+
+    def test_once_when_not_read(self):
+        srv = self.server()
+        one = self.call(srv, "pd_x", {"n": 1})["error"]["message"]
+        self.assertIn("Its card (not read in this session): Pad it. length: mm.", one)
+        two = self.call(srv, "pd_x", {"n": 2})["error"]["message"]
+        self.assertNotIn("Its card", two)
+
+    def test_not_when_read(self):
+        srv = self.server()
+        self.call(srv, "tool_find")
+        one = self.call(srv, "pd_x", {"n": 1})["error"]["message"]
+        self.assertNotIn("Its card", one)
+
+
+class SameSketchState(unittest.TestCase):
+    """A sketch exactly as after an earlier step is said so (QA 1126g: a
+    delete-and-add loop of 22 turns)."""
+
+    def test_back_to_an_earlier_state(self):
+        import types
+
+        from agentlink import protocol
+
+        sk = types.SimpleNamespace(Name="Sketch", Label="Profile", Geometry=["L1"], Constraints=[])
+        doc = types.SimpleNamespace(Name="D", getObject=lambda n: sk if n in ("Sketch", "Profile") else None, getObjectsByLabel=lambda l: [])
+        s = types.SimpleNamespace(doc=doc, steps=[1])
+        tool = types.SimpleNamespace(name="sketch_add", changes=True)
+        out = {"sketch": "Profile"}
+        protocol.same_sketch(s, tool, {}, out)
+        self.assertNotIn("sameAs", out)
+        sk.Geometry, s.steps = ["L1", "C2"], [1, 2]
+        out = {"sketch": "Profile"}
+        protocol.same_sketch(s, tool, {}, out)
+        self.assertNotIn("sameAs", out)
+        sk.Geometry, s.steps = ["L1"], [1, 2, 3]
+        out = {"sketch": "Profile"}
+        protocol.same_sketch(s, tool, {}, out)
+        self.assertEqual(out["sameAs"], "Profile is exactly as it was after step 1 (2 times now): the calls since then changed nothing in the end.")
+
+
 if __name__ == "__main__":
     unittest.main()

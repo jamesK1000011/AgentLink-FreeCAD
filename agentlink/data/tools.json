@@ -8603,7 +8603,8 @@
         },
         {"let": {"clash": "=sorted(set(st.get('conflicting', []) + st.get('redundant', [])) - set(bad))"}},
         {"let": {"news": "=[con_words(sk, i) for i in (bad or added)]", "olds": "=[con_words(sk, i) for i in clash]"}},
-        {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}. FreeCAD names only the new ones: each repeats or contradicts a constraint the sketch has already. A shape item (rectangle, slot, polygon …) comes with its own coincident, horizontal, vertical and tangent constraints: sketch_state lists them. Nothing was added: leave the new ones out."}, "code": "invalid_state", "when": "=not olds"},
+        {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}. The sketch had no constraints before this call, so they repeat or contradict each other. For example, an end-point tangent joins its two points already: a coincident on the same points repeats it. Nothing was added: leave out the repeat."}, "code": "invalid_state", "when": "=not olds and before == 0"},
+        {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}. FreeCAD names only the new ones: each repeats or contradicts a constraint the sketch has already, or another one of this call. A shape item (rectangle, slot, polygon …) comes with its own coincident, horizontal, vertical and tangent constraints: sketch_state lists them. Nothing was added: leave the repeats out."}, "code": "invalid_state", "when": "=not olds"},
         {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}, against existing {olds}. Nothing was added — drop one, or sketch_edit deleteConstraints the old one first."}, "code": "invalid_state"}
        ]
       },

@@ -1585,6 +1585,10 @@ class Server:
             if coedit is not None:
                 # An edit the call opened (a cmd_run's sketch) is the agent's.
                 coedit.settle(edit0)
+            if tool.name == "tool_find":
+                note_cards(self, out)
+            if tool.changes and tool.name != "batch" and s is not None and isinstance(out, dict):
+                same_sketch(s, tool, args, out)
             if gate is not None:
                 # A job logs its own time when it ends (the call may have
                 # answered before it did).
@@ -1632,7 +1636,7 @@ class Server:
                 return self.refusal(e.code, staticbase.batch_hint(e.message), outcome=_outcome(tool, e), kind=getattr(e, "kind", None))
             msg = e.message
             try:
-                msg = msg + example_words(tool, e.code, msg) + restart_words(self, e.code, args, msg)
+                msg = msg + example_words(tool, e.code, msg) + restart_words(self, e.code, args, msg) + card_words(self, tool, e.code)
             except Exception:  # noqa: BLE001 - words only
                 pass
             return self.refusal(e.code, msg, outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None), kind=getattr(e, "kind", None))
@@ -2063,6 +2067,79 @@ def _first_sentence(message):
     return first if len(first) <= 200 else first[:197] + "…"
 
 
+def _sketch_key(sk):
+    """The sketch's geometry and constraints, exactly, as text."""
+    return (tuple(str(g) for g in sk.Geometry), tuple(str(c) for c in sk.Constraints))
+
+
+def same_sketch(s, tool, args, out):
+    """After a change to a sketch: when its geometry and constraints are
+    exactly as after an earlier step, the answer says so (sameAs), with that
+    step and how many times (QA 1126g: delete and add again, 22 turns, and
+    each call that went through cleared the repeat count). A fact only:
+    nothing is refused."""
+    try:
+        name = (out.get("sketch") if isinstance(out.get("sketch"), str) else None) or (args or {}).get("sketch")
+        doc = getattr(s, "doc", None)
+        if not isinstance(name, str) or doc is None:
+            return
+        sk = doc.getObject(name) or next(iter(doc.getObjectsByLabel(name)), None)
+        if sk is None or not hasattr(sk, "Geometry"):
+            return
+        seen = s.__dict__.setdefault("_sketch_seen", {})
+        key = (doc.Name, sk.Name, _sketch_key(sk))
+        step = len(getattr(s, "steps", ()) or ())
+        if key in seen:
+            first, n = seen[key]
+            seen[key] = (first, n + 1)
+            if step != first:
+                out["sameAs"] = (f"{sk.Label} is exactly as it was after step {first} ({n + 1} times now): "
+                                 "the calls since then changed nothing in the end.")
+        else:
+            seen[key] = (step, 1)
+    except Exception:  # noqa: BLE001 - words only
+        pass
+
+
+CARD_MARK = " Its card (not read in this session): "
+
+
+def note_cards(server, out):
+    """The tools whose cards a tool_find answer gave (a hit with its
+    description): read in this session."""
+    try:
+        got = server.__dict__.setdefault("_cards_read", set())
+        for h in (out or {}).get("tools") or []:
+            if isinstance(h, dict) and h.get("tool") and h.get("description"):
+                got.add(h["tool"])
+    except Exception:  # noqa: BLE001 - bookkeeping only
+        pass
+
+
+def card_words(server, tool, code):
+    """" Its card (not read in this session): …" on the first refusal of a
+    bad input or state of a tool whose card the agent has not read, once
+    per tool (QA 1126g: tools used without their cards, and the refusal did
+    not show the card). "" otherwise."""
+    try:
+        if code not in ("invalid_input", "invalid_state") or tool is None:
+            return ""
+        name = getattr(tool, "name", None)
+        if not name or name in ("batch", "tool_find", "fast"):
+            return ""
+        read = server.__dict__.setdefault("_cards_read", set())
+        shown = server.__dict__.setdefault("_cards_shown", set())
+        if name in read or name in shown:
+            return ""
+        desc = str(getattr(tool, "description", "") or "").strip()
+        if not desc:
+            return ""
+        shown.add(name)
+        return f"{CARD_MARK}{desc}"
+    except Exception:  # noqa: BLE001 - words only
+        return ""
+
+
 def example_words(tool, code, message):
     """" Example: edges: {…}." for a refusal of a bad input, when the tool's
     card data has a ready value of that input (examples.field_example), once;
@@ -2200,7 +2277,7 @@ def repeat_words(server, name, result, args=None):
     err = body.get("error") if isinstance(body, dict) else None
     if not isinstance(err, dict):
         return
-    msg = strip_kind(err.get("message", ""))
+    msg = strip_kind(err.get("message", "")).split(CARD_MARK)[0]  # the card shown once is not the refusal's words
     keys = failing_keys(msg)
     code = err.get("code")
     call = canonical_call(args)

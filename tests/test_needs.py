@@ -514,8 +514,11 @@ class Filter(unittest.TestCase):
         self.assertEqual(now["notChecked"], {"count": 1, "tools": ["fea_setup"]})
         self.assertLessEqual(tokens(got["now"]), BOUNDS["nowReply"])
         # The call itself: refused in the reading's words; then a batch, whose answer carries the one line.
-        self.assertEqual(got["refused"]["error"], {"code": "invalid_state", "kind": "fixable", "status": "not_started",
-                                                   "message": "No strength study: fea_setup { body } first."})
+        err = dict(got["refused"]["error"])
+        msg = err.pop("message")
+        self.assertEqual(err, {"code": "invalid_state", "kind": "fixable", "status": "not_started"})
+        # Its card comes once with the first refusal when it was not read (QA 1126g).
+        self.assertTrue(msg.startswith("No strength study: fea_setup { body } first. Its card (not read in this session): "), msg)
         b = got["batch"]
         self.assertEqual(set(b["appliesNow"]), {"groups", "not", "notChecked"})  # no ms: the meter and the logs keep the time
         self.assertEqual(b["appliesNow"]["groups"], {"strength": 1})
