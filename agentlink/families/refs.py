@@ -92,6 +92,12 @@ def _by_filter(shape, q, kind, what, names):
         return _by_ref(shape, q["ref"], kind, what, names)
     bad = sorted(k for k in q if k not in FILTER_KEYS | {"body"})
     if bad:
+        # face, near or all beside filter keys: the card's rule, said (QA
+        # 1126i: "edges.face: not a filter" read as a contradiction of the card).
+        mixed = [k for k in bad if k in ("face", "all")]
+        if mixed and kind == "edge":
+            raise ToolError("invalid_input", f"{what}: an item with {mixed[0]} takes only kind and tol. "
+                                             f"Put type, axis and the other filters in a second item, without {mixed[0]}.")
         raise ToolError("invalid_input", f"{what}.{bad[0]}: not a filter — {HELP}.")
     k = q.pop("kind", None)
     if k in EDGE_TYPES and kind == "edge":

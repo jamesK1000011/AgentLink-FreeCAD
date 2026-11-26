@@ -50,7 +50,7 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 26 Nov: sketch.arc_points (a reader: the arc points in sketch_add answers, QA 1126f).
 # 26 Nov: optimalBoundingBox is a read (geometry.bound_box): import_row, shape_row, box_of, reading, bodies_now, stats … read.
 # 26 Nov: + sketch.item_over (a reader: whether the body has material under an item, QA 1126h).
-PIN = "f99ab5c1303ba2f6ad6596a85ed44b6226e5a4c6b1c54561fd986ef81086f0ab"
+PIN = "411eab6a7ab1c9f944363f20e1f3b36400fe814e44518a0272e2d65f55134c32"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -62,7 +62,7 @@ PIN = "f99ab5c1303ba2f6ad6596a85ed44b6226e5a4c6b1c54561fd986ef81086f0ab"
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
 # 22 Nov, face selectors: + face_pick (a sketch reader).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch), axes (sketch_more); up_frame is not a reader (it makes a placement).
-COUNTS = {"readers": 949, "changers": 160, "families": 37}
+COUNTS = {"readers": 951, "changers": 160, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {

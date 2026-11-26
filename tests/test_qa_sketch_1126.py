@@ -227,7 +227,7 @@ class Words(unittest.TestCase):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]
         d = e["sketch_add"]["description"]
-        self.assertIn("In other outlines, round ends joined by straight sides are arcs, not full circles. A full circle is a closed loop of its own.", d)
+        self.assertIn("Slot cannot make every outline: more than two round ends, or round ends joined by other curves. For those, use arcs and lines, not full circles.", d)
         self.assertIn("Two round ends joined by straight tangent sides, equal or not: slot { from, to, radius, radius2 }", d)
         self.assertIn("sketch_constrain tangent on their two end points [[line, v], [arc, v]]", d)
         self.assertIn("It is false for an open wire, a branch, or closed loops that cross or touch.", e["sketch_state"]["description"])

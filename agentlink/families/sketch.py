@@ -1003,6 +1003,44 @@ def item_over(sk, ids):
         return None
 
 
+def _mm(v):
+    return f"{round(float(v), 4) + 0.0:g}"
+
+
+def round_sizes(sk):
+    """{id: (radius, cx, cy)} for each circle and arc: what solved_away
+    compares after a solve."""
+    out = {}
+    for g, c in enumerate(sk.Geometry):
+        if type(c).__name__ in ("Circle", "ArcOfCircle"):
+            out[g] = (float(c.Radius), float(c.Center.x), float(c.Center.y))
+    return out
+
+
+def solved_away(sk, before, tol=1e-4):
+    """The radii and centres a solve changed, in words: "arc 2: radius 12.5
+    → 12.465" (QA 1126i: a tangent made a crank end 12.465 and no answer
+    said so). Geometry the call did not move is left out; [] when none."""
+    out = []
+    try:
+        now = round_sizes(sk)
+        for g, (r0, x0, y0) in sorted(before.items()):
+            if g not in now:
+                continue
+            r1, x1, y1 = now[g]
+            kind = "circle" if type(sk.Geometry[g]).__name__ == "Circle" else "arc"
+            bits = []
+            if abs(r1 - r0) > tol:
+                bits.append(f"radius {_mm(r0)} → {_mm(r1)}")
+            if abs(x1 - x0) > tol or abs(y1 - y0) > tol:
+                bits.append(f"centre [{_mm(x0)}, {_mm(y0)}] → [{_mm(x1)}, {_mm(y1)}]")
+            if bits:
+                out.append(f"{kind} {g}: " + ", ".join(bits))
+    except Exception:  # noqa: BLE001 - a reading only
+        return []
+    return out
+
+
 def arc_points(sk, ids):
     """For each arc among geometry ids: its id and its start, through (the
     middle of the arc) and end points in the sketch's x/y, so the side it
@@ -1348,7 +1386,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "item_over": item_over, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
+               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "round_sizes": round_sizes, "solved_away": solved_away, "item_over": item_over, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)

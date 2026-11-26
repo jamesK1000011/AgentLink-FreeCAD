@@ -1175,6 +1175,16 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         raise ToolError("failed", f"{feat.Label} ({short(feat)}) made a shape that is not valid (FreeCAD's shape check), though it gave no error — nothing was kept. "
                                   f"{hint or 'Try a smaller size, or fewer edges.'}".strip())
     out = {**({"feature": feat.Label, "type": short(feat)} if feat is not None else {}), "valid": True, **body_reading(body)}
+    # The sketch is another feature's profile too (QA 1126i: shapes and a pad
+    # sent to the old BaseSketch made the body one block). A fact only.
+    try:
+        prof = getattr(feat, "Profile", None) if feat is not None else None
+        sk = prof[0] if isinstance(prof, (list, tuple)) else prof
+        others = [o.Label for o in (getattr(sk, "InList", None) or ()) if o is not feat and _profile_of(o) is sk]
+        if others:
+            out["sketchAlso"] = f"{sk.Label} is also the profile of {', '.join(others)}: a change to it changes {'that feature' if len(others) == 1 else 'those features'} too."
+    except Exception:  # noqa: BLE001 - a reading only
+        pass
     if "box" in out:
         # Where the body is, not only its size (24 Nov QA: a centred
         # sketch on XZ gave the right size 40 as z -20..20, in 7 of 9 runs).
@@ -1190,7 +1200,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         # volumeChange -0.0, as the test of 1e-6 let the noise through).
         tol = max(0.01, 1e-7 * max(abs(before), abs(out["volume"])))
         if must_change == "add" and delta <= tol:
-            raise ToolError("failed", f"{feat.Label} added no material — it lies inside the body already. Nothing was kept. {hint}".strip())
+            raise ToolError("failed", f"{feat.Label} added no material — it lies inside the body already.{covered_words(feat, body)} Nothing was kept. {hint}".strip())
         dress = feat is not None and getattr(feat, "TypeId", "") in DRESSUPS
         # Another object of the body that fails on recompute: the body's
         # numbers are not this feature's result, so the words say that and
@@ -1415,7 +1425,7 @@ def where_went(feat, body, delta, tol=0.01):
         return {"where": f"not worked out ({type(e).__name__})"}
 
 
-def took_from(feat, body, reg, tol=1e-6):
+def took_from_raw(feat, body, reg, tol=1e-6):
     """Which earlier features' own material a cut took (exact: the removed
     region cut with each additive feature's AddSubShape), as "Pad 2: 196 mm³"
     lines, the most first. QA 1126e: holes meant for the base cut the
@@ -1440,7 +1450,12 @@ def took_from(feat, body, reg, tol=1e-6):
                 out.append((v, f.Label))
     except Exception:  # noqa: BLE001 - a reading only
         return []
-    return [f"{label}: {_g(v)} mm³" for v, label in sorted(out, reverse=True)]
+    return sorted(out, reverse=True, key=lambda t: t[0])
+
+
+def took_from(feat, body, reg, tol=1e-6):
+    """took_from_raw as lines: "Pad 2: 196 mm³", the most first."""
+    return [f"{label}: {_g(v)} mm³" for v, label in took_from_raw(feat, body, reg, tol)]
 
 
 PIECES_SHOWN = 4  # separate pieces of one cut said one by one
@@ -1716,6 +1731,31 @@ def outside_text(label, prof, body, normal, tol=1e-6):
         return ""
     return (f"The sketch {label}'s outline is beside the body, not over it: " + "; ".join(words) +
             ". Move the outline over the body (its position, not its direction).")
+
+
+def covered_words(feat, body):
+    """" Its shape (x …) lies inside Pad 2 (from BaseSketch); the body is
+    x …" — the earlier features whose own material holds the new feature's
+    shape (exact: its AddSubShape cut with each one's). QA 1126i: "added no
+    material" with no word of what filled the space, and a 339 s turn."""
+    try:
+        sh = getattr(feat, "AddSubShape", None)
+        if sh is None or sh.isNull():
+            return ""
+        sh = sh.copy()
+        sh.Placement = body.Placement.multiply(sh.Placement)
+        got = []
+        for v, label in took_from_raw(feat, body, sh):
+            o = next((f for f in body.Group if f.Label == label), None)
+            prof = getattr(o, "Profile", None) if o is not None else None
+            sk = prof[0] if isinstance(prof, (list, tuple)) else prof
+            got.append(f"{label} (from {sk.Label})" if sk is not None else label)
+        if not got:
+            return ""
+        return (f" Its shape ({span_text(geo.bound_box(sh))}) lies inside {', '.join(got[:3])}; "
+                f"the body is {span_text(geo.bound_box(body.Shape))}.")
+    except Exception:  # noqa: BLE001 - words only
+        return ""
 
 
 def failing_in(body, feat=None):

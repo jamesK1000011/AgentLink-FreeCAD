@@ -2115,7 +2115,14 @@ def note_cards(server, out):
     description): read in this session."""
     try:
         got = server.__dict__.setdefault("_cards_read", set())
-        for h in (out or {}).get("tools") or []:
+        out = out or {}
+        # Cards come under tools, cards or results, by how tool_find was asked
+        # (QA 1126i: a card given with words was later "not read").
+        hits = list(out.get("tools") or []) + list(out.get("cards") or [])
+        for r in out.get("results") or []:
+            if isinstance(r, dict):
+                hits += list(r.get("tools") or []) + list(r.get("cards") or [])
+        for h in hits:
             if isinstance(h, dict) and h.get("tool") and h.get("description"):
                 got.add(h["tool"])
     except Exception:  # noqa: BLE001 - bookkeeping only
@@ -2170,7 +2177,7 @@ def example_words(tool, code, message):
     # A list of items of kinds (sketch_add items): an example of another kind
     # than the one the error is about misleads (QA 1126e: a rounded_rectangle
     # radius refusal showed an arc).
-    about = (re.match(r"(?:[\w.]+\[\d+\]: )?([a-z][a-z0-9_]*)\.\w", str(message or ""))
+    about = (re.match(r"(?:[\w.]+\[\d+\]: )?([a-z][a-z0-9_]*)[.:]\s?\w", str(message or ""))
              or re.search(r'\bkind "([^"]+)"', str(message or "")))
     if about and isinstance(val, list) and val and all(isinstance(x, dict) and "kind" in x for x in val):
         if about.group(1) not in {x["kind"] for x in val}:
