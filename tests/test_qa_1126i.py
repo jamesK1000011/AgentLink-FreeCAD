@@ -130,6 +130,32 @@ class Fixes(unittest.TestCase):
         self.assertNotIn("copy the card's example", got)
         self.assertIn("read the form of edges on the card", got, got)
 
+    def test_get_reads_labels_first_and_refuses_a_clash(self):
+        got = in_a_process(SETUP + '''
+    import types
+    from agentlink import fastpath
+    from agentlink.protocol import ToolError
+    body = types.SimpleNamespace(Name="Body", Label="Pad", TypeId="PartDesign::Body")
+    pad = types.SimpleNamespace(Name="Pad", Label="Pad001", TypeId="PartDesign::Pad")
+    objs = {"Body": body, "Pad": pad}
+    doc = types.SimpleNamespace(Label="D", getObject=lambda n: objs.get(n), getObjectsByLabel=lambda n: [o for o in objs.values() if o.Label == n])
+    out = [fastpath._doc_object(doc, "Pad").Name]
+    try:
+        fastpath._doc_object(doc, "Pad", clash=True)
+    except ToolError as e:
+        out.append(e.message)
+    print(json.dumps(out))
+''')
+        self.assertEqual(got[0], "Body")
+        self.assertEqual(got[1], '"Pad" is the label of Pad (internal name Body) and the internal name of Pad001: give "Body" for the first or "Pad001" for the second.')
+
+    def test_tool_find_listing_says_what_it_did_not_use(self):
+        got = in_a_process(SERVER + '''
+    r = call("tool_find", {"listing": True, "tool": "pd_pad"})
+    print(json.dumps(r[1].get("notUsed")))
+''')
+        self.assertEqual(got, "listing: true gives the listing only; tool was not used. Send it without listing.")
+
     def test_cards_say_it(self):
         e = entries()
         self.assertIn("solvedAway: the radii and centres that the solve changed", e["sketch_constrain"]["description"])

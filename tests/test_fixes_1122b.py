@@ -102,21 +102,33 @@ class CutSide(unittest.TestCase):
             else:
                 sys.modules[n] = m
 
-    def words(self, body_z, reversed_):
+    def words(self, front, back, reversed_):
+        # The side comes from the material under the outline (exact,
+        # material_sides), not from the centre of the body's box (QA 1126l).
         rot = types.SimpleNamespace(multVec=lambda v: V(0, 0, 1))
         sk = types.SimpleNamespace(Label="Sketch001", Placement=types.SimpleNamespace(Rotation=rot, Base=V(0, 0, 0)))
         feat = types.SimpleNamespace(Profile=[sk, ["Face1"]], Reversed=reversed_)
-        bb = types.SimpleNamespace(XMin=-5, XMax=5, YMin=-5, YMax=5, ZMin=body_z - 2, ZMax=body_z + 2)
+        bb = types.SimpleNamespace(XMin=-5, XMax=5, YMin=-5, YMax=5, ZMin=-20, ZMax=20)
         body = types.SimpleNamespace(Shape=types.SimpleNamespace(BoundBox=bb))
+        self.pd.material_sides = lambda *a: (front, back)
+        self.pd.outside_words = lambda *a: ""
+        self.pd.under_words = lambda *a: ""
+        self.pd._under_found = lambda *a: ""
+        self.pd.geo.bound_box = lambda shape: shape.BoundBox
         return self.pd.cut_side_words(feat, body)
 
     def test_body_on_normal_side_says_reversed_true(self):
-        w = self.words(10, False)
+        w = self.words(50.0, 0.0, False)
         self.assertIn("+z", w)
-        self.assertIn("reversed: true", w)
+        self.assertIn("reversed: true cuts it", w)
 
     def test_already_reversed_says_false(self):
-        self.assertIn("reversed: false", self.words(-10, True))
+        self.assertIn("reversed: false", self.words(0.0, 50.0, True))
+
+    def test_no_material_either_side_gives_no_way_words(self):
+        w = self.words(0.0, 0.0, False)
+        self.assertIn("no material under the outline on either side", w)
+        self.assertNotIn("reversed", w)
 
     def test_the_pads_own_sketch_needs_one_of_its_own(self):
         rot = types.SimpleNamespace(multVec=lambda v: V(0, 0, 1))
@@ -128,9 +140,6 @@ class CutSide(unittest.TestCase):
         w = self.pd.cut_side_words(hole, types.SimpleNamespace(Shape=types.SimpleNamespace(BoundBox=bb)))
         self.assertIn("profile of Pad", w)
         self.assertIn("sketch_new { face", w)
-
-    def test_cut_toward_body_says_overlap(self):
-        self.assertIn("overlaps", self.words(-10, False))
 
 
 if __name__ == "__main__":

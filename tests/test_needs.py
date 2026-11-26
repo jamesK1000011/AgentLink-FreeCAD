@@ -50,7 +50,7 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 26 Nov: sketch.arc_points (a reader: the arc points in sketch_add answers, QA 1126f).
 # 26 Nov: optimalBoundingBox is a read (geometry.bound_box): import_row, shape_row, box_of, reading, bodies_now, stats … read.
 # 26 Nov: + sketch.item_over (a reader: whether the body has material under an item, QA 1126h).
-PIN = "8ddcc2fc3aecafdbd1869a444da0d0e64bc17b628f00d32a75e3bf8926eff2bd"
+PIN = "1ca68dde73f20192468a67d82f1a04c091bcfde3d72822529ef17348d5c0d1d2"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).

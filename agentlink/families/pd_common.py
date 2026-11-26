@@ -281,6 +281,33 @@ def profile_users(sk):
     return out
 
 
+def now_words(sk, body):
+    """" Now: 2 closed outlines in Base, one inside another (an opening);
+    Body has volume 8803.65 mm³ and 12 faces." — what the change did to
+    the feature, read after it (QA 1126l: circles added to a pad's own
+    sketch made both holes, and the note gave no volume or count)."""
+    try:
+        doc = getattr(sk, "Document", None)
+        if doc is not None:
+            doc.recompute()
+        wires = [w for w in sk.Shape.Wires if w.isClosed()]
+        inner = 0
+        import Part
+
+        faces = [Part.Face(w) for w in wires]
+        for i, f in enumerate(faces):
+            if any(j != i and g.Area > f.Area and g.common(f).Area > f.Area - 1e-6 for j, g in enumerate(faces)):
+                inner += 1
+        st = geo.stats(body.Shape) if body.Shape.Solids else {}
+        out = f" Now: {len(wires)} closed outline{'' if len(wires) == 1 else 's'} in {sk.Label}"
+        out += f", {inner} inside another (an opening each)" if inner else ""
+        if st:
+            out += f"; {body.Label} has volume {_g(st.get('volume', 0))} mm³ and {st.get('faces')} faces."
+        return out + ("" if st else ".")
+    except Exception:  # noqa: BLE001 - words only
+        return ""
+
+
 def used_sketch_note(sk, body=None, tool=None):
     """For a change to the geometry of a sketch that a feature uses (decision
     4, D-b): words that name the feature, and the body's unused sketch when
@@ -298,7 +325,7 @@ def used_sketch_note(sk, body=None, tool=None):
         prof = profile_users(sk)
         doing = "adding to it" if tool == "sketch_add" else "this change"
         if prof:
-            return f"Note: {sk.Label} is the profile of {', '.join(prof)}; {doing} changes {', '.join(prof)}."
+            return f"Note: {sk.Label} is the profile of {', '.join(prof)}; {doing} changes {', '.join(prof)}." + now_words(sk, body)
         return f"Note: {sk.Label} is used by {', '.join(users)}; {doing} changes {', '.join(users)}."
     names = ", ".join(o.Label for o in free[:3])
     return (f"{sk.Label} is used by {', '.join(users)}, so this change also changes {', '.join(users)}. "
@@ -1883,34 +1910,28 @@ def cut_side_words(feat, body):
         off = outside_words(sk, bb, n)
         if off:
             return off
-        c = FreeCAD.Vector((bb.XMin + bb.XMax) / 2, (bb.YMin + bb.YMax) / 2, (bb.ZMin + bb.ZMax) / 2)
-        side = (c - pl.Base).dot(n)
         axis = max(("x", abs(n.x), n.x), ("y", abs(n.y), n.y), ("z", abs(n.z), n.z), key=lambda t: t[1])
         normal = f"{'+' if axis[2] > 0 else '-'}{axis[0]}"
         rev = bool(getattr(feat, "Reversed", False))
-        if abs(side) < 1e-6:
-            # Which side of the sketch has material under the outline
-            # (exact, QA 1126g: "the body's centre is in the sketch's plane"
-            # gave no way on).
-            front, back = material_sides(sk, body, n, pl)
-            said = f"The sketch {sk.Label}'s normal is {normal}; the body's centre is in the sketch's plane."
-            if front is None:
-                return said
-            if front > 1e-6 and back > 1e-6:
-                return said + f" Under the outline there is material on both sides of the sketch ({_g(front)} mm³ along the normal, {_g(back)} mm³ against it)."
-            if front > 1e-6:
-                return said + f" Under the outline the material is on the side the normal points to ({normal}): reversed: true cuts it."
-            if back > 1e-6:
-                return said + f" Under the outline the material is on the side opposite the normal: reversed: false (the default) cuts it."
+        # Which side of the sketch has material under the outline, exact
+        # (QA 1126l: the side was taken from the centre of the body's box,
+        # which on an L-shaped body pointed the wrong way in 4 of 7 refusals).
+        front, back = material_sides(sk, body, n, pl)
+        said = f"The sketch {sk.Label}'s normal is {normal}."
+        if front is None:
             return said + (under_words(sk, body, n, pl) or "")
-        where = "on the side its normal points to" if side > 0 else "on the side opposite its normal"
-        # A pocket goes against the normal, reversed along it. The words say
-        # what the call sent (QA 1126g: "reversed: false sends the cut that
-        # way" after reversed: true was read as the tool ignoring it).
-        flip = (f" You sent reversed: true, so the cut went along the normal, away from the body: reversed: false (or leave it out) sends it into the body."
-                if rev else " reversed: true sends the cut that way.")
-        fix = (flip if (side > 0) != rev else (under_words(sk, body, n, pl) or _under_found(sk, body, n, pl)))
-        return f"The sketch {sk.Label}'s normal is {normal}, and the body is {where}." + fix
+        if front > 1e-6 and back > 1e-6:
+            return said + f" Under the outline there is material on both sides of the sketch ({_g(front)} mm³ along the normal, {_g(back)} mm³ against it)."
+        if front > 1e-6:
+            # A pocket goes against the normal, reversed along it. The words
+            # say what the call sent (QA 1126g).
+            return said + (" Under the outline the material is on the side the normal points to: reversed: true cuts it." if not rev
+                           else " Under the outline the material is on the side the normal points to, and reversed: true was sent." + (under_words(sk, body, n, pl) or ""))
+        if back > 1e-6:
+            return said + (" Under the outline the material is on the side opposite the normal. You sent reversed: true, so the cut went along the normal, "
+                           "away from it: reversed: false (or leave it out) sends it into the body." if rev
+                           else " Under the outline the material is on the side opposite the normal, the way the cut went." + (under_words(sk, body, n, pl) or ""))
+        return said + " There is no material under the outline on either side of the sketch." + (under_words(sk, body, n, pl) or _under_found(sk, body, n, pl) or "")
     except Exception:  # noqa: BLE001 - advice only
         return ""
 

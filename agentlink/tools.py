@@ -3546,7 +3546,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             staticbase.apply(server)
             listed = server.listed()
             entries = staticbase.listing(server, listed)
-            got = {"mode": staticbase.mode(), "style": staticbase.style(), "count": len(entries),
+            # Other inputs beside listing are not used: said (QA 1126l: tool
+            # and words sent with listing: true, 3 times, and dropped unsaid).
+            rest = sorted(k for k in a if k not in ("listing", "to"))
+            got = {**({"notUsed": f"listing: true gives the listing only; {', '.join(rest)} {'was' if len(rest) == 1 else 'were'} not used. Send {'it' if len(rest) == 1 else 'them'} without listing."} if rest else {}),
+                   "mode": staticbase.mode(), "style": staticbase.style(), "count": len(entries),
                    "tokens": int(round(len(json.dumps(entries, ensure_ascii=False, separators=(",", ":"))) / 3.5)), "names": [e["name"] for e in entries]}
             if a.get("to"):
                 to = a["to"]

@@ -333,17 +333,25 @@ def _reader(server, name, args):
     return out if isinstance(out, dict) else {}
 
 
-def _doc_object(doc, name):
+def _doc_object(doc, name, clash=False):
+    """The object named by label first, then by internal name, as every
+    other tool reads a name (QA 1126l: the current body, labelled "Pad",
+    was read as the feature whose internal name is Pad). clash: refuse
+    when name is one object's label and another's internal name."""
     if doc is None:
         return None
     try:
-        o = doc.getObject(name)
-        if o is not None:
-            return o
         found = doc.getObjectsByLabel(name)
-        return found[0] if found else None
+        o = doc.getObject(name)
     except Exception:  # noqa: BLE001
         return None
+    if found:
+        if clash and o is not None and o is not found[0]:
+            a = found[0]
+            raise ToolError("invalid_input", f'"{name}" is the label of {a.Label} (internal name {a.Name}) and the internal name of {o.Label}: '
+                                             f'give "{a.Name}" for the first or "{o.Label}" for the second.')
+        return found[0]
+    return o
 
 
 def _gui():
@@ -434,7 +442,7 @@ def read(server, session, what):
         o, rest = _doc_object(doc, label), parts[1:]
     else:
         for i in range(len(parts) - 1, 0, -1):
-            o = _doc_object(doc, ".".join(parts[:i]))
+            o = _doc_object(doc, ".".join(parts[:i]), clash=True)
             if o is not None:
                 rest = parts[i:]
                 break

@@ -61,6 +61,25 @@ def body_extent(b, sk):
     return {"x": [r(min(p.x for p in pts)), r(max(p.x for p in pts))], "y": [r(min(p.y for p in pts)), r(max(p.y for p in pts))]}
 
 
+def face_extent(link, sk):
+    """Where the face a sketch sits on is, in the sketch's own x/y: {"x":
+    [min, max], "y": [min, max]} (mm, to 0.1), exact; None when the sketch
+    is on a plane, not a face (QA 1126l: an upright drawn on a 60 x 5 long
+    side, read as a short end, with only the body's extent given)."""
+    try:
+        obj, subs = link[0], link[1]
+        sub = subs[0] if isinstance(subs, (list, tuple)) else subs
+        if not str(sub).startswith("Face"):
+            return None
+        face = obj.Shape.getElement(str(sub))
+        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+        bb = geo.bound_box(face.transformed(pl.inverse().toMatrix()))
+    except Exception:  # noqa: BLE001 - no reading: nothing said
+        return None
+    r = lambda v: round(float(v), 1) + 0.0  # noqa: E731
+    return {"x": [r(bb.XMin), r(bb.XMax)], "y": [r(bb.YMin), r(bb.YMax)]}
+
+
 def _geo_kind(g):
     return type(g).__name__.replace("ArcOfCircle", "Arc").replace("LineSegment", "Line")
 
@@ -1067,8 +1086,16 @@ def item_over(sk, ids):
             if span(under) == span(own):
                 return f"over the body: material under {span(own)}, the same box as the item's, {depth}"
             return f"partly over the body: material under {span(under)} of the item's {span(own)}, {depth}"
-        return (f"off the body: no material of {body.Label} under it on either side of the sketch "
-                f"(the body: {pc.span_text(bb)})")
+        # The body's box in the sketch's own x/y, as the item's numbers are
+        # (QA 1126l: "off the body … (the body: x 0..65, …)" in world axes,
+        # 18 times, for circles inside that box).
+        inv = pl.inverse().toMatrix()
+        bs, own = geo.bound_box(body.Shape.transformed(inv)), geo.bound_box(Part.Face(wire))
+        span = lambda b: f"x {_mm(b.XMin)}..{_mm(b.XMax)}, y {_mm(b.YMin)}..{_mm(b.YMax)}"  # noqa: E731
+        inside = own.XMin >= bs.XMin - 1e-6 and own.XMax <= bs.XMax + 1e-6 and own.YMin >= bs.YMin - 1e-6 and own.YMax <= bs.YMax + 1e-6
+        return (f"off the body: no material of {body.Label} under it on either side of the sketch"
+                + (f", although the item ({span(own)}) is inside the body's box in the sketch's x/y ({span(bs)}): not all of that box is material"
+                   if inside else f" (the item: {span(own)}; the body: {span(bs)}, in the sketch's x/y)"))
     except Exception:  # noqa: BLE001 - a reading only
         return None
 
@@ -1456,7 +1483,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "both_given": both_given, "round_sizes": round_sizes, "solved_away": solved_away, "item_over": item_over, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
+               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "face_extent": face_extent, "both_given": both_given, "round_sizes": round_sizes, "solved_away": solved_away, "item_over": item_over, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)

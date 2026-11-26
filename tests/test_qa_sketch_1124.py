@@ -408,7 +408,7 @@ class BodyExtent(unittest.TestCase):
         e = entries()
         new = e["sketch_new"]
         self.assertEqual(new["answer"]["fields"]["bodyExtent"], {"when": "=ext", "value": "=ext"})
-        self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)"}})
+        self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)", "fext": "=face_extent(link, sk)"}})
         self.assertIn("bodyExtent: the box of the body's solid in the sketch's own x/y", new["description"])
         add = e["sketch_add"]["description"]
         self.assertIn("rectangle {center|corner, size [w,h]}. rounded_rectangle {…, radius}. center puts the middle of the shape on that point. "
