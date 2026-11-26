@@ -168,7 +168,7 @@ class PlaneOrFace(unittest.TestCase):
         for k in ("a face as plane", "mirror face as plane"):
             self.assertEqual(got[k], ["refused", "invalid_input", "plane: XY, XZ, YZ or a datum plane's name. Give a face as face."], k)
         for k in ("a plane as face", "mirror plane as face"):
-            self.assertEqual(got[k], ["refused", "invalid_input", 'face: { side: "+z" }, { at: [x,y,z], normal: [x,y,z] } or "Pad.Face3". Give a plane as plane.'], k)
+            self.assertEqual(got[k], ["refused", "invalid_input", 'face: { side: "+z" }, { at: [x,y,z], normal: [x,y,z] } or "<feature>.Face<n>" (from shape_query). Give a plane as plane.'], k)
 
 
 if __name__ == "__main__":

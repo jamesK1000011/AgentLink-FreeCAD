@@ -326,10 +326,10 @@ SCHEMAS = {
     # 24 Nov, rename set 8 (rule R5): the plane-or-face field split in two, one meaning each
     "pd_mirrored": {"why": "face selectors; rename set 8",
                     "replace": {"plane": {"type": "string", "description": "XY, XZ, YZ (default) or a datum plane's name."}},
-                    "after": [("plane", "face", {"description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."})]},
+                    "after": [("plane", "face", {"description": "A flat face: { side: \"+z\" }, { at, normal } or \"<feature>.Face<n>\" (from shape_query)."})]},
     "pd_datum_plane": {"why": "face selectors; rename set 8",
                        "rename": {"on": ("plane", {"type": "string", "description": "XY (default), XZ, YZ or a datum plane's name."})},
-                       "after": [("plane", "face", {"description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."})]},
+                       "after": [("plane", "face", {"description": "A flat face: { side: \"+z\" }, { at, normal } or \"<feature>.Face<n>\" (from shape_query)."})]},
     # 24 Nov, local-model runs (a, b, kind sent for a constraint's fields): each constraint item typed on the card
     "sketch_constrain": {"why": "local-model runs: a constraint item's fields typed",
                          "replace": {"constraints": {

@@ -7268,7 +7268,7 @@
       "description": "XY, XZ, YZ (default) or a datum plane's name."
      },
      "face": {
-      "description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."
+      "description": "A flat face: { side: \"+z\" }, { at, normal } or \"<feature>.Face<n>\" (from shape_query)."
      }
     },
     "required": [
@@ -7288,7 +7288,7 @@
     {"refuse": "features: [names] — the features to repeat (feature_list names them) — or \"all\" for the whole body.", "when": "=not whole and (not is_list(refs) or not refs or not all(is_str(r) for r in refs))"},
     {"refuse": "Give plane or face, not both: plane is XY, XZ, YZ or a datum plane; face is a face.", "when": "='plane' in a and 'face' in a"},
     {"refuse": "plane: XY, XZ, YZ or a datum plane's name. Give a face as face.", "when": "='plane' in a and (not is_str(a.plane) or '.Face' in a.plane)"},
-    {"refuse": "face: { side: \"+z\" }, { at: [x,y,z], normal: [x,y,z] } or \"Pad.Face3\". Give a plane as plane.", "when": "='face' in a and not (is_dict(a.face) or (is_str(a.face) and '.Face' in a.face))"},
+    {"refuse": "face: { side: \"+z\" }, { at: [x,y,z], normal: [x,y,z] } or \"<feature>.Face<n>\" (from shape_query). Give a plane as plane.", "when": "='face' in a and not (is_dict(a.face) or (is_str(a.face) and '.Face' in a.face))"},
     {"let": {"orig": "=None if whole else [in_body(b, r, ['PartDesign::']) for r in refs]", "prior": "=b.Tip", "ref": "=plane_ref(b, a.face, 'face')[0] if 'face' in a else plane_ref(b, a.get('plane', 'YZ'), 'plane')[0]"}},
     {"let": {"f": "=new(b, 'PartDesign::Mirrored', 'Mirrored')"}},
     {
@@ -7620,7 +7620,7 @@
       "description": "XY (default), XZ, YZ or a datum plane's name."
      },
      "face": {
-      "description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."
+      "description": "A flat face: { side: \"+z\" }, { at, normal } or \"<feature>.Face<n>\" (from shape_query)."
      },
      "offset": {
       "type": "number"
@@ -7643,7 +7643,7 @@
     {"let": {"b": "=body(a.body)"}},
     {"refuse": "Give plane or face, not both: plane is XY, XZ, YZ or a datum plane; face is a face.", "when": "='plane' in a and 'face' in a"},
     {"refuse": "plane: XY, XZ, YZ or a datum plane's name. Give a face as face.", "when": "='plane' in a and (not is_str(a.plane) or '.Face' in a.plane)"},
-    {"refuse": "face: { side: \"+z\" }, { at: [x,y,z], normal: [x,y,z] } or \"Pad.Face3\". Give a plane as plane.", "when": "='face' in a and not (is_dict(a.face) or (is_str(a.face) and '.Face' in a.face))"},
+    {"refuse": "face: { side: \"+z\" }, { at: [x,y,z], normal: [x,y,z] } or \"<feature>.Face<n>\" (from shape_query). Give a plane as plane.", "when": "='face' in a and not (is_dict(a.face) or (is_str(a.face) and '.Face' in a.face))"},
     {"let": {"base, what": "=plane_ref(b, a.face, 'face') if 'face' in a else plane_ref(b, a.get('plane', 'XY'), 'plane')", "f": "=new(b, 'PartDesign::Plane', a.name or 'DatumPlane')"}},
     {"do": "=setprop(f, support_prop(f), [(base[0], base[1][0])])"},
     {"set": {"f.MapMode": "FlatFace"}},
@@ -8119,7 +8119,7 @@
   },
   "sketch_new": {
    "group": "sketch",
-   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). +z is the top and -z the bottom, as FreeCAD names them. of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal. reversed: true reverses the normal. The planes give sketch x, sketch y and the normal. XY: +X, +Y, +Z. XZ: +X, +Z, -Y. YZ: +Y, +Z, +X. A pad grows along the normal, and a pocket or a hole cuts against it. offset moves the sketch along the normal: XZ with offset 15 is at y -15. A face sketch aligns with the world. Its origin is the foot of the world origin on the face plane, not the face centre. On a standing face, y runs up +Z. On another face, x is along the world axis that lies most in the face, and y is normal × x. up: x | y | z makes sketch y run along that world axis, and x is y × normal. Answer: sketch (its label), axes and frame. axes: the frame in words. Read it before you draw. frame: where the sketch x/y and its origin are in the world. picked: which face a side took when more faces face that way. On a face, face is the form that picks it again. bodyExtent: the box of the body's solid in the sketch's own x/y, { x: [min, max], y: [min, max] } (mm). It is not there when the body has no solid. Use its numbers to start a shape at an edge of the body, not at the origin. Example: on face { side: \"+z\" } of a 50 x 40 x 4 plate centred on XY, bodyExtent is { x: [-25.0, 25.0], y: [-20.0, 20.0] }. There, sketch_add rectangle { corner: [-25, -20], size: [10, 10] } is a block on one corner of the plate.",
+   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | a face's name as shape_query gives it. An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). +z is the top and -z the bottom, as FreeCAD names them. of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal. reversed: true reverses the normal. The planes give sketch x, sketch y and the normal. XY: +X, +Y, +Z. XZ: +X, +Z, -Y. YZ: +Y, +Z, +X. A pad grows along the normal, and a pocket or a hole cuts against it. offset moves the sketch along the normal: XZ with offset 15 is at y -15. A face sketch aligns with the world. Its origin is the foot of the world origin on the face plane, not the face centre. On a standing face, y runs up +Z. On another face, x is along the world axis that lies most in the face, and y is normal × x. up: x | y | z makes sketch y run along that world axis, and x is y × normal. Answer: sketch (its label), axes and frame. axes: the frame in words. Read it before you draw. frame: where the sketch x/y and its origin are in the world. picked: which face a side took when more faces face that way. On a face, face is the form that picks it again. bodyExtent: the box of the body's solid in the sketch's own x/y, { x: [min, max], y: [min, max] } (mm). It is not there when the body has no solid. Use its numbers to start a shape at an edge of the body, not at the origin. Example: on face { side: \"+z\" } of a 50 x 40 x 4 plate centred on XY, bodyExtent is { x: [-25.0, 25.0], y: [-20.0, 20.0] }. There, sketch_add rectangle { corner: [-25, -20], size: [10, 10] } is a block on one corner of the plate.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21136,7 +21136,7 @@
   },
   "sketch_attach": {
    "group": "sketch",
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. reversed: true reverses the normal. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and reversed stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: axes (the frame in words), on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"<feature>.Face<n>\" (from shape_query). Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. reversed: true reverses the normal. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and reversed stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: axes (the frame in words), on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"<feature>.Face<n>\" (from shape_query)). A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21187,8 +21187,8 @@
     {"let": {"b": "=first([p for p in sk.InList if p.TypeId == 'PartDesign::Body'])"}},
     {"refuse": {"fmt": "{sk.Label} is in no body: attach works on a body's sketch — sketch_new makes one in a body, and sketch_carbon copies this one into it."}, "code": "invalid_state", "when": "=b is None"},
     {"when": "=a.get('edge') is not None or a.get('repair')", "then": [{"refuse": "edge or repair: not with plane or face.", "when": "='plane' in a or 'face' in a"}, {"let": {"extra": "=attach_edge(sk, b, a)"}}, {"answer": {"via": "finish", "with": ["sketch_attach", "$fields"], "late": true, "fields": {"axes": "=axes(sk.Placement)", "...state": "=state(sk)", "...extra": "=extra"}}}]},
-    {"refuse": {"fmt": "No plane or face was given. Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face {{ at: [x,y,z], normal: [x,y,z] }}."}, "when": "=not ('plane' in a or 'face' in a)"},
-    {"refuse": {"fmt": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face {{ at: [x,y,z], normal: [x,y,z] }}, one of them, not both."}, "when": "=('plane' in a) and ('face' in a)"},
+    {"refuse": {"fmt": "No plane or face was given. Give plane (XY, XZ, YZ, a datum plane's name or \"<feature>.Face<n>\" (from shape_query)) or face {{ at: [x,y,z], normal: [x,y,z] }}."}, "when": "=not ('plane' in a or 'face' in a)"},
+    {"refuse": {"fmt": "Give plane (XY, XZ, YZ, a datum plane's name or \"<feature>.Face<n>\" (from shape_query)) or face {{ at: [x,y,z], normal: [x,y,z] }}, one of them, not both."}, "when": "=('plane' in a) and ('face' in a)"},
     {"let": {"link, what": "=plane_ref(b, a['plane'] if 'plane' in a else a['face'], 'plane')"}},
     {"let": {"owner": "=link[0]", "moved": "=False", "order": "=list(b.Group)"}},
     {"when": "=has(owner, 'isDerivedFrom') and owner.isDerivedFrom('PartDesign::Feature') and sk in order and owner in order and order.index(owner) >= order.index(sk)", "then": [{"let": {"built": "=[o for o in sk.InList if o is not b and o is not owner and b.hasObject(o) and o.isDerivedFrom('PartDesign::Feature')]"}}, {"refuse": {"fmt": "{owner.Label} (whose face it is) is built after {sk.Label}{', and ' + ', '.join([u.Label for u in built]) + ' is built from ' + sk.Label if built else ''}: attaching would make the sketch hang on a later feature (a cyclic support). Attach to an earlier face or plane, or make a new sketch on that face (sketch_new {{ face }})."}, "code": "invalid_state", "when": "=built or owner in sk.InListRecursive"}, {"try": [{"do": ["=b.removeObject(sk)", "=b.insertObject(sk, owner, True)"]}], "except": [{"refuse": {"fmt": "{sk.Label} comes before {owner.Label} in {b.Label} and could not be moved after it ({error}): make a new sketch on that face (sketch_new {{ face }})."}, "code": "failed"}]}, {"let": {"moved": "=True"}}]},
