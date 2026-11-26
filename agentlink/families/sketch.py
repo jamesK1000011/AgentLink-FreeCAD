@@ -5,6 +5,7 @@
 # reading, and edits. Coordinates are the sketch's own, in mm; angles in
 # degrees.
 
+import json
 import math
 import re
 import os
@@ -241,8 +242,14 @@ def open_end_words(ends, curves, size, dist, rounds=(), joined=None):
             pairs.add(key)
             if joined is not None:
                 joined.append(((gid, p), (g2, q)))
-            near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: "
-                        "sketch_constrain coincident joins them")
+            # A line end at an arc end: the card's join, tangent, joins and
+            # smooths them; coincident leaves a corner (QA 1126h: the todo and
+            # the card named different joins).
+            if {kind, k2} == {"line", "arc"}:
+                how = f"sketch_constrain tangent [[{gid}, {pos}], [{g2}, {s2}]] joins and smooths them"
+            else:
+                how = "sketch_constrain coincident joins them"
+            near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: " + how)
 
     # Two ends a hair apart are one joint left open: the coincident words
     # first, always (26 Nov QA: an end 0.001 mm from the next one got the
@@ -840,6 +847,11 @@ def build(item):
     # The wrong value is said back, and a PartDesign feature's name is told
     # apart from a sketch shape (QA 1126f: kind "fillet" in sketch_add).
     kinds = "line, polyline, arc, arc3, circle, circle3, ellipse, parabola, hyperbola, bspline, rectangle, rounded_rectangle, polygon, slot, arc_slot or point"
+    if k is None:
+        # No kind at all (QA 1126h: kind "None" for an item that had type).
+        other = next((f for f in ("type", "shape", "kind_") if f in item), None)
+        raise ToolError("invalid_input", "the item has no kind" + (f' (it has {other}: {json.dumps(item[other])}; the field is kind)' if other else "")
+                        + f". The kinds: line, polyline, arc, arc3, circle, circle3, ellipse, parabola, hyperbola, bspline, rectangle, rounded_rectangle, polygon, slot, arc_slot or point.")
     said = str(k)
     feature = {"fillet": "pd_fillet", "chamfer": "pd_chamfer", "pad": "pd_pad", "pocket": "pd_pocket", "hole": "pd_hole", "extrude": "pd_pad"}.get(said.lower())
     if feature:

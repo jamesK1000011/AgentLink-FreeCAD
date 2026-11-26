@@ -358,9 +358,19 @@ def named(doc, ref, prefer=(BODY,)):
         o = doc.getObject(ref)
     except Exception:
         o = None
+    objs = list(getattr(doc, "Objects", None) or [])
+    # One object's label and another's internal name: refused with both
+    # (QA 1126h: "Sketch" went to the sketch whose internal name it was, not
+    # to the one the agent had named "Sketch").
+    labelled = [x for x in objs if str(getattr(x, "Label", "")) == ref]
+    if o is not None and labelled and all(x is not o for x in labelled):
+        a = labelled[0]
+        from ..protocol import ToolError
+
+        raise ToolError("invalid_input", f'"{ref}" is the label of {a.Label} (internal name {a.Name}) and the internal name of {o.Label}: '
+                                         f'give "{a.Name}" for the first or "{o.Label}" for the second.')
     if o is not None:
         return o
-    objs = list(getattr(doc, "Objects", None) or [])
     low = ref.lower()
     for exact in (True, False):
         hits = [x for x in objs if (str(getattr(x, "Label", "")) == ref if exact

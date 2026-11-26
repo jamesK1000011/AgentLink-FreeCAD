@@ -1144,7 +1144,15 @@ def check(session, tool, m, args=None):
     if pending:
         h["needRecompute"] = pending[:MAX_LIST] + ([f"… {len(pending) - MAX_LIST} more"] if len(pending) > MAX_LIST else [])
         lines.append(f"{len(pending)} object{'s' if len(pending) != 1 else ''} not recomputed yet")
-        todos.append("recompute brings them up to date")
+        # An object that fails when recomputed stays not up to date: the
+        # words say so (QA 1126h: "recompute brings them up to date" after
+        # five recomputes failed the same way).
+        failing = {e.get("object") for e in errors}
+        stuck = [p for p in pending if p in failing]
+        if stuck:
+            todos.append(f"a recompute does not fix {', '.join(stuck[:3])}: {'it fails' if len(stuck) == 1 else 'they fail'} when recomputed (the error above); fix its input or delete it")
+        else:
+            todos.append("recompute brings them up to date")
 
     failing_now = {e["object"] for e in errors}
     took("state")

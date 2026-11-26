@@ -79,12 +79,34 @@ def body_of(o):
     return None
 
 
+def by_ref(objs, ref):
+    """The object of objs that ref names, or None: an exact label first,
+    then an internal name, then a label in another case. When ref is one
+    object's label and another's internal name, it refuses with both (QA
+    1126h: "Sketch" was BaseSketch's internal name and the new sketch's
+    label, and circles went into the pad's profile)."""
+    objs = list(objs)
+    ref_s = str(ref)
+    by_label = [o for o in objs if o.Label == ref_s]
+    by_name = [o for o in objs if o.Name == ref_s]
+    if by_label and by_name and by_name[0] is not by_label[0]:
+        a, b = by_label[0], by_name[0]
+        raise ToolError("invalid_input", f'"{ref_s}" is the label of {a.Label} (internal name {a.Name}) and the internal name of {b.Label}: '
+                                         f'give "{a.Name}" for the first or "{b.Label}" for the second.')
+    if by_label:
+        return by_label[0]
+    if by_name:
+        return by_name[0]
+    low = ref_s.lower()
+    return next((o for o in objs if o.Label.lower() == low), None)
+
+
 def in_body(body, ref, kinds=None, what="feature"):
     """An object of the body by label or name; kinds: TypeId prefixes allowed."""
     items = [o for o in body.Group if kinds is None or any(o.TypeId.startswith(k) for k in kinds)]
-    for o in items:
-        if ref in (o.Label, o.Name) or o.Label.lower() == str(ref).lower():
-            return o
+    o = by_ref(items, ref)
+    if o is not None:
+        return o
     raise ToolError("not_found", f"{what} {ref!r}: not in {body.Label} — there: {', '.join(o.Label for o in items) or 'none'}.")
 
 
@@ -234,10 +256,10 @@ def sketch_of(doc, ref, body=None, session=None):
     if o is not None and any(o is x for x in sk):
         note_named(session, o)
         return o
-    for o in sk:
-        if ref in (o.Label, o.Name) or o.Label.lower() == str(ref).lower():
-            note_named(session, o)
-            return o
+    o = by_ref(sk, ref)
+    if o is not None:
+        note_named(session, o)
+        return o
     # 24 Nov (Gemma: "Sketch1" for "Sketch 2"): the same ordered, marked
     # list as say-which, and where the names come from.
     if not sk:
@@ -1170,6 +1192,14 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         if must_change == "add" and delta <= tol:
             raise ToolError("failed", f"{feat.Label} added no material — it lies inside the body already. Nothing was kept. {hint}".strip())
         dress = feat is not None and getattr(feat, "TypeId", "") in DRESSUPS
+        # Another object of the body that fails on recompute: the body's
+        # numbers are not this feature's result, so the words say that and
+        # no side words (QA 1126h: "cut nothing" twice while the body could
+        # not recompute).
+        broken = failing_in(body, feat)
+        if broken and ((must_change == "cut" and delta >= -tol) or (must_change == "add" and delta <= tol)):
+            raise ToolError("failed", f"{body.Label} did not recompute: {broken}. Its volume is not this feature's result. "
+                                      f"Fix that object first (or delete it). Nothing was kept.")
         if must_change == "cut" and delta >= -tol:
             what = ("removed no material — the wall did not hollow the body" if dress
                     else "cut nothing — the profile does not meet the body that way")
@@ -1688,6 +1718,25 @@ def outside_text(label, prof, body, normal, tol=1e-6):
             ". Move the outline over the body (its position, not its direction).")
 
 
+def failing_in(body, feat=None):
+    """"Sketch (Sketch001) fails: …" for the first object of the body other
+    than feat that FreeCAD marks invalid after its recompute, else ""."""
+    try:
+        for o in getattr(body, "Group", None) or []:
+            if o is feat:
+                continue
+            if "Invalid" in (getattr(o, "State", None) or []):
+                why = ""
+                try:
+                    why = str(o.getStatusString() or "")[:160]
+                except Exception:  # noqa: BLE001
+                    pass
+                return f"{o.Label} ({o.Name}) fails" + (f": {why}" if why else "")
+    except Exception:  # noqa: BLE001 - words only
+        return ""
+    return ""
+
+
 def material_sides(sk, body, n, pl=None):
     """(volume along the normal, volume against it) of the body's material
     under the sketch's outline (the outline swept each way through the
@@ -1708,6 +1757,16 @@ def material_sides(sk, body, n, pl=None):
         return front, back
     except Exception:  # noqa: BLE001 - advice only
         return None, None
+
+
+def _under_found(sk, body, n, pl):
+    """The words when material does lie under the outline and still nothing
+    was cut: the volume found, not "check that it overlaps" (QA 1126h)."""
+    front, back = material_sides(sk, body, n, pl)
+    if front is None:
+        return " The cut went toward the body: check that the sketch overlaps it (its position, not its side)."
+    return (f" Material does lie under the outline ({_g(front + back)} mm³), yet nothing was removed: "
+            "check the depth (length) and that the sketch's outline is one closed wire (sketch_state).")
 
 
 def under_words(sk, body, n, pl=None):
@@ -1788,8 +1847,7 @@ def cut_side_words(feat, body):
         # way" after reversed: true was read as the tool ignoring it).
         flip = (f" You sent reversed: true, so the cut went along the normal, away from the body: reversed: false (or leave it out) sends it into the body."
                 if rev else " reversed: true sends the cut that way.")
-        fix = (flip if (side > 0) != rev else
-               (under_words(sk, body, n, pl) or " The cut went toward the body: check that the sketch overlaps it (its position, not its side)."))
+        fix = (flip if (side > 0) != rev else (under_words(sk, body, n, pl) or _under_found(sk, body, n, pl)))
         return f"The sketch {sk.Label}'s normal is {normal}, and the body is {where}." + fix
     except Exception:  # noqa: BLE001 - advice only
         return ""
@@ -2034,9 +2092,9 @@ def ref_object(doc, name, body=None):
     """The object a reference names, any kind, shown or hidden; one of the
     body's own first when two have that label."""
     if body is not None:
-        for o in getattr(body, "Group", None) or []:
-            if name in (o.Label, o.Name):
-                return o
+        o = by_ref(getattr(body, "Group", None) or [], name)
+        if o is not None:
+            return o
     return picks.named(doc, name, prefer=())
 
 
