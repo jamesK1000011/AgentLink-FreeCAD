@@ -1107,6 +1107,7 @@
     "gid",
     "is_tuple",
     "item_error",
+    "item_over",
     "line",
     "make_constraint",
     "offset_out",

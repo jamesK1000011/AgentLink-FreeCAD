@@ -972,6 +972,37 @@ def vertex_words(sk, g, p):
     return f"{name} has no {VERTEX_WORDS[p]} (vertex {p}); its points are {pts}"
 
 
+def item_over(sk, ids):
+    """For one closed item of sketch sk (its geometry ids): "over the body"
+    when the body has material under its outline on either side of the
+    sketch, "off the body: …" when it has none, None when it cannot be
+    told or the body has no solid yet (exact: the outline swept through the
+    body and cut with its solid). QA 1126h: holes drawn at (45, 15) on a
+    body that spans x -30..30, and the answer said nothing until the cut."""
+    try:
+        body = next((o for o in sk.InList if o.TypeId == "PartDesign::Body"), None)
+        if body is None or body.Shape.isNull() or not body.Shape.Solids:
+            return None
+        edges = [sk.Geometry[g].toShape() for g in ids if not sk.getConstruction(g)]
+        if not edges:
+            return None
+        wire = Part.Wire(Part.sortEdges(edges)[0])
+        if not wire.isClosed():
+            return None
+        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+        face = Part.Face(wire).transformed(pl.toMatrix())  # in the world, as the body's solid
+        n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+        bb = geo.bound_box(body.Shape)
+        d = bb.DiagonalLength + face.BoundBox.DiagonalLength + 1.0
+        v = face.translated(n * -d).extrude(n * (2 * d)).common(body.Shape).Volume
+        if v > 1e-6:
+            return "over the body"
+        return (f"off the body: no material of {body.Label} under it on either side of the sketch "
+                f"(the body: {pc.span_text(bb)})")
+    except Exception:  # noqa: BLE001 - a reading only
+        return None
+
+
 def arc_points(sk, ids):
     """For each arc among geometry ids: its id and its start, through (the
     middle of the arc) and end points in the sketch's x/y, so the side it
@@ -1317,7 +1348,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
+               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "item_over": item_over, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)
