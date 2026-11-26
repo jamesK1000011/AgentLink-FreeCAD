@@ -1013,6 +1013,21 @@ def vertex_words(sk, g, p):
     return f"{name} has no {VERTEX_WORDS[p]} (vertex {p}); its points are {pts}"
 
 
+SIDES = ("+x", "-x", "+y", "-y", "+z", "-z")
+
+
+def both_given(plane, face):
+    """sketch_new's refusal of plane and face together: what was sent, and
+    the fact when plane holds a side (QA run 1126k lid: plane "-z" with
+    face { side: "-z" }, and the model then took the example "Pad.Face3",
+    a real side face, for the bottom)."""
+    said = f"You sent plane {json.dumps(plane)} and face {json.dumps(face, default=str)}: send one of them."
+    if str(plane).strip().lower() in SIDES:
+        said += f" plane {json.dumps(plane)} is not a plane: a side goes in face {{ side: {json.dumps(str(plane).strip().lower())} }}."
+    return (said + " plane is XY, XZ, YZ, a datum plane's name or a face's name as shape_query gives it."
+            " face is { side: \"+z\" } (+z is the top, -z the bottom) or { at: [x,y,z], normal: [x,y,z] } on the body's solid.")
+
+
 def item_over(sk, ids):
     """For one closed item of sketch sk (its geometry ids): "over the body"
     when the body has material under its outline on either side of the
@@ -1435,7 +1450,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "round_sizes": round_sizes, "solved_away": solved_away, "item_over": item_over, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
+               "con_words": con_words, "clashing": clashing, "build": build, "arc_points": arc_points, "both_given": both_given, "round_sizes": round_sizes, "solved_away": solved_away, "item_over": item_over, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)

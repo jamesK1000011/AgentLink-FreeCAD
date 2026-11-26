@@ -88,6 +88,15 @@ class Fixes(unittest.TestCase):
 ''')
         self.assertFalse(got[0], got)
 
+    def test_sketch_new_both_given_names_what_was_sent(self):
+        got = in_a_process(SETUP + '''
+    from agentlink.families import sketch
+    print(json.dumps([sketch.both_given("-z", {"side": "-z"}), sketch.both_given("XY", {"side": "+z"})]))
+''')
+        self.assertTrue(got[0].startswith('You sent plane "-z" and face {"side": "-z"}: send one of them. plane "-z" is not a plane: a side goes in face { side: "-z" }.'), got[0])
+        self.assertNotIn("is not a plane", got[1])
+        self.assertNotIn("Pad.Face3", got[0] + got[1])
+
     def test_cards_say_it(self):
         e = entries()
         self.assertIn("solvedAway: the radii and centres that the solve changed", e["sketch_constrain"]["description"])
