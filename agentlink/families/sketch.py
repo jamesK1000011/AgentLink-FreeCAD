@@ -462,6 +462,46 @@ def _cross_words(sk, wires):
         return []
 
 
+MAX_OVERLAP_CURVES = 200
+
+
+def overlap_words(sk):
+    """Curves of sketch sk that lie on each other for a length (exact: the
+    common part of their shapes), in words: "line 4 lies on line 0 from
+    [35, 0] to [-30, 0]" (QA 1126i: a polyline back over its own first edge
+    read closedWires 1, readyForFeature true, and padded only part of it).
+    Construction geometry is left out; [] when none or not readable."""
+    out = []
+    try:
+        ids = []
+        for g, c in enumerate(sk.Geometry):
+            try:
+                if sk.getConstruction(g):
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
+            if type(c).__name__ in ("LineSegment", "ArcOfCircle", "Circle"):
+                ids.append(g)
+        if len(ids) > MAX_OVERLAP_CURVES:
+            return []
+        shapes = {g: sk.Geometry[g].toShape() for g in ids}
+        for n, a in enumerate(ids):
+            for b in ids[n + 1:]:
+                sa, sb = shapes[a], shapes[b]
+                if not sa.BoundBox.intersect(sb.BoundBox):
+                    continue
+                com = sa.common(sb)
+                if com.isNull() or com.Length <= 1e-6:
+                    continue
+                vs = com.Vertexes
+                ends = f" from {_pt(vs[0].Point)} to {_pt(vs[-1].Point)}" if len(vs) >= 2 else ""
+                out.append(f"{_geo_kind(sk.Geometry[b]).lower()} {b} lies on {_geo_kind(sk.Geometry[a]).lower()} {a}{ends} "
+                           f"({_mm(com.Length)} mm): delete one or move it")
+    except Exception:  # noqa: BLE001 - no reading: nothing said
+        return []
+    return out
+
+
 def _open_end_words(sk, openv, joined=None):
     """open_end_words for sketch sk: its open ends (openv, the sketch's own
     x/y) matched to the curves they end, by id. [] when one is not matched."""
@@ -554,6 +594,7 @@ def state_of(sk):
     # a face of loops apart or one inside another (a hole), not of loops
     # that meet.
     cross = _cross_words(sk, wires) if wires and closed == len(wires) else []
+    cross += overlap_words(sk) if wires else []
     ready = code == 0 and not conflicting and not redundant and not malformed and bool(wires) and closed == len(wires) and not cross
     out["readyForFeature"] = ready
     if not ready:

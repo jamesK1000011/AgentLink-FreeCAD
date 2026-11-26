@@ -8630,7 +8630,7 @@
   },
   "sketch_state": {
    "group": "sketch",
-   "description": "Read the solver's state of a sketch. Check it before a feature. dof: 0 is fully constrained. Also conflicting / redundant / malformed constraint ids, closed wires and open vertices. readyForFeature, with todo when it is false. It is false for an open wire, a branch, or closed loops that cross or touch. Its frame in the world, as vectors (frame) and in words (axes). detail (default true): lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool. A pad on a sketch with dof > 0 works, but it moves when you edit the sketch.",
+   "description": "Read the solver's state of a sketch. Check it before a feature. dof: 0 is fully constrained. Also conflicting / redundant / malformed constraint ids, closed wires and open vertices. readyForFeature, with todo when it is false. It is false for an open wire, a branch, or closed loops that cross or touch. It is also false when two curves lie on each other for a length. Its frame in the world, as vectors (frame) and in words (axes). detail (default true): lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool. A pad on a sketch with dof > 0 works, but it moves when you edit the sketch.",
    "inputSchema": {
     "type": "object",
     "properties": {
