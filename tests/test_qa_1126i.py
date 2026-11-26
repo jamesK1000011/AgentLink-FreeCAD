@@ -97,6 +97,28 @@ class Fixes(unittest.TestCase):
         self.assertNotIn("is not a plane", got[1])
         self.assertNotIn("Pad.Face3", got[0] + got[1])
 
+    def test_tool_find_says_a_name_is_no_tool(self):
+        got = in_a_process(SERVER + '''
+    r = call("tool_find", {"tool": ["pd_join", "pd_pad"]})
+    print(json.dumps([r[1].get("missing"), "readAs" in r[1]]))
+''')
+        self.assertEqual(got[0], "No tool is named pd_join. What follows is a word search for it.")
+
+    def test_get_says_which_object_it_read(self):
+        got = in_a_process(SETUP + '''
+    import types
+    from agentlink import fastpath
+    o = types.SimpleNamespace(Name="Body", Label="Part", Shape=object(), PropertiesList=["Label", "Shape"], TypeId="PartDesign::Body", Visibility=False)
+    doc = types.SimpleNamespace(Label="D", getObject=lambda n: o if n == "Body" else None, getObjectsByLabel=lambda n: [o] if n == "Part" else [])
+    s = types.SimpleNamespace(doc=doc)
+    try:
+        fastpath.read(types.SimpleNamespace(tools={}), s, "Body.solids")
+    except Exception:
+        pass
+    print(json.dumps(s.__dict__.get("_get_read")))
+''')
+        self.assertEqual(got, "Body Part (internal name Body), hidden")
+
     def test_cards_say_it(self):
         e = entries()
         self.assertIn("solvedAway: the radii and centres that the solve changed", e["sketch_constrain"]["description"])

@@ -46,11 +46,12 @@ def tools(session):
              {"type": "object", "properties": {"do": {"type": "array", "items": {"type": "object"}}, "check": {"type": "boolean"}, "keep": {"type": "boolean"}, "rollback": {"type": "boolean"}},
                                  "required": ["do"], "additionalProperties": False}, fast),
         Tool("get", ("Read one value, and get only that value with its unit. "
-                     "what: \"Pad.Length\" (a property), \"Body.volume\" (also area, mass, centerOfMass, size), "
-                     "\"Body.Edge7.length\" (an edge or a face: length, radius, area), \"sketch.dof\" (also closedWires, readyForFeature), "
+                     "what: \"Pad.Length\" (a property), \"body.volume\" (also area, mass, centerOfMass, size), "
+                     "\"body.Edge7.length\" (an edge or a face: length, radius, area), \"sketch.dof\" (also closedWires, readyForFeature), "
                      "\"active.body\", \"active.sketch\", \"selection\" or \"bodies\". "
-                     "body and sketch in lower case are the current ones. what can be a list of up to 20. "
-                     "Answer: { what: value }, for example { \"Body.volume\": \"1520 mm³\" }. In a list, a value that cannot be read goes in missed, with why. "
+                     "body and sketch in lower case are the current ones; any other name is an object's label or internal name. what can be a list of up to 20. "
+                     "Answer: { what: value }, for example { \"body.volume\": \"1520 mm³\" }. In a list, a value that cannot be read goes in missed, with why. "
+                     "readFrom names the object read when its label is not the name given or it is hidden. "
                      "It uses the readers of object_get, measure, measure_mass and sketch_state. "
                      "Changes nothing. The person's preference FastPath can turn it off."),
              {"type": "object", "properties": {"what": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}},

@@ -276,7 +276,7 @@ def what_words(what):
     """What is wrong with a targeted read's form, or None (the objects are
     looked up when it runs)."""
     if not isinstance(what, str) or not what.strip():
-        return "what: \"Pad.Length\", \"Body.volume\", \"Body.Edge7.length\", \"sketch.dof\", \"active.body\""
+        return "what: \"Pad.Length\", \"body.volume\", \"body.Edge7.length\", \"sketch.dof\", \"active.body\""
     w = what.strip()
     if w in ACTIVE:
         return None
@@ -440,6 +440,19 @@ def read(server, session, what):
                 break
     if o is None:
         raise ToolError("not_found", f"{w}: no object {parts[0]!r} in {getattr(doc, 'Label', 'the document')} (a name or a label; session_state lists the bodies).")
+    # Which object was read, when its label is not the name given or it is
+    # hidden (QA 1126k: "Body.volume" read the hidden input body of a
+    # boolean, internal name Body, and the answer did not say so).
+    given = w[:len(w) - len(".".join(rest)) - 1] if rest else w
+    try:
+        if given in ("body", "sketch"):  # the current one: asked by its role
+            raise ValueError
+        hidden = getattr(o, "Visibility", True) is False
+        if getattr(o, "Label", given) != given or hidden:
+            session.__dict__["_get_read"] = (f"{getattr(o, 'TypeId', 'object').split('::')[-1]} {o.Label}" + (f" (internal name {o.Name})" if o.Name != o.Label else "")
+                                             + (", hidden" if hidden else ""))
+    except Exception:  # noqa: BLE001 - a word only, or the current one
+        pass
     head = rest[0]
     if ELEMENT.match(head):
         kind = re.match(r"[A-Za-z]+", head).group(0)
@@ -519,12 +532,13 @@ def get_tool(server, session, a):
     what = a.get("what")
     whats = [what] if isinstance(what, str) else what
     if not isinstance(whats, list) or not whats or len(whats) > 20 or not all(isinstance(x, str) for x in whats):
-        raise ToolError("invalid_input", "what: \"Pad.Length\", \"Body.volume\", \"Body.Edge7.length\", \"sketch.dof\", \"active.body\", or a list of up to 20.")
-    out, missed = {}, {}
+        raise ToolError("invalid_input", "what: \"Pad.Length\", \"body.volume\", \"body.Edge7.length\", \"sketch.dof\", \"active.body\", or a list of up to 20.")
+    out, missed, readfrom = {}, {}, {}
     for x in whats:
         # One value that cannot be read does not lose the others (live, 22
         # Nov: a body with no material had no mass, and the whole list was
         # refused). A single what still refuses as before.
+        session.__dict__.pop("_get_read", None)
         try:
             v, unit = read(server, session, x)
         except ToolError as e:
@@ -533,6 +547,10 @@ def get_tool(server, session, a):
             missed[x.strip()] = e.message
             continue
         out[x.strip()] = with_unit(v, unit)
+        if session.__dict__.get("_get_read"):
+            readfrom[x.strip()] = session.__dict__.pop("_get_read")
+    if readfrom:
+        out["readFrom"] = readfrom
     if missed:
         out["missed"] = missed
     return out

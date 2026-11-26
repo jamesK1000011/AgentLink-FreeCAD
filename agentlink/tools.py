@@ -3593,6 +3593,12 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 one["card"] = tool_groups({"tool": exact.name})["tools"][0]
             out.append(one)
         res = out[0] if len(out) == 1 else {"results": out}
+        # A tool input that names no tool, said on its own (QA 1126k: pd_join
+        # and fillet_edge were searched, and the line in readAs was missed).
+        gone = [r[len("tool: "):-len(" is no tool name, so it was searched")] for r in read_as if r.startswith("tool: ") and r.endswith(" is no tool name, so it was searched")]
+        if gone:
+            read_as = [r for r in read_as if not (r.startswith("tool: ") and r.endswith(" is no tool name, so it was searched"))]
+            res["missing"] = f"No tool is named {', '.join(gone)}. What follows is a word search for {'it' if len(gone) == 1 else 'them'}."
         if names:
             res["cards"] = tool_groups({"tool": names})["tools"]
         res["note"] = "Every tool found here can be called: by name, or in batch { calls: [{ tool, arguments }] }. tool_find { tool: name } gives its whole description and inputs."
