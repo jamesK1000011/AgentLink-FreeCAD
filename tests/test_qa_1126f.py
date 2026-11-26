@@ -7,6 +7,8 @@ import types
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from test_hubfix2 import in_a_process  # noqa: E402
 
 
 class ExampleOfTheRightKind(unittest.TestCase):
@@ -84,6 +86,42 @@ class RepeatMasksGivenNames(unittest.TestCase):
         from agentlink import protocol
 
         self.assertEqual(protocol._given_names({"a": "line", "b": [{"c": "x"}, "Up 2"]}), {"line", "Up 2"})
+
+
+class TookFrom(unittest.TestCase):
+    """A cut names the features whose own material it took (QA 1126e: holes
+    meant for the base cut the upright)."""
+
+    def test_names_by_volume(self):
+        got = in_a_process('''
+            from agentlink.families import pd_common as pc
+
+            class Pl:
+                def multiply(self, other):
+                    return other
+
+            class Sh:
+                def __init__(self, v):
+                    self.v, self.Placement = v, Pl()
+                def isNull(self):
+                    return False
+                def copy(self):
+                    return self
+                def common(self, other):
+                    return type("C", (), {"Volume": min(self.v, other.v) if other.v != 9 else 0})()
+
+            class F:
+                def __init__(self, label, kind, v, add="Additive"):
+                    self.Label, self.kind, self.AddSubType, self.AddSubShape = label, kind, add, Sh(v)
+                def isDerivedFrom(self, t):
+                    return self.kind == "addsub"
+
+            pad, pad2, sk, other = F("Pad", "addsub", 150), F("Pad 2", "addsub", 46), F("Sketch", "sketch", 1), F("Pad 3", "addsub", 9)
+            pocket = F("Pocket", "addsub", 0, "Subtractive")
+            body = type("B", (), {"Group": [sk, pad, pad2, other, pocket], "Placement": Pl()})()
+            print(json.dumps(pc.took_from(pocket, body, Sh(196))))
+        ''')
+        self.assertEqual(got, ["Pad: 150 mm³", "Pad 2: 46 mm³"])
 
 
 if __name__ == "__main__":

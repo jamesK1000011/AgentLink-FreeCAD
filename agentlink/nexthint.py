@@ -239,6 +239,17 @@ def facts(doc, state=None, gui=None):
         sketches = [o for o in group if o.isDerivedFrom("Sketcher::SketchObject")]
         feats = [o for o in group if o.isDerivedFrom("PartDesign::Feature")]
         unused = [k for k in sketches if not any(p.isDerivedFrom("PartDesign::Feature") for p in k.InList)]
+        # A sketch with no feature that is older than the body's newest
+        # feature is left over (a refused batch, a plan dropped), not the
+        # sketch in progress: the options do not offer to build on it, and
+        # it is named apart (QA 1126f: "pd_pad sketch=HoleSketch" after
+        # every feature).
+        if feats:
+            last = max(group.index(f) for f in feats)
+            left = [k for k in unused if group.index(k) < last]
+            unused = [k for k in unused if group.index(k) > last]
+            if left:
+                out["leftSketches"] = [str(k.Label) for k in reversed(left)][:MAX_NAMES]
         out["features"] = "some" if feats else "none"
         if unused:
             out["body"] = _sketch_progress(unused[-1])

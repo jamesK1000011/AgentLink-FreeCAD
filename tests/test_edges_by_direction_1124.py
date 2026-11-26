@@ -117,9 +117,10 @@ for e in sh.Edges:
     e.Edges = [e]
 print(json.dumps({"few": pc.edge_words(sh, ["Edge1", "Edge2", "Edge3"]), "many": pc.edge_words(sh, ["Edge%d" % i for i in range(1, 19)])}))
 ''')
-        self.assertEqual(got["few"], ["Edge1: line along z, 10 mm, mid [0, 0, 5]", "Edge2: line along y, 60 mm, mid [40, 0, 0]",
+        self.assertEqual(got["few"], ["3 edges: 1 along y, 1 along z, 1 slanted", "Edge1: line along z, 10 mm, mid [0, 0, 5]", "Edge2: line along y, 60 mm, mid [40, 0, 0]",
                                       "Edge3: line along [0.6, 0.8, 0], 5 mm, mid [1.5, 2, 0]"])
-        self.assertEqual(len(got["many"]), 13)
+        self.assertEqual(len(got["many"]), 14)
+        self.assertEqual(got["many"][0], "18 edges: 16 along z, 1 along y, 1 slanted")
         self.assertEqual(got["many"][-1], "… and 6 more edges (18 in all)")
 
     def test_fillet_answer_lists_the_edges(self):
@@ -136,7 +137,7 @@ for tool, case, prepare, args in cases(fc, tempfile.mkdtemp()):
 print(json.dumps(out))
 ''')
         for n in ("pd_fillet", "pd_chamfer"):
-            self.assertEqual(got[n], ["Edge2: line along x, 1 mm, mid [1.5, 0, 0]", "Edge3: line along x, 1 mm, mid [2.5, 0, 0]"], n)
+            self.assertEqual(got[n], ["2 edges: 2 along x", "Edge2: line along x, 1 mm, mid [1.5, 0, 0]", "Edge3: line along x, 1 mm, mid [2.5, 0, 0]"], n)
 
 
 SETTLE = '''

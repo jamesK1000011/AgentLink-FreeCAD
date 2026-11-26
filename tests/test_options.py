@@ -181,6 +181,16 @@ class Build(Base):
         self.assertEqual(pad["choices"], {"sketch": ["Sketch001", "Sketch"]})  # live choices, the newest first
         self.assertLessEqual(len(o["list"]), options.MAX_OPTIONS)
 
+    def test_a_left_sketch_is_not_built_on(self):
+        """QA 1126f: a sketch left from a refused batch, older than the
+        newest feature, was offered for a pad after every feature."""
+        base, left, up = sketch("Base"), sketch("HoleSketch"), sketch("Up")
+        pad = feature("Pad", "Pad", base)
+        pad2 = feature("Pad", "Pad 2", up)
+        o, s, _ = self.opts(doc_of(body_with("Body", base, pad, left, up, pad2, tip=pad2), base, pad, left, up, pad2))
+        self.assertNotIn(("pd_pad", "HoleSketch"), [(x["tool"], (x.get("arguments") or {}).get("sketch")) for x in o["list"]])
+        self.assertEqual(o["list"][0]["tool"], "sketch_new")
+
     def test_after_a_pad(self):
         sk = sketch("Sketch")
         pad = feature("Pad", "Pad", sk)

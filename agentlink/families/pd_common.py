@@ -875,7 +875,37 @@ def edge_words(shape, names, cap=EDGES_SHOWN):
     if len(names) > cap:
         out.append(f"… and {len(names) - cap} more edges ({len(names)} in all)")
     head = sides_line(sides)
+    runs = runs_line(edges, names)
+    if runs:
+        head = f"{head}; {runs}" if head else f"{len(names)} edge{'s' if len(names) != 1 else ''}: {runs}"
     return ([head] if head else []) + out
+
+
+def runs_line(edges, names):
+    """Which way the edges run, counted: "4 along z" or "2 along x, 2 along
+    y, 1 round" (QA 1126e: a lid's top edges were rounded for its vertical
+    corners, and the answer listed them one by one only). "" when there are
+    too many to look at."""
+    if len(names) > EDGES_SIDED:
+        return ""
+    from .measure import describe_edge
+
+    got = {}
+    for n in names:
+        try:
+            i = int(str(n)[4:])
+            d = describe_edge(edges[i - 1], i)
+        except Exception:  # noqa: BLE001 - not an edge: not counted
+            continue
+        if d.get("type") == "line" and d.get("dir"):
+            w = _dir_word(d["dir"])
+            k = f"along {w}" if not w.startswith("[") else "slanted"
+        elif "radius" in d:
+            k = "round"
+        else:
+            k = "curved"
+        got[k] = got.get(k, 0) + 1
+    return ", ".join(f"{k_n} {k}" for k, k_n in sorted(got.items(), key=lambda t: (-t[1], t[0])))
 
 
 def edge_sides(shape, names):
@@ -1339,10 +1369,40 @@ def where_went(feat, body, delta, tol=0.01):
             # 26 Nov QA: two notches in one pocket came back as one box that
             # "goes all the way through along x". Each piece apart.
             out["where"] = pieces_sentence(pieces, skin, diag)
+        took = took_from(feat, body, reg, tol)
+        if took:
+            out["from"] = took
         out.update(profile_results(feat, reg, old, tol, cut=True))
         return out
     except Exception as e:  # noqa: BLE001 - a reading only
         return {"where": f"not worked out ({type(e).__name__})"}
+
+
+def took_from(feat, body, reg, tol=1e-6):
+    """Which earlier features' own material a cut took (exact: the removed
+    region cut with each additive feature's AddSubShape), as "Pad 2: 196 mm³"
+    lines, the most first. QA 1126e: holes meant for the base cut the
+    upright, and the answer named no feature. [] when it cannot be told."""
+    out = []
+    try:
+        group = list(getattr(body, "Group", None) or [])
+        before = group[:group.index(feat)] if feat in group else group
+        for f in before:
+            if not (hasattr(f, "isDerivedFrom") and f.isDerivedFrom("PartDesign::FeatureAddSub")):
+                continue
+            if str(getattr(f, "AddSubType", "")) != "Additive":
+                continue
+            sh = getattr(f, "AddSubShape", None)
+            if sh is None or sh.isNull():
+                continue
+            sh = sh.copy()
+            sh.Placement = body.Placement.multiply(sh.Placement)  # in the world, as the body's solid
+            v = reg.common(sh).Volume
+            if v > tol:
+                out.append((v, f.Label))
+    except Exception:  # noqa: BLE001 - a reading only
+        return []
+    return [f"{label}: {_g(v)} mm³" for v, label in sorted(out, reverse=True)]
 
 
 PIECES_SHOWN = 4  # separate pieces of one cut said one by one

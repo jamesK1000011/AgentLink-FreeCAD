@@ -207,8 +207,8 @@ plain = pc.edge_words(sh, ["Edge1", "Edge2"])
 pc.edge_sides = lambda shape, names: ["outside", "inside"]
 print(json.dumps({"plain": plain, "sided": pc.edge_words(sh, ["Edge1", "Edge2"])}))
 ''')
-        self.assertEqual(got["plain"], ["Edge1: line along z, 10 mm, mid [0, 0, 5]", "Edge2: line along z, 10 mm, mid [5, 5, 5]"])
-        self.assertEqual(got["sided"], ["2 edges: 1 outside (lose material), 1 inside (gain material)",
+        self.assertEqual(got["plain"], ["2 edges: 2 along z", "Edge1: line along z, 10 mm, mid [0, 0, 5]", "Edge2: line along z, 10 mm, mid [5, 5, 5]"])
+        self.assertEqual(got["sided"], ["2 edges: 1 outside (lose material), 1 inside (gain material); 2 along z",
                                         "Edge1: line along z, 10 mm, mid [0, 0, 5], outside", "Edge2: line along z, 10 mm, mid [5, 5, 5], inside"])
 
     def test_the_outside_filter(self):
