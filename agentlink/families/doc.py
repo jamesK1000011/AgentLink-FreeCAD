@@ -750,7 +750,29 @@ def tools(session):
         promised), else the last one FreeCAD lists, else a new one."""
         left = list(still.values())
         back = next((still[n] for n in reversed(s.__dict__.get("doc_trail", [])) if n in still), None)
-        return back or (left[-1] if left else FreeCAD.newDocument("Unnamed"))
+        return back or (left[-1] if left else empty_doc())
+
+    def empty_doc():
+        """A new empty document when the last one was closed: Agent Link's
+        own start document, not the person's (tools.START_DOCS)."""
+        from ..tools import START_DOCS
+
+        d = FreeCAD.newDocument("Unnamed")
+        START_DOCS.add(d.Name)
+        return d
+
+    def new_doc(name):
+        """doc_new's document. It is one that an agent made, from the call
+        that makes it: the answer's whereYouAre and options read
+        agent_docs, and Session.execute adds a document only after a
+        changing call (27 Nov QA: "is the person's document" after the
+        agent's own doc_new)."""
+        d = FreeCAD.newDocument(name)
+        made = getattr(s, "agent_docs", None)
+        if made is None:
+            made = s.agent_docs = set()
+        made.add(d.Name)
+        return d
 
     def recent_files():
         """The window's File › Recent files, from settings (headless too)."""
@@ -1207,7 +1229,7 @@ def tools(session):
         "ref_list": picks.ref_list, "num": picks.num, "vec3": picks.vec3, "json_safe": lambda v: picks.json_safe(v),
         "recompute_scoped": lambda objs: picks.recompute_scoped(s.doc, objs),
         # documents
-        "new_doc": lambda name: FreeCAD.newDocument(name), "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
+        "new_doc": new_doc, "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
         "listed_docs": lambda: FreeCAD.listDocuments(), "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
         "unsaved": unsaved, "touched_marks": touched_marks, "current_name": current_name, "back_to": back_to, "recent_files": recent_files, "open_at": open_at,
         "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "agent_file": agent_file, "note_agent_file": note_agent_file, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,

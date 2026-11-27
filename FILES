@@ -517,6 +517,7 @@ tests/test_qa_sketch_1124.py
 tests/test_qa_sketch_1126.py
 tests/test_qa_workflow_1126.py
 tests/test_qafix_1126e.py
+tests/test_qafix_1127a.py
 tests/test_quiet_reads.py
 tests/test_quit_guard.py
 tests/test_red_team.py
@@ -534,6 +535,7 @@ tests/test_restart_temp_copy.py
 tests/test_result_line_1127.py
 tests/test_rider_calldone.py
 tests/test_round7_misc.py
+tests/test_run_calls_1127.py
 tests/test_runners.py
 tests/test_selftest_exit_1122.py
 tests/test_settle_copies.py

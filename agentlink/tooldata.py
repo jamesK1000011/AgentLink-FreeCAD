@@ -115,7 +115,7 @@ import re
 
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
-OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "pathKeys": list, "writeKeys": list, "reads": dict, "frontReads": dict, "activity": str,
+OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "pathKeys": list, "writeKeys": list, "reads": dict, "frontReads": dict, "kindInputs": dict, "activity": str,
             "workbench": str, "commands": list, "words": list}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
 # one FreeCAD command, or a list of steps, run by one of agentlink/runners.py's

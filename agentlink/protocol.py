@@ -406,10 +406,86 @@ _CON_KIND_WORDS = ("kind", "constraint")
 _CON_REF_WORDS = ("a", "b", "c", "point", "points", "geometry", "geometries", "geo", "ref", "first", "second", "line", "circle", "edges", "ids")
 _CON_VALUE_WORDS = ("length", "distance", "radius", "diameter", "angle", "size", "mm", "deg")
 _CON_FORM = 'A constraint has only type, refs, value and name. Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] }.'
+# Words that several fields' entries end with: said once in a refusal that
+# names several of them (wrong_field_words).
+WRONG_FIELD_TAILS = (_CON_FORM,)
 WRONG_FIELD_WORDS["sketch_constrain"].update(
     {**{k: "The constraint's kind goes in type. " + _CON_FORM for k in _CON_KIND_WORDS},
      **{k: "Its geometry ids and points go in refs, one list, in order. " + _CON_FORM for k in _CON_REF_WORDS},
      **{k: "A size goes in value (mm or deg). " + _CON_FORM for k in _CON_VALUE_WORDS}})
+
+def wrong_field_words(tool, unknown):
+    """WRONG_FIELD_WORDS for each unknown field of a call, in order, each
+    sentence once (the fields of one refusal can share their words)."""
+    table = WRONG_FIELD_WORDS.get(tool) or {}
+    said = []
+    for k in unknown:
+        words = table.get(k)
+        if not words:
+            continue
+        tail = next((t for t in WRONG_FIELD_TAILS if words.endswith(t)), "")
+        head = words[:len(words) - len(tail)].strip() if tail else words
+        for part in (head, tail):
+            if part and part not in said:
+                said.append(part)
+    # A shared tail (the tool's form and example) comes last, once.
+    said.sort(key=lambda w: w in WRONG_FIELD_TAILS)
+    return " ".join(said)
+
+
+def gave_words(args):
+    """"The call gave: sketch, kind." The names of the inputs that arrived,
+    in the order they came."""
+    names = [str(k) for k in (args if isinstance(args, dict) else {})]
+    return f"The call gave: {', '.join(names)}." if names else "The call gave no inputs."
+
+
+# The inputs of each kind of a tool whose kind input picks a shape: the
+# tool's data (kindInputs in tools.json; the card's description lists the
+# same). The inputs that no kind has are common to every kind.
+def kind_inputs(tool):
+    """{kind: [its inputs]} of the tool, or {} (no such data, or no tool)."""
+    if not tool:
+        return {}
+    try:
+        from . import runners
+
+        got = (runners.entries().get(tool) or {}).get("kindInputs")
+    except Exception:  # noqa: BLE001 - no data: no check
+        got = None
+    return got if isinstance(got, dict) else {}
+
+
+def takes_words(tool, kind):
+    """"line takes from, to." for a kind of the tool, or ""."""
+    own = kind_inputs(tool).get(kind) if isinstance(kind, str) else None
+    return f"{kind} takes {', '.join(own)}." if own else ""
+
+
+def other_kind(tool, args):
+    """Refuse the inputs of a call that belong to another kind than the one
+    it gave: named, with the inputs of its kind and the kinds that take
+    each (27 Nov QA: a line with an arc's start and end got "a number, not
+    a list", and the model sent numbers)."""
+    table = kind_inputs(tool)
+    kind = args.get("kind") if isinstance(args, dict) else None
+    if not table or not isinstance(kind, str) or kind not in table:
+        return
+    own = set(table[kind])
+    owners = {}
+    for k, fields in table.items():
+        for f in fields:
+            owners.setdefault(f, []).append(k)
+    other = [f for f in args if f in owners and f not in own]
+    if not other:
+        return
+    groups = {}
+    for f in other:
+        groups.setdefault(tuple(owners[f]), []).append(f)
+    whose = " ".join(f"{', '.join(fs)}: {'an input' if len(fs) == 1 else 'inputs'} of {', '.join(ks)}." for ks, fs in groups.items())
+    what = "not an input" if len(other) == 1 else "not inputs"
+    raise ToolError("invalid_input", f"input.{', '.join(other)}: {what} of kind {kind}. {takes_words(tool, kind)} {whose}")
+
 
 # A field that means something only beside another one (per tool: field ->
 # the field it goes with). Given alone, it is left out and said in readAs
@@ -805,11 +881,18 @@ def check_input(schema, args, tool=None):
         read_as.append(f"ignored {', '.join(unknown)} (not {'a field' if len(unknown) == 1 else 'fields'} here — the fields: {', '.join(props) or 'none'})")
         unknown = []
     if unknown and schema.get("additionalProperties") is False:
-        more = (WRONG_FIELD_WORDS.get(tool) or {}).get(unknown[0])
-        raise ToolError("invalid_input", f"input.{unknown[0]}: not a known field — the fields here: {', '.join(props) or 'none'}" + (f". {more}" if more else ""))
-    for k in schema.get("required", []):
-        if k not in args:
-            raise ToolError("invalid_input", f"input.{k}: required.")
+        # Every unknown field in one refusal (27 Nov QA: kind, object1 and
+        # object2 were sent, and only kind was named).
+        more = wrong_field_words(tool, unknown)
+        what = "not a known field" if len(unknown) == 1 else "not known fields"
+        raise ToolError("invalid_input", f"input.{', '.join(unknown)}: {what} — the fields here: {', '.join(props) or 'none'}" + (f". {more}" if more else ""))
+    missing = [k for k in schema.get("required", []) if k not in args]
+    if missing:
+        # What is required and what arrived (27 Nov QA: a model believed
+        # that it had sent the input).
+        it = "it" if len(missing) == 1 else "them"
+        raise ToolError("invalid_input", f"input.{', '.join(missing)}: required. The call did not give {it}. {gave_words(args)}")
+    other_kind(tool, args)
     # A value the card's example marks to give, sent as the example's null
     # (or its <name>): refused by name, never read as left out (owner, 22 Nov).
     if tool:
@@ -1663,6 +1746,7 @@ class Server:
                 return self.refusal(e.code, staticbase.batch_hint(e.message), outcome=_outcome(tool, e), kind=getattr(e, "kind", None))
             msg = e.message
             try:
+                msg = msg + arrived_words(tool, e.code, msg, args)
                 msg = msg + example_words(tool, e.code, msg) + restart_words(self, e.code, args, msg)
             except Exception:  # noqa: BLE001 - words only
                 pass
@@ -2068,6 +2152,35 @@ def _first_sentence(message):
     return first if len(first) <= 200 else first[:197] + "…"
 
 
+def named_input(tool, message):
+    """The input of the tool that a refusal's words name first, or None."""
+    props = (getattr(tool, "schema", None) or {}).get("properties") or {}
+    for k in failing_keys(message):
+        got = re.match(r"(?:input\.)?([A-Za-z_]\w*)", k)
+        if got and got.group(1) in props:
+            return got.group(1)
+    return None
+
+
+def arrived_words(tool, code, message, args):
+    """" The call did not give length. The call gave: sketch." for a refusal
+    of a bad input that names an input the call did not give; then the
+    inputs of the call's kind, for a tool with kinds (kind_inputs). A fact
+    of the call, for every tool; "" when the named input was given or the
+    words say it already (27 Nov QA: a pocket with no length got the form
+    of length, and the model believed that it had sent one)."""
+    if code != "invalid_input" or tool is None or not isinstance(args, dict) or "The call gave" in str(message or ""):
+        return ""
+    field = named_input(tool, message)
+    if field is None or field in args:
+        return ""
+    out = f" The call did not give {field}. {gave_words(args)}"
+    takes = takes_words(getattr(tool, "name", None), args.get("kind"))
+    if takes and takes not in str(message):
+        out += " " + takes
+    return out
+
+
 def example_words(tool, code, message):
     """" Example: edges: {…}." for a refusal of a bad input, when the tool's
     card data has a ready value of that input (examples.field_example), once;
@@ -2075,13 +2188,7 @@ def example_words(tool, code, message):
     find the card's ready form)."""
     if code != "invalid_input" or tool is None or "Example: " in str(message or ""):
         return ""
-    props = (getattr(tool, "schema", None) or {}).get("properties") or {}
-    field = None
-    for k in failing_keys(message):
-        got = re.match(r"(?:input\.)?([A-Za-z_]\w*)", k)
-        if got and got.group(1) in props:
-            field = got.group(1)
-            break
+    field = named_input(tool, message)
     if field is None:
         return ""
     from . import examples

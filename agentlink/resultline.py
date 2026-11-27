@@ -262,13 +262,23 @@ def pt(p):
     return f"({num(p[0])}, {num(p[1])})"
 
 
-def shape_text(kind, ids, xr=None, yr=None, world=None, circle=None, arc=None, line=None):
+def default_text(default):
+    """"center not given, so center is [0, 0]": an input that places the
+    shape, which the call did not give, and the value the tool used."""
+    return "; ".join(f"{k} not given, so {k} is [{', '.join(num(c) for c in v)}]" for k, v in (default or {}).items())
+
+
+def shape_text(kind, ids, xr=None, yr=None, world=None, circle=None, arc=None, line=None, default=None):
     """One shape of a sketch_add call: "rectangle, ids 0-3: sketch x 0..30,
     y 5..45; world x -30..0, y 30, z 5..45." circle: (centre, radius); arc:
     (start, middle, end); line: (start, end). The middle point of an arc is
-    the point halfway along it: it shows the side the arc bulges to."""
+    the point halfway along it: it shows the side the arc bulges to.
+    default: {input: value} of a place that the call did not give (said
+    first)."""
     head = f"{kind}, {id_text(ids)}"
     facts = []
+    if default:
+        facts.append(default_text(default))
     if circle is not None:
         facts.append(f"centre {pt(circle[0])}, radius {num(circle[1])}")
     if arc is not None:

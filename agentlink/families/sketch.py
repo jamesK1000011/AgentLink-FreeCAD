@@ -672,6 +672,29 @@ def _arc(c, r, a0, a1):
     return Part.ArcOfCircle(Part.Circle(c, V(0, 0, 1), r), a0, a1)
 
 
+# The kinds whose place is one point that the builder puts at the sketch
+# origin when the call does not give it: {kind: that input}. A rectangle's
+# corner is its place too. by_default says it in the answer (27 Nov QA: a
+# rectangle with no center went to [0, 0] and no answer said so).
+ORIGIN_DEFAULT = {"circle": "center", "rectangle": "center", "rounded_rectangle": "center", "polygon": "center",
+                  "arc_slot": "center", "ellipse": "center", "hyperbola": "center", "parabola": "vertex"}
+
+
+def by_default(item):
+    """{input: [0, 0]} when the builder places this shape at the sketch
+    origin because the call did not give that input; else None."""
+    k = item.get("kind")
+    f = ORIGIN_DEFAULT.get(k)
+    if f is None or f in item or (k in ("rectangle", "rounded_rectangle") and "corner" in item):
+        return None
+    return {f: [0, 0]}
+
+
+def _origin_or(item, field):
+    """The point the call gave for field, or the sketch origin (by_default says so)."""
+    return pc.vec2(item[field] if field in item else [0, 0], field)
+
+
 def build(item):
     """One item -> (geometries, constraints (as tuples with local ids), dims (name, tuple), report)."""
     k = item.get("kind")
@@ -710,18 +733,23 @@ def build(item):
         r = float(item.get("radius") or item.get("diameter", 0) / 2.0)
         if r <= 0:
             raise ToolError("invalid_input", "circle: radius (or diameter), mm.")
-        G = [Part.Circle(pc.vec2(item.get("center", [0, 0]), "center"), V(0, 0, 1), r)]
+        G = [Part.Circle(_origin_or(item, "center"), V(0, 0, 1), r)]
         D.append(("d", ("Diameter", 0, 2 * r)))
         return G, C, D
     if k == "arc":
         r = float(item.get("radius", 0))
         if r <= 0:
             raise ToolError("invalid_input", "arc: center, radius, start and end angles (degrees, counter-clockwise from +x).")
+        if "center" not in item:
+            # No default centre for an arc (27 Nov QA: two arcs with no
+            # center went to [0, 0] with no word). The hub adds what the
+            # call gave and what an arc takes (protocol.arrived_words).
+            raise ToolError("invalid_input", "center: an arc needs its centre [x, y].")
         a0, a1 = math.radians(float(item.get("start", 0))), math.radians(float(item.get("end", 90)))
         if a1 <= a0:
             a1 += 2 * math.pi
         D.append(("r", ("Radius", 0, r)))
-        return [_arc(pc.vec2(item.get("center", [0, 0]), "center"), r, a0, a1)], C, D
+        return [_arc(pc.vec2(item["center"], "center"), r, a0, a1)], C, D
     if k == "point":
         p = pc.vec2(item.get("at"), "at")
         return [Part.Point(p)], C, D
@@ -739,7 +767,7 @@ def build(item):
             c0 = pc.vec2(item["corner"], "corner")
             x0, y0 = c0.x, c0.y
         else:
-            c = pc.vec2(item.get("center", [0, 0]), "center")
+            c = _origin_or(item, "center")
             x0, y0 = c.x - w / 2.0, c.y - h / 2.0
         x1, y1 = x0 + w, y0 + h
         if k == "rectangle":
@@ -773,7 +801,7 @@ def build(item):
         R = float(item.get("radius", 0))
         if n < 3 or R <= 0:
             raise ToolError("invalid_input", "polygon: sides (3 or more), radius (to the corners, mm), center, rotation (degrees).")
-        c = pc.vec2(item.get("center", [0, 0]), "center")
+        c = _origin_or(item, "center")
         rot = math.radians(float(item.get("rotation", 0)))
         pts = [V(c.x + R * math.cos(rot + 2 * math.pi * i / n), c.y + R * math.sin(rot + 2 * math.pi * i / n), 0) for i in range(n)]
         G = [_line(pts[i], pts[(i + 1) % n]) for i in range(n)]
@@ -805,7 +833,7 @@ def build(item):
         D += [("r", ("Radius", 0, r)), ("length", ("Distance", 0, 3, 1, 3, d.Length))]
         return G, C, D
     if k == "arc_slot":
-        c = pc.vec2(item.get("center", [0, 0]), "center")
+        c = _origin_or(item, "center")
         R = float(item.get("radius", 0))
         r = float(item.get("width", 0)) / 2
         a0, a1 = math.radians(float(item.get("start", 0))), math.radians(float(item.get("end", 90)))
@@ -841,7 +869,7 @@ def build(item):
             bs.buildFromPoles(pts, closed, deg)
         return [bs], C, D
     if k == "ellipse":
-        c = pc.vec2(item.get("center", [0, 0]), "center")
+        c = _origin_or(item, "center")
         a_, b_ = float(item.get("major", 0)) / 2, float(item.get("minor", 0)) / 2
         if a_ <= 0 or b_ <= 0 or b_ > a_:
             raise ToolError("invalid_input", "ellipse: center, major and minor (its full width and height, mm, major the larger), rotation (deg).")
@@ -863,7 +891,7 @@ def build(item):
         lo, hi = _ccw(c, pts[0], pts[2], pts[1])
         return [_arc(c.Location, c.Radius, lo, hi)], C, D
     if k == "parabola":
-        v = pc.vec2(item.get("vertex", [0, 0]), "vertex")
+        v = _origin_or(item, "vertex")
         f = float(item.get("focal", 0))
         if f <= 0:
             raise ToolError("invalid_input", "parabola: vertex, focal (distance from vertex to focus, mm), rotation (deg: the way it opens, 0 = +x), from and to (y along it, mm).")
@@ -876,7 +904,7 @@ def build(item):
         u0, u1 = float(item.get("from", -2 * f)), float(item.get("to", 2 * f))
         return [Part.ArcOfParabola(pb, min(u0, u1), max(u0, u1))], C, D
     if k == "hyperbola":
-        c = pc.vec2(item.get("center", [0, 0]), "center")
+        c = _origin_or(item, "center")
         a_, b_ = float(item.get("major", 0)), float(item.get("minor", 0))
         if a_ <= 0 or b_ <= 0:
             raise ToolError("invalid_input", "hyperbola: center, major and minor (semi-axes, mm), rotation (deg), from and to (its parameter, -1 … 1 by default).")
@@ -1134,6 +1162,8 @@ def _add_result(sk, out, st):
             kw["xr"], kw["yr"] = (box[0], box[1]), (box[2], box[3])
             if frame is not None:
                 kw["world"] = rl.world_box(frame, kw["xr"], kw["yr"])
+        if isinstance(item.get("byDefault"), dict):
+            kw["default"] = item["byDefault"]
         shapes.append(rl.shape_text(str(item.get("kind") or "shape"), ids, **kw))
     wires = closed = ends = None
     if isinstance(st, dict):
@@ -1144,6 +1174,37 @@ def _add_result(sk, out, st):
         except Exception:  # noqa: BLE001
             ends = None
     return rl.sketch_add_result(shapes, wires, closed, ends)
+
+
+def refs_read(sk, raw, refs):
+    """What the refs of a call are as _ref read them, one clause each: "The
+    call gave 2 refs: [2, 0] is arc 2 as a whole (vertex 0 is the whole
+    curve; its points are [2, 1] start point, [2, 2] end point, [2, 3]
+    centre); [0, 1] is the start of line 0." A ref written with vertex 0
+    gets the points that its geometry has (VERTICES). 27 Nov QA: [2, 0] was
+    read as the whole curve, and the refusal said only "refs two points"."""
+    if not refs:
+        return "The call gave no refs."
+    said = []
+    for r, (g, p) in zip(raw, refs):
+        shown = json.dumps(r)
+        if r == "origin":
+            said.append(f"{shown} is the sketch origin")
+        elif p is not None:
+            said.append(f"{shown} is {ref_words(sk, g, p)}")
+        else:
+            words = f"{shown} is {ref_words(sk, g)} as a whole"
+            if isinstance(r, list) and len(r) == 2:
+                more = "vertex 0 is the whole curve"
+                try:
+                    has = VERTICES.get(_geo_kind(sk.Geometry[g])) if 0 <= g < len(sk.Geometry) else None
+                except Exception:  # noqa: BLE001 - not read: not said
+                    has = None
+                if has:
+                    more += "; its points are " + ", ".join(f"[{g}, {v}] {VERTEX_WORDS[v]}" for v in has)
+                words += f" ({more})"
+            said.append(words)
+    return f"The call gave {rl.plural(len(refs), 'ref')}: " + "; ".join(said) + "."
 
 
 def make_constraint(sk, c):
@@ -1159,7 +1220,7 @@ def make_constraint(sk, c):
 
     def need(ok, form):
         if not ok:
-            raise ToolError("invalid_input", f"{t}: refs {form}.")
+            raise ToolError("invalid_input", f"{t}: refs {form}. {refs_read(sk, c.get('refs') or [], refs)}")
 
     def mm():
         if not isinstance(val, (int, float)):
@@ -1411,5 +1472,5 @@ def tools(session):
                "frame": frame, "state_of": state_of, "fresh": fresh, "join_points": join_points, "join_move_words": join_move_words, "dof_of": dof_of, "con_result": con_result, "add_result": add_result, "new_result": new_result, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
-               "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
+               "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent, "by_default": by_default}
     return runners.tools(GROUP, s, helpers)

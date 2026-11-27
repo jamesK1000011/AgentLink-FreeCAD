@@ -237,7 +237,7 @@ class ConstraintAndSketchWords(Base):
     def test_a_b_kind_refused_with_the_fields_and_one_constraint(self):
         m = checked("sketch_constrain", {"sketch": "S", "kind": "tangent", "a": 0, "b": 4})
         self.assertIsInstance(m, str)
-        self.assertIn("input.kind: not a known field", m)
+        self.assertIn("input.kind, a, b: not known fields", m)  # 27 Nov: every unknown field in one refusal
         self.assertIn("the fields here: sketch, type, refs, value, name.", m)
         self.assertIn("The constraint's kind goes in type.", m)
         self.assertIn("A constraint has only type, refs, value and name.", m)

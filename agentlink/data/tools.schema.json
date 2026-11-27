@@ -124,7 +124,7 @@
       "description": "For a changing tool, the calls that only read: an argument and the values that make a call a read, e.g. {\"action\": [\"list\"]}. Such a call is no undo step, marks nothing changed and is not shown as a change.",
       "additionalProperties": {"type": "array"}
      },
-     "frontReads": {
+     "kindInputs": {"type": "object", "description": "For a tool whose kind input picks a shape: the inputs of each kind, {\"line\": [\"from\", \"to\"]}. An input that no kind lists is common to every kind. Agent Link refuses an input of another kind by name, and a refusal for an input not given says the inputs of the kind.", "additionalProperties": {"type": "array", "items": {"type": "string"}}}, "frontReads": {
       "type": "object",
       "description": "The calls that only read and may run in a batch beside gui_input while a dialog or menu holds the window: an argument and the values that make a call such a read, e.g. {\"action\": [\"status\", \"list\"]}; {} for every call. Declare only calls that need no event loop of their own.",
       "additionalProperties": {"type": "array"}

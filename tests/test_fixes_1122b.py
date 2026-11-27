@@ -183,7 +183,7 @@ class Stubbed(unittest.TestCase):
         with self.assertRaises(protocol.ToolError) as e:
             protocol.check_input(schema, {"kind": "fix", "point": [1, 0]}, "sketch_constrain")
         m = e.exception.message
-        self.assertIn("input.kind: not a known field", m)
+        self.assertIn("input.kind, point: not known fields", m)  # 27 Nov: every unknown field in one refusal
         self.assertIn("goes in type", m)
         self.assertIn('"type": "tangent"', m)
         with self.assertRaises(protocol.ToolError):
