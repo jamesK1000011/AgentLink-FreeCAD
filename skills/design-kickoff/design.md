@@ -4,7 +4,7 @@
 The method behind the design-kickoff skill: clarify the task, freeze the interfaces, build level by level on a parametric skeleton, check each level, hand off what each process needs, and learn from the made part. The skill itself is `skills/design-kickoff/SKILL.md` in this repository.
 
 ## Start here
-A map of this guide. `guide_read { topic: "design", section: [...] }` reads the sections named.
+A map of this file. It is the design-kickoff skill's own file: read the sections named, by their `##` headings.
 - Before the first question to the person: `The brief` (the records, the requirements list, the kickoff questions, the interface table).
 - Before L1: `Modelling principles`, `Levels, build rules and gates` and `Agent Link steps and traps`.
 - At their own moment (the index lists them under later): `Concepts and embodiment`, `Workflow branches`, `Hand-off and feedback`, `Sources`.

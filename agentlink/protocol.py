@@ -91,7 +91,7 @@ class ToolError(Exception):
 
 KIND_WORDS = {
     "fixable": "Change what the error names and call again.",
-    "retry": "Retrying the same call is expected to succeed.",
+    "retry": "The cause is not in the call: FreeCAD was busy or not ready.",
     "stop": "Do not call it again. Report what happened.",
 }
 # A FreeCAD error that names no input to change (24 Nov QA: "BRep_API:

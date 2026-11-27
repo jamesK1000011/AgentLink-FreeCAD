@@ -86,7 +86,7 @@ class FarJoins(unittest.TestCase):
 ''')
         self.assertEqual(got[0], 1)
         self.assertEqual(got[1], "coincident joined the end of arc 0 (0.9, 20) and the start of line 3 (170.7, -12.5), 172.882 mm apart: "
-                                 "the shape moved; check it; close the open wires")
+                                 "the shape moved; close the open wires")
         self.assertEqual(got[2], "x")
 
     def test_the_card_reads_them_before_the_constraints_go_in(self):

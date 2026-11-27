@@ -304,7 +304,9 @@ class RefineOnAWeldment(unittest.TestCase):
         self.assertEqual(got, [True, True])
 
     def test_the_guide_has_the_trap(self):
-        with open(os.path.join(ROOT, "agentlink", "guides", "design.md"), encoding="utf-8") as f:
+        # 27 Nov, facts only: the design method is the design-kickoff skill's own file, not a guide of the hub
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "agentlink", "guides", "design.md")))
+        with open(os.path.join(ROOT, "skills", "design-kickoff", "design.md"), encoding="utf-8") as f:
             text = f.read()
         self.assertIn("Trap: Refine on every feature of a big pipe weldment can make the body unorientable", text)
 

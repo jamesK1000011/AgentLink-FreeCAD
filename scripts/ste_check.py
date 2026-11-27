@@ -56,6 +56,12 @@ WAIVERS = {
     ("pd_chamfer", "only"): "the hub does not refuse a chamfer that changes nothing (27 Nov, facts only): FreeCAD keeps it, and the answer gives volume change 0",
     ("pd_pad", "sketch_state"): "the advice to use sketch_state first is gone (27 Nov, facts only: no method advice in a card)",
     ("sketch_new", "never"): "the advice never to use a face index is gone (27 Nov, facts only); the card gives the fact that face and edge numbers can change",
+    ("part_offset2d", "clearance"): "the English word in the advice sentence that is gone (27 Nov, facts only), not the clearance tool",
+    ("pd_datum_plane", "on"): "the English word in the advice sentence that is gone (27 Nov, facts only), not the input on",
+    ("recompute", "object_freeze"): "the advice on when to use recompute is gone (27 Nov, facts only)",
+    ("surface_polynomial", "meshobj_segments"): "the advice to split a scan first is gone (27 Nov, facts only)",
+    ("surface_polynomial", "meshobj_trim"): "the advice to split a scan first is gone (27 Nov, facts only)",
+    ("window_snapshot", "never"): "the advice on what a snapshot proves is gone (27 Nov, facts only)",
     ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 

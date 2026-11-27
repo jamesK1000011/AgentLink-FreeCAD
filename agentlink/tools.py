@@ -370,8 +370,7 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
                 what = next((res[k] for k in ("sketch", "feature", "body", "object", "document") if isinstance(res.get(k), str)), None)
                 gone.append(f"{r.get('tool')}{' ' + what if what else ''}")
         if gone:
-            out["takenBackNote"] = (f"Taken back: {', '.join(gone)}. Those calls answered ok, but what they made is gone. "
-                                   "Fix the refused call and send the whole block again.")
+            out["takenBackNote"] = f"Taken back: {', '.join(gone)}. What those calls made is not in the document now."
     return out
 
 # The calls of the last batches that went through, kept for ran_before.
@@ -878,7 +877,7 @@ class Session:
         got["note"] = (("The agent's document is one an agent made. " if mine else
                         f"{self.doc.Label} is an empty start document that Agent Link made, not the person's. " if is_start_doc(self.doc) else
                         f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
-                       + "For new work, make a document of its own: run { \"calls\": [ { \"tool\": \"doc_new\", \"name\": \"Part\" } ] }. "
+                       + "doc_new makes a new document: run { \"calls\": [ { \"tool\": \"doc_new\", \"name\": \"Part\" } ] }. "
                        "session_state reads all of this again.")
         return got
 
@@ -1092,9 +1091,9 @@ class Session:
                     s["checkGeometry"]["warning"] = True
                     where = geo.bop_where(sh, said)
                     s.setdefault("warnings", []).append(
-                        f"FreeCAD's Check Geometry (its BOP check) reports {'; '.join(said[:3])}, but the shape is valid by BRepCheck and closed: "
-                        "a tolerance finding, usually where two features meet at a sharp intersection — printing, exporting and measuring are fine; "
-                        "a later boolean or fillet at that spot may need a smaller step."
+                        f"FreeCAD's Check Geometry (its BOP check) reports {'; '.join(said[:3])}"
+                        + (f" and {len(said) - 3} more" if len(said) > 3 else "")
+                        + ". The shape is valid by BRepCheck (isValid) and closed."
                         + (f" Where: {', '.join(w['element'] + ' at ' + str(w['at']) for w in where)}." if where else ""))
                     if where:
                         s["checkGeometry"]["where"] = where
@@ -1438,9 +1437,8 @@ WORKING = (
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
     "Words that stand the same from call to call (a tool's own note, the health's advice on an overlap) are given the first time "
     "in a conversation; after that the answer names their key in saidBefore, and tool_find { card: name } gives them again (said). "
-    "Look at the work after each change that matters: view_render draws the parts from any view, cut open, zoomed "
-    "to a spot, or with a map (wall, stress, and those add-ons add), and gives the worst place; body_check says "
-    "whether a body is sound. "
+    "view_render draws the parts from any view, cut open, zoomed "
+    "to a spot, or with a map (wall, stress, and those add-ons add); body_check gives FreeCAD's checks of a body. "
     "What only the person knows (how a part is made, what it is made of, what it must carry): ask, when someone answers. "
     "When nobody answers (a run with no person), take the plain choice, and say it in your last answer. "
     "Never start, pause or stop a print without the person's typed say-so. "
@@ -2309,7 +2307,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             if missed:
                 out["notFound"] = missed
                 out["note"] = ("Not found: " + "; ".join(f"{m['tool']} (did you mean {', '.join(m['didYouMean'])}?)" for m in missed if m["didYouMean"])
-                               + ". The card of the closest name is in tools; check it is the tool you want before you call it. " + TG_CARDS_NOTE)
+                               + ". The card of the closest name is in tools. " + TG_CARDS_NOTE)
             return out
         asked = a.get("needs")
         if asked is not None or a.get("arguments") is not None:

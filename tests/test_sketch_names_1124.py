@@ -203,8 +203,8 @@ class UsedSketchNote(unittest.TestCase):
 ''')
         err, r = got["used"]
         self.assertFalse(err)
-        self.assertEqual(r["sketchNote"], "Sketch 2 is used by Pad 2, so this change also changes Pad 2. Body also has a sketch that is not used: "
-                                          "Sketch 4, Sketch 3. If you meant Sketch 4, use history_undo, then give sketch: \"Sketch 4\".")
+        self.assertEqual(r["sketchNote"], "Sketch 2 is used by Pad 2, so this change also changes Pad 2. Body also has sketches that no feature uses: "
+                                          "Sketch 4, Sketch 3.")
         self.assertNotIn("sketchNote", got["unused"][1])
         self.assertNotIn("sketchNote", got["read"][1])  # a read changes nothing
         # Blind QA, 24 Nov: holes went into a Pad's own sketch, then that sketch was pocketed. Every used sketch gets the note.

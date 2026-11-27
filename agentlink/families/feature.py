@@ -369,9 +369,9 @@ def path_closed(path, names, tol=1e-4):
     return all(sum(1 for j, q in enumerate(ends) if j != i and (p - q).Length < tol) >= 1 for i, p in enumerate(ends))
 
 
-CLOSED_TUBE = ("sketch: a tube (circle with wall) on a closed path ({path}: {edges}) — FreeCAD's Pipe makes a solid ring there and leaves the bore out "
-               "(bicycle runs, a rim on a circle path). Nothing was made. Make the ring in two calls on the same path: pd_pipe {{ sketch: {{ circle: {{ d: {d} }} }} }}, "
-               "then pd_pipe {{ sketch: {{ circle: {{ d: {bore} }} }}, subtractive: true }}. Or pd_revolve a sketch of the ring's section.")
+CLOSED_TUBE = ("sketch: this tool refuses a tube (circle with wall) on a closed path ({path}: {edges}). On FreeCAD 1.1 the Pipe made a solid ring there, with no bore "
+               "(measured 21 Nov). Nothing was made. These calls are taken on the same path: pd_pipe {{ sketch: {{ circle: {{ d: {d} }} }} }}, "
+               "and pd_pipe {{ sketch: {{ circle: {{ d: {bore} }} }}, subtractive: true }}.")
 
 
 def closed_tube_words(path, names, spec):

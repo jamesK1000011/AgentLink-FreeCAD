@@ -308,6 +308,64 @@ class BlindfoldGaps(unittest.TestCase):
         self.assertIn('return None if fmt in ("wrl", "x3d") else "mm"', source("families", "doc.py"))
 
 
+class OpinionOut(unittest.TestCase):
+    """Decision 4: no method advice, no guess of what was meant, in the
+    cards, answers, refusals and guides. Decision 7: the likely next steps
+    stay, with their ranking."""
+
+    ADVICE = ("Prefer ", "prefer ", " should ", "Use it for ", "safer", "usually", "is a mistake", "If you meant", "when you are not sure", "Try a smaller", "try smaller")
+
+    def test_no_advice_word_in_a_data_tools_card(self):
+        for name, e in entries().items():
+            for w in self.ADVICE:
+                self.assertNotIn(w, e["description"], f"{name}: {w!r}")
+
+    def test_no_advice_in_the_core_code_texts(self):
+        for path, gone in ((("families", "pd_common.py"), ("If you meant", "Try a smaller", "feature_remove {first", "Choose a face away")),
+                           (("families", "sketch.py"), ("the shape moved; check it", "dimension and fix it")),
+                           (("families", "feature.py"), ("bicycle runs, a rim",)),
+                           (("once.py",), ("DOF_NOTE", "it pads as drawn")),
+                           (("tools.py",), ("For new work, make a document", "printing, exporting and measuring are fine", "may need a smaller step",
+                                            "Those calls answered ok", "whether a body is sound")),
+                           (("protocol.py",), ("is expected to succeed",))):
+            text = source(*path)
+            for w in gone:
+                self.assertNotIn(w, text, f"{path}: {w!r}")
+
+    def test_the_design_guide_is_not_a_guide_of_the_hub(self):
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "agentlink", "guides", "design.md")))
+        self.assertTrue(os.path.exists(os.path.join(ROOT, "skills", "design-kickoff", "design.md")))
+        with open(os.path.join(ROOT, "skills", "design-kickoff", "SKILL.md"), encoding="utf-8") as f:
+            self.assertNotIn('topic: "design"', f.read())
+        start = source("guides", "start.md")
+        for gone in ("made and judged", "Don't assume a part is printed", "never send the same call again", "is the cause"):
+            self.assertNotIn(gone, start, gone)
+        feature = source("guides", "feature.md")
+        for gone in ("FreeCAD's own advice", "usually a mistake", "what was meant", "Try a smaller value", "Keep one call under"):
+            self.assertNotIn(gone, feature, gone)
+
+    def test_the_next_steps_stay_and_their_ranking_is_as_it_was(self):
+        with open(os.path.join(ROOT, "agentlink", "data", "nexthint.json"), encoding="utf-8") as f:
+            text = f.read()
+        hint = json.loads(text)["entries"]
+        self.assertEqual(len(hint), 27)  # the rules, as the audit counted them
+        for gone in ("fillets last", "on a stable plane", "in place first", "when done", "sound solid", "read its todo"):
+            self.assertNotIn(gone, text, gone)
+        self.assertTrue(os.path.exists(os.path.join(ROOT, "agentlink", "options.py")))
+        self.assertEqual(entries()["pd_body_new"]["answer"]["fields"]["next"], 'sketch_new { body, plane: "XY" }')
+
+    def test_the_used_sketch_note_gives_facts_only(self):
+        got = child('''
+        feat = types.SimpleNamespace(Label="Pad", TypeId="PartDesign::Pad")
+        def sk(label, users): return types.SimpleNamespace(Label=label, Name=label, TypeId="Sketcher::SketchObject", InList=users)
+        base = sk("Base", [feat]); feat.Profile = (base, [])
+        frees = [sk(f"Free{i}", []) for i in range(5)]
+        body = types.SimpleNamespace(Label="Body", Group=[base] + frees)
+        print(json.dumps(pc.used_sketch_note(base, body, "sketch_add")))
+        ''')
+        self.assertEqual(got, "Base is used by Pad, so this change also changes Pad. Body also has sketches that no feature uses: Free4, Free3, Free2 and 2 more.")
+
+
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
         self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")

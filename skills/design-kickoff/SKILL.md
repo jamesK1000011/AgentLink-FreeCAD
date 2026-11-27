@@ -12,7 +12,7 @@ The method in one line: clarify the task, freeze the interfaces, then add detail
 
 Write to the person in plain, short sentences. Assume no CAD or engineering skill. Go deeper only when the person shows more skill.
 
-The details are in Agent Link's guide `design`. Read each section at its step with `guide_read { topic: "design", section: "<name>" }` (start with `section: "Start here"`). Without Agent Link, read `agentlink/guides/design.md` in the AgentLink-FreeCAD repository.
+The details are in this skill's own file `design.md`, beside this file (in the AgentLink-FreeCAD repository: `skills/design-kickoff/design.md`). Read each section at its step, by its `##` heading (start with `Start here`). Agent Link's own guides (`guide_read`) hold only facts about FreeCAD and the tools: the design method is here, not there.
 - `The brief` — the design records, the requirements list, stories, the kickoff questions, the interface table.
 - `Concepts and embodiment` — functions, concepts, how to present options, embodiment rules.
 - `Modelling principles` — how to model each part: structure, stable references, parameters, features and patterns, cosmetic detail.

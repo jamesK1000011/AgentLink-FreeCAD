@@ -1074,9 +1074,9 @@ def join_moves(sk, joins):
 def join_move_words(st, sk, joins):
     """st (state_of's) with the todo words first for each join that moved:
     "coincident joined the end of arc 0 (0.9, 20) and the start of line 3
-    (170.7, -12.5), 172 mm apart: the shape moved; check it". Never raises."""
+    (170.7, -12.5), 172 mm apart: the shape moved". Never raises."""
     try:
-        words = [f"{kind} joined {ref_words(sk, g1, p1)} {_at(a)} and {ref_words(sk, g2, p2)} {_at(b)}, {geo.r3(d):g} mm apart: the shape moved; check it"
+        words = [f"{kind} joined {ref_words(sk, g1, p1)} {_at(a)} and {ref_words(sk, g2, p2)} {_at(b)}, {geo.r3(d):g} mm apart: the shape moved"
                  for kind, (g1, p1, g2, p2), a, b, d, _pts in join_moves(sk, joins)]
     except Exception:  # noqa: BLE001
         return st

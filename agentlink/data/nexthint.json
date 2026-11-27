@@ -305,7 +305,7 @@
    "suggest": [
     {
      "tool": "sketch_state",
-     "why": "check closed wires before a feature",
+     "why": "the sketch's wires and solver",
      "arguments": {
       "sketch": "=facts.editSketch"
      }
@@ -435,7 +435,7 @@
     },
     {
      "tool": "asm_ground",
-     "why": "fix one part in place first",
+     "why": "fix one part in place",
      "arguments": {
       "assembly": "=facts.assemblyName"
      },
@@ -473,7 +473,7 @@
     },
     {
      "tool": "asm_ground",
-     "why": "fix one part in place first",
+     "why": "fix one part in place",
      "arguments": {
       "assembly": "=facts.assemblyName"
      },
@@ -750,7 +750,7 @@
    "suggest": [
     {
      "tool": "sketch_state",
-     "why": "closed, but not ready for a feature: read its todo",
+     "why": "closed wires; constraints are flagged or closed wires meet",
      "arguments": {
       "sketch": "=facts.sketchName"
      },
@@ -760,7 +760,7 @@
     },
     {
      "tool": "sketch_edit",
-     "why": "fix what its todo names",
+     "why": "what its todo names",
      "arguments": {
       "sketch": "=facts.sketchName"
      },
@@ -834,7 +834,7 @@
     },
     {
      "tool": "sketch_constrain",
-     "why": "or finish its dimensions first",
+     "why": "or add its dimensions",
      "arguments": {
       "sketch": "=facts.sketchName"
      },
@@ -949,7 +949,7 @@
    "suggest": [
     {
      "tool": "sketch_new",
-     "why": "the next feature's sketch, on a stable plane",
+     "why": "the next feature's sketch",
      "arguments": {
       "body": "=facts.bodyName",
       "plane": "XY"
@@ -969,7 +969,7 @@
     },
     {
      "tool": "pd_fillet",
-     "why": "fillets last, when the shape is done"
+     "why": "round the body's edges"
     }
    ],
    "weight": 50,
@@ -1042,7 +1042,7 @@
    "suggest": [
     {
      "tool": "body_check",
-     "why": "is the body one sound solid",
+     "why": "FreeCAD's checks of the body",
      "arguments": {
       "body": "=facts.bodyName"
      },
@@ -1068,7 +1068,7 @@
     },
     {
      "tool": "export",
-     "why": "write it out when done"
+     "why": "write it out"
     }
    ],
    "weight": 48,
@@ -1082,7 +1082,7 @@
    "suggest": [
     {
      "tool": "body_check",
-     "why": "is the body one sound solid",
+     "why": "FreeCAD's checks of the body",
      "arguments": {
       "body": "=facts.bodyName"
      },

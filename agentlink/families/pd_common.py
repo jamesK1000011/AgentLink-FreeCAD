@@ -286,11 +286,12 @@ def used_sketch_note(sk, body=None, tool=None, change=None):
         if change:
             return f"Note: {whose}. {change}"
         return f"Note: {whose}; {doing} changes {', '.join(prof or users)}."
-    names = ", ".join(o.Label for o in free[:3])
+    names = ", ".join(o.Label for o in free[:UNUSED_SHOWN]) + (f" and {len(free) - UNUSED_SHOWN} more" if len(free) > UNUSED_SHOWN else "")
     first = f"{sk.Label} is used by {', '.join(users)}. {change}" if change else f"{sk.Label} is used by {', '.join(users)}, so this change also changes {', '.join(users)}."
-    return (f"{first} "
-            f"{body.Label} also has a sketch that is not used: {names}. "
-            f"If you meant {free[0].Label}, use history_undo, then give sketch: \"{free[0].Label}\".")
+    return f"{first} {body.Label} also has {'a sketch' if len(free) == 1 else 'sketches'} that no feature uses: {names}."
+
+
+UNUSED_SHOWN = 3  # unused sketches the used-sketch note names; the rest are counted
 
 
 def used_mark(sk):
