@@ -421,6 +421,7 @@ tests/test_findings_1120c.py
 tests/test_fitting.py
 tests/test_fixes_1122b.py
 tests/test_flat2d.py
+tests/test_flat_call_1126.py
 tests/test_gaps_redteam.py
 tests/test_grab_stacked.py
 tests/test_gui_input.py
@@ -512,6 +513,7 @@ tests/test_qa_fixes_1126cd.py
 tests/test_qa_sketch_1124.py
 tests/test_qa_sketch_1126.py
 tests/test_qa_workflow_1126.py
+tests/test_qafix_1126e.py
 tests/test_quiet_reads.py
 tests/test_quit_guard.py
 tests/test_red_team.py
