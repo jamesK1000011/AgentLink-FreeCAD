@@ -47,7 +47,7 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 24 Nov, blind QA: + item_error (sketch_add's failed item by its index), body_extent (sketch_new's bodyExtent), sketch readers.
 # 24 Nov QA, edges by direction: + edge_words (feature reader: each edge given, in a short line).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch readers), axes (sketch_more reader).
-PIN = "6840b8340d2a04b7267465f7d64d0013dc4bf7452abf85e988d241beeb901232"
+PIN = "4dc4d28cd89680197747e3d46d5dc7bcf33be7eee715ecb9094ff5672052e2cf"  # 27 Nov: con_keys gone, edges_form added (scripts/tool_needs.py --why edges_form)
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -59,7 +59,7 @@ PIN = "6840b8340d2a04b7267465f7d64d0013dc4bf7452abf85e988d241beeb901232"
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
 # 22 Nov, face selectors: + face_pick (a sketch reader).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch), axes (sketch_more); up_frame is not a reader (it makes a placement).
-COUNTS = {"readers": 937, "changers": 160, "families": 37}
+COUNTS = {"readers": 939, "changers": 160, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -73,7 +73,8 @@ SUITES = {
 # readings of false and of true with the arguments given.
 # 22 Nov, face selectors: pd 214 false, 305 true. sketch_new reads its face (face_pick) before it makes the sketch,
 # so "a face not found" and "a face on an empty body" are now told as the call's refusal.
-AT_LEAST = {"pd": (214, 305), "mesh": (133, 48), "td": (61, 73), "cam": (6, 2), "bim": (144, 155)}
+# 27 Nov: pd 211 false: sketch_add and sketch_constrain take one shape and one constraint, so three cases of a list that is not a list are gone.
+AT_LEAST = {"pd": (211, 305), "mesh": (133, 48), "td": (61, 73), "cam": (6, 2), "bim": (144, 155)}
 
 NUMPY = ("mesh", "td", "cam")
 CHARS_PER_TOKEN = 3.5
@@ -399,7 +400,8 @@ class Census(unittest.TestCase):
 # 781: window_snapshot checks its width first (efficiency design D1, 22 Nov).
 # 787: pd_datum_plane and pd_mirrored check plane or face (both; a face as plane; a plane as face) first (rename set 8, 24 Nov).
 # 784: object_set's three property/value refusals went with { property, value } (rename set 10, 24 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 786, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 782: sketch_add and sketch_constrain take one shape and one constraint: the refusals for a list that is not a list, or an item that is not an object, are gone (27 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 782, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):
@@ -561,7 +563,9 @@ class Filter(unittest.TestCase):
 
 # Upper bounds, in tokens at 3.5 characters each, on one piece each: a later change cannot bloat these without saying so here.
 # The totals (everything; the lean listing) have no bound (decided 18 Nov): Tokens.test_the_costs reports them and does not fail on them.
-BOUNDS = {"line": 45, "full": 800, "report": 260, "needsReply": 260, "nowReply": 1500, "oneCard": 900, "toolGroupsCard": 740}
+# 27 Nov: oneCard 900 -> 1700. sketch_add takes one shape with 26 typed inputs, and each input has its own description (its facts moved out of the
+# description into the schema); its card is the largest by far, and no fact of it was cut.
+BOUNDS = {"line": 45, "full": 800, "report": 260, "needsReply": 260, "nowReply": 1500, "oneCard": 1700, "toolGroupsCard": 740}
 # The three states, without arguments: every Part Design and Sketcher tool begins by finding the body or the sketch its
 # arguments name, so none of the 32 can be told before a call (they are told with arguments: Agreement). The filter
 # has something to say where a tool's first check is of the document alone: test_a_state_the_filter_tells.

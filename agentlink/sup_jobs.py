@@ -218,12 +218,12 @@ class Jobs:
 
 
 def job_start_inner(args):
-    """job_start { tool, arguments, wait } as the call it starts: (tool,
+    """job_start { job, arguments, wait } as the call it starts: (tool,
     arguments, after) with after 0 for wait: false, else None (the
     normal DETACH_AFTER). None when it is not one the supervisor runs (no
     tool, a job_ or app_ tool, or agentlink_update)."""
     a = args or {}
-    tool = a.get("tool")
+    tool = a.get("job")
     if not isinstance(tool, str) or not tool or tool.startswith(("job_", "app_")) or tool == "agentlink_update":
         return None
     inner = a.get("arguments") or {}

@@ -91,9 +91,9 @@ class Loops(unittest.TestCase):
         self.assertIn(("probe_change", json.dumps({"n": 15})), seen)
         self.assertIn(("probe_change", json.dumps({"n": 45})), seen)
         for x in (15, 45):
-            self.assertIn(("sketch_add", json.dumps({"items": [{"circle": {"at": [x, 15], "radius": 5}}], "sketch": "Sketch"}, sort_keys=True)), seen)
+            self.assertIn(("sketch_add", json.dumps({"kind": "circle", "center": [x, 15], "radius": 5, "sketch": "Sketch"}, sort_keys=True)), seen)
         for x in (3, 4, 5):
-            self.assertIn(("sketch_add", json.dumps({"items": [{"circle": {"at": [x, 0], "radius": 1}}], "sketch": "Sketch"}, sort_keys=True)), seen)
+            self.assertIn(("sketch_add", json.dumps({"kind": "circle", "center": [x, 0], "radius": 1, "sketch": "Sketch"}, sort_keys=True)), seen)
 
     def test_a_second_pass_that_is_refused_keeps_the_first(self):
         g = flat()["badLoop"]["body"]
@@ -178,9 +178,9 @@ class Collisions(unittest.TestCase):
     def test_no_tool_input_of_the_server_has_a_step_key(self):
         g = flat()
         self.assertEqual(g["reserved"], ["each", "tool", "writeTo"])
-        # The hub's own tools that take a tool's name or a file in a field of that name are called by their own name
-        # (a step has no room for a second tool): they are not data tools and are listed here, not hidden.
-        self.assertEqual(g["collide"], ["batch.writeTo", "job_start.tool", "run.tool", "tool_find.tool", "tool_groups.tool"])
+        # Two hub inputs keep a step key, each for its own reason (27 Nov: tool_find, tool_groups and job_start now say card and job):
+        # run.tool is the step's own tool, and batch.writeTo is the batch's own top-level key (the file of the whole record).
+        self.assertEqual(g["collide"], ["batch.writeTo", "run.tool"])
 
     def test_the_five_renamed_inputs(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:

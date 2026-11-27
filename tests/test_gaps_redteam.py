@@ -61,7 +61,7 @@ class GapsRedTeam(unittest.TestCase):
     def test_h2_sketch_scale_doubles(self):
         self.ok("pd_body_new", {"name": "H2 body"})
         self.ok("sketch_new", {"body": "H2 body", "plane": "XY", "name": "H2 sk"})
-        self.ok("sketch_add", {"sketch": "H2 sk", "items": [{"kind": "circle", "center": [10, 0], "radius": 5}]})
+        self.ok("sketch_add", {"sketch": "H2 sk", "kind": "circle", "center": [10, 0], "radius": 5})
         self.ok("sketch_copy", {"sketch": "H2 sk", "geometry": [0], "scale": {"center": [0, 0], "factor": 2}})
         g = self.obj("H2 sk").Geometry[-1]
         self.assertAlmostEqual(g.Radius, 10.0, places=4)
@@ -150,7 +150,7 @@ class GapsRedTeam(unittest.TestCase):
     def test_m9_helix_growth_used_or_refused(self):
         self.ok("pd_body_new", {"name": "M9 spring"})
         self.ok("sketch_new", {"body": "M9 spring", "plane": "XZ", "name": "M9 wire"})
-        self.ok("sketch_add", {"sketch": "M9 wire", "items": [{"kind": "circle", "center": [10, 0], "radius": 1}]})
+        self.ok("sketch_add", {"sketch": "M9 wire", "kind": "circle", "center": [10, 0], "radius": 1})
         err, out = self.call("pd_helix", {"body": "M9 spring", "sketch": "M9 wire", "height": 20, "turns": 5, "growth": 2})
         if not err:
             h = next(o for o in self.obj("M9 spring").Group if o.TypeId == "PartDesign::AdditiveHelix")

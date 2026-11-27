@@ -104,8 +104,8 @@ class AnswerFields(unittest.TestCase):
         self.assertEqual(protocol.read_as_words(["object as body"]), "read object as body")
 
     def test_empty_text_for_tool_find_is_left_out(self):
-        schema = obj({"words": {"type": "string"}, "group": {"type": "string"}, "tool": {"anyOf": [{"type": "string"}]}})
-        a = {"group": "", "tool": ""}
+        schema = obj({"words": {"type": "string"}, "group": {"type": "string"}, "card": {"anyOf": [{"type": "string"}]}})
+        a = {"group": "", "card": ""}
         said = check_input(schema, a, "tool_find")
         self.assertEqual(a, {})
         self.assertEqual(said, [])  # read as left out, and not said: an empty value carries nothing (26 Nov)

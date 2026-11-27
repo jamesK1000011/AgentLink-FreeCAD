@@ -50,6 +50,7 @@ WAIVERS = {
     ("draft_text", "run"): "the English verb in the original text, not the run tool that came on 26 Nov",
     ("tool_groups", "run"): "the English verb in the original text, not the run tool that came on 26 Nov",
     ("cam_job", "tool"): "the input tool is now toolbit (26 Nov: no input is named like a step key; no alias, rule R5)",
+    ("sketch_add", "items"): "the input items is gone (27 Nov): one call adds one shape, and kind and its inputs stand beside tool; no alias, rule R5",
 }
 
 

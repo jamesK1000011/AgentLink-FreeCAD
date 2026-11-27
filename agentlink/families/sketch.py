@@ -580,18 +580,14 @@ def state_of(sk):
     return out
 
 
-def item_error(n, e):
-    """sketch_add's refusal for item n that failed (blind QA, 24 Nov: FreeCAD's
-    words did not say which item): the same refusal, its words after
-    "items[n]: ". A tool's own refusal keeps its code; a ValueError is the
+def item_error(e):
+    """sketch_add's refusal for the shape that failed: the same refusal and
+    its words. A tool's own refusal keeps its code; a ValueError is the
     input's; any other error is FreeCAD's failure."""
     if isinstance(e, ToolError):
-        code, msg = e.code, e.message
-    else:
-        code, msg = ("invalid_input" if isinstance(e, ValueError) else "failed"), (str(e) or type(e).__name__)
-    head = f"items[{n}]"
-    err = ToolError(code, msg if str(msg).startswith(head) else f"{head}: {msg}", kind=getattr(e, "kind", None))
-    raise err from e
+        raise e
+    code, msg = ("invalid_input" if isinstance(e, ValueError) else "failed"), (str(e) or type(e).__name__)
+    raise ToolError(code, msg) from e
 
 
 # ---- geometry builders: (geometry, construction) lists and their constraints -----------------
@@ -686,7 +682,7 @@ def build(item):
             other = [f for f in ("width", "height", "x", "y", "w", "h") if f in item]
             raise ToolError("invalid_input", f"{k}: size [w, h] (mm), and center [x, y] or corner [x, y] (its lower left)."
                                              + (f" {', '.join(other)}: not fields of a {k}." if other else "")
-                                             + f" Example: {{ \"kind\": \"{k}\", \"corner\": [0, 0], \"size\": [60, 30] }}.")
+                                             + f" Example: {{ \"tool\": \"sketch_add\", \"kind\": \"{k}\", \"corner\": [0, 0], \"size\": [60, 30] }}.")
         if "corner" in item:
             c0 = pc.vec2(item["corner"], "corner")
             x0, y0 = c0.x, c0.y
@@ -891,36 +887,6 @@ def _ref(r, what):
             raise ToolError("invalid_input", f"{what}: vertex {v} of geometry {r[0]} — 1 its start, 2 its end, 3 its centre (arcs, circles, ellipses); 0 or left out means the whole curve.")
         return (r[0], v or None)
     raise ToolError("invalid_input", f"{what}: a geometry id, [id, vertex] (vertex 1 start, 2 end, 3 centre) or \"origin\". The axes: -1 the horizontal, -2 the vertical; outside edges -3 down (sketch_external). sketch_state lists the ids.")
-
-
-CON_FIELDS = ("type", "refs", "value", "name")
-CON_EXAMPLE = '{ "type": "tangent", "refs": [0, 1] } makes line 0 tangent to circle 1'
-# Fields models wrote for refs (local-model runs, 24 Nov: a, b).
-CON_REF_WORDS = ("a", "b", "c", "point", "points", "geometry", "geometries", "geo", "ref", "first", "second", "line", "circle", "edges", "ids")
-CON_VALUE_WORDS = ("length", "distance", "radius", "diameter", "angle", "size", "mm", "deg")
-
-
-def con_keys(c, i):
-    """One constraint checked for its fields: { type, refs, value, name }.
-    A field written another way (kind, a, b, point …) is refused by name,
-    with the right fields and one worked constraint; nothing is guessed
-    (owner, 22 Nov; no aliases, 24 Nov). A reader."""
-    if not isinstance(c, dict):
-        return c
-    extra = [k for k in c if k not in CON_FIELDS]
-    if extra:
-        hint = ""
-        if "kind" in extra or "constraint" in extra:
-            hint = " The constraint's kind goes in type."
-        if any(k in extra for k in CON_REF_WORDS):
-            hint += " Its geometry ids and points go in refs, one list, in order."
-        if any(k in extra for k in CON_VALUE_WORDS):
-            hint += " A size goes in value (mm or deg)."
-        raise ToolError("invalid_input", f"constraints[{i}]: {', '.join(extra)}: not {'a field' if len(extra) == 1 else 'fields'} of a constraint.{hint} "
-                                         f"A constraint has only type, refs, value and name. Example: {CON_EXAMPLE}.")
-    if not c.get("type"):
-        raise ToolError("invalid_input", f"constraints[{i}]: type is missing. Example: {CON_EXAMPLE}.")
-    return c
 
 
 # The vertices each kind of sketch geometry has (FreeCAD's PointPos: 1 start,
@@ -1271,7 +1237,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
-               "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
+               "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
+               "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
     return runners.tools(GROUP, s, helpers)

@@ -11,17 +11,17 @@ class SketchTools(Base):
         self.ok("pd_body_new", {"name": "Plate"})
         sk = self.ok("sketch_new", {"plane": "XY", "name": "Outline"})
         self.assertEqual(sk["frame"]["normal"], [0, 0, 1])
-        add = self.ok("sketch_add", {"sketch": "Outline", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20], "dims": True, "name": "plate"}]})
+        add = self.ok("sketch_add", {"sketch": "Outline", "kind": "rectangle", "center": [0, 0], "size": [40, 20], "dims": True, "name": "plate"})
         self.assertEqual(add["added"][0]["ids"], [0, 1, 2, 3])
         self.assertEqual(add["state"]["dof"], 2)
         self.assertTrue(add["state"]["readyForFeature"], add["state"])
-        c = self.ok("sketch_constrain", {"sketch": "Outline", "constraints": [{"type": "symmetric", "refs": [[0, 1], [1, 2], "origin"]}]})
+        c = self.ok("sketch_constrain", {"sketch": "Outline", "type": "symmetric", "refs": [[0, 1], [1, 2], "origin"]})
         self.assertEqual(c["state"]["dof"], 0)
         self.assertTrue(c["state"]["fullyConstrained"])
 
     def test_2_conflict_is_refused_and_nothing_added(self):
         before = len(self.ok("sketch_state", {"sketch": "Outline"})["constraints"])
-        e = self.refused("sketch_constrain", {"sketch": "Outline", "constraints": [{"type": "distance_x", "refs": [0], "value": 50}]})
+        e = self.refused("sketch_constrain", {"sketch": "Outline", "type": "distance_x", "refs": [0], "value": 50})
         self.assertIn("over-constrain", e["message"])
         self.assertEqual(len(self.ok("sketch_state", {"sketch": "Outline"})["constraints"]), before)
 
@@ -34,12 +34,10 @@ class SketchTools(Base):
 
     def test_4_shapes_close_and_solve(self):
         self.ok("sketch_new", {"plane": "XZ", "name": "Shapes"})
-        add = self.ok("sketch_add", {"sketch": "Shapes", "items": [
-            {"kind": "rounded_rectangle", "center": [0, 0], "size": [30, 20], "radius": 3},
-            {"kind": "polygon", "center": [40, 0], "radius": 8, "sides": 6},
-            {"kind": "slot", "from": [70, 0], "to": [90, 0], "radius": 4},
-            {"kind": "line", "from": [0, -20], "to": [0, 20], "construction": True},
-        ]})
+        self.ok("sketch_add", {"sketch": "Shapes", "kind": "rounded_rectangle", "center": [0, 0], "size": [30, 20], "radius": 3})
+        self.ok("sketch_add", {"sketch": "Shapes", "kind": "polygon", "center": [40, 0], "radius": 8, "sides": 6})
+        self.ok("sketch_add", {"sketch": "Shapes", "kind": "slot", "from": [70, 0], "to": [90, 0], "radius": 4})
+        add = self.ok("sketch_add", {"sketch": "Shapes", "kind": "line", "from": [0, -20], "to": [0, 20], "construction": True})
         st = add["state"]
         self.assertEqual(st["solver"], "solved", st)
         self.assertEqual(st["closedWires"], 3, st)
@@ -49,24 +47,22 @@ class SketchTools(Base):
 
     def test_5_open_polyline_is_not_ready(self):
         self.ok("sketch_new", {"plane": "YZ", "name": "Open"})
-        add = self.ok("sketch_add", {"sketch": "Open", "items": [{"kind": "polyline", "points": [[0, 0], [10, 0], [10, 10]]}]})
+        add = self.ok("sketch_add", {"sketch": "Open", "kind": "polyline", "points": [[0, 0], [10, 0], [10, 10]]})
         self.assertFalse(add["state"]["readyForFeature"])
         self.assertIn("openVertices", add["state"])
 
     def test_6_curves_offset_and_outside_geometry(self):
         self.ok("pd_body_new", {"name": "Tray"})
         self.ok("sketch_new", {"body": "Tray", "plane": "XY", "name": "TrayOut"})
-        self.ok("sketch_add", {"sketch": "TrayOut", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 30]}]})
+        self.ok("sketch_add", {"sketch": "TrayOut", "kind": "rectangle", "center": [0, 0], "size": [40, 30]})
         off = self.ok("sketch_offset", {"sketch": "TrayOut", "distance": 3})
         # Four sides and four round corners, joined into one more closed profile.
         self.assertEqual(len(off["added"]), 8, off)
         self.assertEqual(off["state"]["closedWires"], 2, off["state"])
         self.ok("sketch_new", {"body": "Tray", "plane": "XZ", "name": "Curves"})
-        c = self.ok("sketch_add", {"sketch": "Curves", "items": [
-            {"kind": "bspline", "points": [[0, 0], [10, 8], [20, 0], [30, 8]]},
-            {"kind": "bspline", "points": [[0, 20], [10, 30], [20, 20], [10, 15]], "closed": True},
-            {"kind": "ellipse", "center": [50, 10], "major": 20, "minor": 10, "rotation": 30},
-        ]})
+        self.ok("sketch_add", {"sketch": "Curves", "kind": "bspline", "points": [[0, 0], [10, 8], [20, 0], [30, 8]]})
+        self.ok("sketch_add", {"sketch": "Curves", "kind": "bspline", "points": [[0, 20], [10, 30], [20, 20], [10, 15]], "closed": True})
+        c = self.ok("sketch_add", {"sketch": "Curves", "kind": "ellipse", "center": [50, 10], "major": 20, "minor": 10, "rotation": 30})
         self.assertEqual(c["state"]["solver"], "solved", c["state"])
         self.assertEqual(c["state"]["closedWires"], 2, c["state"])
         # A pad of the two profiles is a 3 mm frame; a sketch on its top with an inside edge brought in.
@@ -84,7 +80,8 @@ class SketchTools(Base):
 
         self.ok("pd_body_new", {"name": "Edited"})
         self.ok("sketch_new", {"body": "Edited", "plane": "XY", "name": "EditMe"})
-        self.ok("sketch_add", {"sketch": "EditMe", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}, {"kind": "circle", "center": [12, 4], "radius": 3}]})
+        self.ok("sketch_add", {"sketch": "EditMe", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
+        self.ok("sketch_add", {"sketch": "EditMe", "kind": "circle", "center": [12, 4], "radius": 3})
         st = self.ok("sketch_state", {"sketch": "EditMe"})
         # The corner where line 0 ends.
         f = self.ok("sketch_edit", {"sketch": "EditMe", "fillet": {"at": [0, 2], "radius": 5}})
@@ -97,7 +94,8 @@ class SketchTools(Base):
         self.assertAlmostEqual(vol, want, delta=want * 0.005)
         # Trim and split on a sketch of its own: a line across a circle.
         self.ok("sketch_new", {"body": "Edited", "plane": "XY", "name": "Cuts"})
-        self.ok("sketch_add", {"sketch": "Cuts", "items": [{"kind": "circle", "center": [0, 0], "radius": 10}, {"kind": "line", "from": [-15, 0], "to": [15, 0]}]})
+        self.ok("sketch_add", {"sketch": "Cuts", "kind": "circle", "center": [0, 0], "radius": 10})
+        self.ok("sketch_add", {"sketch": "Cuts", "kind": "line", "from": [-15, 0], "to": [15, 0]})
         t = self.ok("sketch_edit", {"sketch": "Cuts", "trim": {"geometry": 1, "at": [-13, 0]}})
         self.assertIn("trimmed", t["done"][0])
         sp = self.ok("sketch_edit", {"sketch": "Cuts", "split": {"geometry": 0, "at": [0, 10]}})

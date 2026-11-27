@@ -38,13 +38,13 @@ class LiveFindings(unittest.TestCase):
         # applies: what the tool's own leading checks say of the document now (agentlink/appliesnow.py).
         self.assertTrue(all(set(t) - {"applies"} == {"tool", "group", "does"} for t in got["tools"]), got["tools"])
         self.assertLessEqual(len(got["tools"]), 10)
-        card = self.ok("tool_groups", {"tool": "pd_fillet"})["tools"][0]
+        card = self.ok("tool_groups", {"card": "pd_fillet"})["tools"][0]
         self.assertEqual(card["group"], "feature")
         self.assertIn("properties", card["inputSchema"])
         self.assertTrue(card["description"])
         self.assertEqual(self.ok("tool_groups")["listed"], before)
         self.assertEqual(self.ok("tool_groups", {"find": "zzqqxx"})["tools"], [])
-        e = self.no("tool_groups", {"tool": "pd_filet"})
+        e = self.no("tool_groups", {"card": "pd_filet"})
         self.assertEqual(e["code"], "not_found")
         self.assertIn("pd_fillet", e["message"])
 
@@ -76,9 +76,9 @@ class LiveFindings(unittest.TestCase):
     def test_tool_groups_twenty_cards(self):
         twenty = [t["tool"] for t in self.ok("tool_groups", {"find": "sketch", "limit": 20})["tools"]]
         self.assertEqual(len(twenty), 20)
-        cards = self.ok("tool_groups", {"tool": twenty})["tools"]
+        cards = self.ok("tool_groups", {"card": twenty})["tools"]
         self.assertEqual([c["tool"] for c in cards], twenty)
-        e = self.no("tool_groups", {"tool": twenty + ["pd_pad"]})
+        e = self.no("tool_groups", {"card": twenty + ["pd_pad"]})
         self.assertEqual(e["code"], "invalid_input")
         self.assertIn("20", e["message"])
 

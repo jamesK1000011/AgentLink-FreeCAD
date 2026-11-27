@@ -14,7 +14,7 @@ way in, for an agent that already knows what it does:
 A step is the same flat step as batch's (agentlink/callshape.py):
 
   { "tool": "pd_pad", "sketch": "Sketch", "length": 6 }
-  { "tool": "sketch_add", "each": { "x": [15, 45] }, "items": [...  "$x" ...] }
+  { "tool": "sketch_add", "each": { "x": [15, 45] }, "kind": "circle", "center": ["$x", 0], "radius": 3 }
   { "tool": "pd_pad", "length": { "$from": 2, "$at": "height" } }
 
 The tool's inputs stand beside tool. each runs the step once for each

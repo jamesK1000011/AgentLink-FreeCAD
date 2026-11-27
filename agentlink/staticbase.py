@@ -11,7 +11,7 @@ ToolListMode (preference, Mod/AgentLink, text) or AGENTLINK_TOOLLIST:
                        answer: a client that sends only listed tools reaches
                        every tool with it). With the fast path on, fast and get
                        come before run. Every other tool is found with
-                       tool_find and called by name, or as a step of run or batch. The list never
+                       tool_find and called by name, or as a step of run, batch or fast. The list never
                        changes by itself: no tools/list_changed, so every
                        client sees the same list. A group turned on with
                        tool_groups { enable } is listed too.

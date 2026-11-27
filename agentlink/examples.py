@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""A ready call on a tool's card (owner, 22 Nov): the arguments filled from
-the open document, as the options fill theirs, and the values the agent
-must give marked. Small models copy and change a call better than they
-build one from the card (local runs, 22 Nov: sketch constraints).
+"""Two example calls on a tool's card (owner, 22 Nov, 26 Nov): plain, every
+input with no context, and ready, the same call filled from the open
+document as the options fill theirs. Each is one flat step that goes into
+run, batch or fast as it is. A value that the agent must give is marked in
+both. Small models copy and change a call better than they build one from
+the card (local runs, 22 Nov: sketch constraints).
 
 The marker of a value to give: null (default; a null fails the schema
-check, and the refusal names the field) or angle ("<length: mm>").
+check, and the refusal names the field) or angle ("<length>").
 AGENTLINK_EXAMPLE_MARK=null|angle picks it; AGENTLINK_EXAMPLES=0 turns
 the examples off. Data: data/examples.json. Never raises."""
 import copy
@@ -48,9 +50,20 @@ def _value(v, facts):
     return copy.deepcopy(v)
 
 
+def _marked(arg, how):
+    return None if how == "null" else f"<{arg}>"
+
+
 def for_tool(name, facts, table=None, how=None):
-    """{ example: { tool, arguments }, fill: [words] } for the tool, or None
-    (no entry, or switched off)."""
+    """{ plain, ready, fill } for the tool, or None (no entry, or switched off).
+
+    plain and ready are each one flat step ({ "tool": name, <inputs> }) that
+    can go into run, batch or fast as it is. plain has every input of the
+    entry with no context: a value that the document gives, and a value to
+    give, are marked; a worked value stays. ready is the same call filled
+    from the open document: an input that the document does not give is still
+    there, marked. fill: words for the inputs of the entry that the agent
+    gives (a worked value to change, or a marked one)."""
     if not enabled():
         return None
     e = (load() if table is None else table).get(name)
@@ -58,22 +71,26 @@ def for_tool(name, facts, table=None, how=None):
         return None
     how = how or mark()
     facts = facts or {}
-    args = {}
+    plain, ready = {}, {}
     for k, v in (e.get("arguments") or {}).items():
-        got = _value(v, facts)
-        if got is not None and got != []:
-            args[k] = got
+        if isinstance(v, str) and v.startswith("="):
+            got = _value(v, facts)
+            plain[k] = _marked(k, how)
+            ready[k] = got if got is not None and got != [] else _marked(k, how)
+        else:
+            plain[k] = ready[k] = copy.deepcopy(v)
     words = []
     for f in e.get("fill") or ():
         arg, what = f.get("arg"), f.get("what", "")
-        if f.get("unless") and _value(f["unless"], facts) not in (None, []):
-            continue
         if f.get("keep"):
             words.append(f"{arg}: {what}. Change it to yours.")
             continue
-        args[arg] = None if how == "null" else f"<{arg}>"
-        words.append(f"{arg}: {what}. Put the value in place of " + ("null." if how == "null" else f"<{arg}>."))
-    out = {"example": {"tool": name, "arguments": args}}
+        if arg in ready and ready[arg] != _marked(arg, how):
+            continue  # the open document gave it: ready has the value, and there is nothing to give
+        if arg not in plain:
+            plain[arg] = ready[arg] = _marked(arg, how)
+        words.append(f"{arg}: {what}.")
+    out = {"plain": {"tool": name, **plain}, "ready": {"tool": name, **ready}}
     if words:
         out["fill"] = words
     return out

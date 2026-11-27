@@ -184,7 +184,7 @@ def _no_tool_words(server, session, c, i):
         more = f" (and {len(fits) - 4} more)" if len(fits) > 4 else ""
         words += f" Tools whose cards take {', '.join(keys[:6])}: {', '.join(fits[:4])}{more}."
     elif keys:
-        words += f" No tool's card takes all of {', '.join(keys[:6])}: read the card of the tool you mean (tool_find {{ tool: name }})."
+        words += f" No tool's card takes all of {', '.join(keys[:6])}: read the card of the tool you mean (tool_find {{ card: name }})."
     name = fits[0] if fits else "sketch_new"
     shown = ", ".join(f"\"{k}\": …" for k in keys[:3]) if fits else "\"plane\": \"XY\""
     return words + f" Form: {{ \"tool\": \"{name}\", {shown} }}. The calls run in order, one after another."
@@ -997,7 +997,7 @@ class Session:
         got["note"] = (("The agent's document is one an agent made. " if mine else
                         f"{self.doc.Label} is an empty start document that Agent Link made, not the person's. " if is_start_doc(self.doc) else
                         f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
-                       + "For new work, make a document of its own: batch { calls: [{ \"tool\": \"doc_new\", \"name\": \"Part\" }] }. "
+                       + "For new work, make a document of its own: run { \"tool\": \"doc_new\", \"name\": \"Part\" }. "
                        "session_state reads all of this again.")
         return got
 
@@ -1477,9 +1477,10 @@ class Session:
 
 
 # tool_groups' standing notes: said once a conversation (agentlink/once.py).
-TG_CARDS_NOTE = ("Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, inputs }] } where the client only sends listed tools. "
-                 "example is a ready call from the open document: copy it, and give each value that fill names.")
-TG_CARD_NOTE = "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
+TG_CARDS_NOTE = ("Callable by name as they are, listed or not: directly, or with run (one call), batch (several calls) or fast (several calls, one short answer) "
+                 "where the client only sends listed tools. plain is one call with every input, and a null where you give the value. "
+                 "ready is the same call filled from the open document, and a null where it could not fill. Each is one step: copy it, and give each value that fill names.")
+TG_CARD_NOTE = "tool_groups { card: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
 TG_ALL_NOTE = "Every tool is callable by name, listed or not. find: \"words\" searches them all; group: g gives one group's whole about and its tools, a line each; detail: true every group's whole about."
 
 from . import once as _once  # noqa: E402
@@ -1501,19 +1502,21 @@ ABOUT_HEADLESS = (
 )
 WORKING = (
     "Start with session_state: the document, its bodies with their sizes, the step count and the folder files go to. "
-    "A tool's card (tool_find { tool: name }) gives its inputs and an example: read it before the first call of that tool. "
+    "A tool's card (tool_find { card: name }) gives its inputs and an example: read it before the first call of that tool. "
     "A guide gives the workflow and traps: read the section you need when a card is not enough. "
     "guide_read with no topic gives the index. The guides here: {guides}. {words}"
     "A guide's ## sections can be read one at a time (the index gives what each costs; where a guide has a Start here section, read that first). "
     "Lengths are millimetres, angles degrees, masses grams. A body is named by its label; a face or edge by what it "
     "is (shape_query: normal, radius, near a point) rather than by FreeCAD's Face12, which changes with the model. "
     "Every tool that changes the document is one undo step: history_undo and history_redo (and checkpoints "
-    "where an add-on offers them); history_diff says what changed. batch { calls: [{ tool, inputs }] } runs calls one at a time, in order; "
-    "at a refusal the calls before it stay, and the answer says which ran (done), which was refused (refused) and which did not run (notRun). "
+    "where an add-on offers them); history_diff says what changed. A call is a step: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }, with the inputs beside tool. "
+    "run makes one call. batch { calls: [step, step] } makes several calls, one at a time, in order, with a full answer for each; "
+    "fast { calls } does the same with one short answer. "
+    "At a refusal in a batch the calls before it stay, and the answer says which ran (done), which was refused (refused) and which did not run (notRun). "
     "Give only calls at first: batch's other fields are in guide_read { topic: \"batch\" }. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
     "Words that stand the same from call to call (a tool's own note, the health's advice on an overlap) are given the first time "
-    "in a conversation; after that the answer names their key in saidBefore, and tool_find { tool: name } gives them again (said). "
+    "in a conversation; after that the answer names their key in saidBefore, and tool_find { card: name } gives them again (said). "
     "Look at the work after each change that matters: view_render draws the parts from any view, cut open, zoomed "
     "to a spot, or with a map (wall, stress, and those add-ons add), and gives the worst place; body_check says "
     "whether a body is sound. "
@@ -1529,7 +1532,7 @@ LEAN_NOTE = (
     "and the pictures. The rest come in groups, Agent Link's and those of the add-ons installed (doc, model, sketch, "
     "feature, draft, measure, strength, techdraw, assembly, cam …): tool_groups lists them. The way to a tool is find, card, call: tool_groups { find: \"words\" } searches every tool by what it does "
     "(FreeCAD's own command and workbench names work; now: true puts what fits the open workbench, sketch and selection first), "
-    "tool_groups { tool: name } gives its description and inputs, and it runs by name (or through batch) unlisted — do not load a group for one tool. "
+    "tool_groups { card: name } gives its description and inputs, and it runs by name (or through run, batch or fast) unlisted — do not load a group for one tool. "
     "enable: [group] lists a whole group from then on — only for a task that uses most of it; enable what the task's "
     "guide names, not all. AGENTLINK_TOOLS=full "
     "lists every tool from the start."
@@ -1552,10 +1555,10 @@ def orient_on():
 
 
 STATIC_NOTE = (
-    "Only a few tools are listed: session_state, batch, guide_read, tool_find and the approval tools (and fast and get with the "
+    "Only a few tools are listed: session_state, run, batch, guide_read, tool_find and the approval tools (and fast and get with the "
     "fast path). Every other tool is found and called by name: tool_find { words: \"what it does\" } searches every tool, "
-    "tool_find { tool: name } (or a list of names) gives each card, and the tool runs by name, or in batch { calls: [{ tool, "
-    "inputs }] } where the client sends only listed tools."
+    "tool_find { card: name } (or a list of names) gives each card, and the tool runs by name. Where the client sends only listed tools, "
+    "use run { \"tool\": name, <its inputs> } for one call, batch { calls } for several calls, or fast { calls } for several calls with one short answer."
 )
 
 
@@ -2362,11 +2365,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 out["said"] = said
             return out
 
-        names = a.get("tool")
+        names = a.get("card")
         if names:
             names = [names] if isinstance(names, str) else names
             if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or len(names) > 20:
-                raise ToolError("invalid_input", "tool: a tool's name, or up to 20 names — tool_groups { find: \"words\" } finds names by what they do.")
+                raise ToolError("invalid_input", "card: a tool's name, or up to 20 names — tool_groups { find: \"words\" } finds names by what they do.")
             cards, missed = [], []
             for n in names:
                 t = server.tools.get(plain_name(server, n))
@@ -2612,7 +2615,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         from . import jobs
         from .protocol import check_input
 
-        name = a.get("tool")
+        name = a.get("job")
         t = server.tools.get(name)
         if t is None:
             raise ToolError("not_found", f"{name}: no such tool — tool_groups lists them.")
@@ -2829,10 +2832,10 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 c["tool"] = plain_name(server, c["tool"])
         unknown = [c["tool"] for c in calls if "bad" not in c and c["tool"] not in server.tools]
         if unknown and rollback:
-            raise ToolError("not_found", f"No tool named {'; '.join(_unknown_words(server, u) for u in sorted(set(unknown)))} — nothing was run. tool_find {{ tool: name }} gives a tool's card.")
+            raise ToolError("not_found", f"No tool named {'; '.join(_unknown_words(server, u) for u in sorted(set(unknown)))} — nothing was run. tool_find {{ card: name }} gives a tool's card.")
         for i, c in enumerate(calls):
             if "bad" not in c and c["tool"] not in server.tools:
-                c["bad"] = {"code": "not_found", "message": f"calls.{i}: no tool named {_unknown_words(server, c['tool'])}. tool_find {{ tool: name }} gives a tool's card. The call was not run."}
+                c["bad"] = {"code": "not_found", "message": f"calls.{i}: no tool named {_unknown_words(server, c['tool'])}. tool_find {{ card: name }} gives a tool's card. The call was not run."}
         stop = a.get("stopOnError", True)
         # A long batch is answered in parts. The client drops a call after
         # about 80 s and the watchdog takes one past 120 s for hung and
@@ -3524,8 +3527,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         # their cards, everything else is searched (owner, 22 Nov).
         names, qs, read_as = sort_find(server, a)
         lone = isinstance(a.get("queries"), list) and len(a["queries"]) == 1 or isinstance(a.get("words"), str)
-        if names and not qs and not (lone and not a.get("tool")):
-            got = tool_groups({"tool": names if len(names) > 1 or isinstance(a.get("tool"), list) else names[0]})
+        if names and not qs and not (lone and not a.get("card")):
+            got = tool_groups({"card": names if len(names) > 1 or isinstance(a.get("card"), list) else names[0]})
             if read_as:
                 got["readAs"] = read_as
             return got
@@ -3544,12 +3547,13 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             got = tool_groups({"find": q, "limit": limit, **({"group": a["group"]} if a.get("group") else {})})
             one = {"find": q, "tools": got.get("tools") or [], **({"note": got["note"]} if not got.get("tools") else {})}
             if exact is not None:
-                one["card"] = tool_groups({"tool": exact.name})["tools"][0]
+                one["card"] = tool_groups({"card": exact.name})["tools"][0]
             out.append(one)
         res = out[0] if len(out) == 1 else {"results": out}
         if names:
-            res["cards"] = tool_groups({"tool": names})["tools"]
-        res["note"] = "Every tool found here can be called: by name, or in batch { calls: [{ tool, inputs }] }. tool_find { tool: name } gives its whole description and inputs."
+            res["cards"] = tool_groups({"card": names})["tools"]
+        res["note"] = ("Every tool found here can be called by name, or as a step { \"tool\": name, <its inputs> } of run (one call), batch (several calls) "
+                       "or fast (several calls, one short answer). tool_find { card: name } gives its whole description, its inputs and two example calls: plain and ready.")
         if read_as:
             res["readAs"] = read_as
         return res
@@ -3566,7 +3570,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                             "answers with that group alone: its whole about, and its tools with one line each. detail: true gives every group's whole about. The cheap way to a "
                             "tool that is not listed is find, card, call. find: \"words\" searches every tool, best first (group narrows it; limit 1-40, 10 by default). It searches "
                             "the name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description. Tools that "
-                            "match every word come before tools that match some. It answers name, group and what it does. tool: name (or up to 20 names) answers that tool's whole "
+                            "match every word come before tools that match some. It answers name, group and what it does. card: name (or up to 20 names) answers that tool's whole "
                             "description and inputSchema. said: words its answers gave once and now leave out, named in saidBefore. Then call it by name. now: true (alone or with "
                             "find) answers the tools that fit the present state, best first, each with fits (why). First the likely next step by the document's own state, the same "
                             "ranking as session_state's next (next [{ tool, why }], at most three). fits then starts \"likely next: …\". Then the active workbench, a sketch open in "
@@ -3575,14 +3579,14 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                             "lists anything, so a group's other descriptions are not loaded. Enable a group only when a task uses most of it. Every tool is callable by name either "
                             "way. Changes nothing but which tools are listed. needs: tool reads that tool's own leading checks against the document now, and never runs it. Answer: "
                             "{ applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }. arguments: {…} also reads that call's checks; advice only. "
-                            "find's hits that would refuse now come last, with applies: false. now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
+                            "find's hits that would refuse now come last, with applies: false. now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "card": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
         Tool("tool_find", "Find a tool by plain words: what it does, or FreeCAD's own command or workbench name. It gives up to limit (8) tools, best first. Each has its group, "
-                          "and one line on what it does. queries: a list of searches (up to 6) and tool names (up to 20). tool: a name or a list of names answers the "
+                          "and one line on what it does. queries: a list of searches (up to 6) and tool names (up to 20). card: a name or a list of names answers the "
                           "whole description and inputs of each one (its card). A name with a prefix, other letter case or a letter wrong is read as the name; readAs says so. "
-                          "A card has example: a ready call from the open document, and fill: the values to give. tool and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
-                          "callable by name, listed or not. Where the client sends only listed tools, use batch { calls: [{ tool, inputs }] }. listing: true answers what the "
+                          "A card has two example calls and fill. plain has every input. ready is the same call filled from the open document. fill names the values to give. card and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
+                          "callable by name, listed or not. Where the client sends only listed tools, use run for one call. Use batch for several calls. Use fast for several calls with one short answer. listing: true answers what the "
                           "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. The write rule of every tool applies to it. Changes nothing.",
-             obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+             obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "card": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
                   "groups": {"type": "boolean"}, "group": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "listing": {"type": "boolean"}, "to": {"type": "string"}}), tool_find, group="find"),
         Tool("guide_read", "Read how to do a task: the workflow, and the traps that the tools' own descriptions do not give. No topic: the index. For each guide: its sections, "
                            "and what the guide and each section cost to read (tokens). sectionTokens: each section's name, in the guide's order, with its cost (approximate, "
@@ -3599,13 +3603,13 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                            "Then the job fails with the code stopped. A job-… job is a read, so the document does not change. A call-N job runs on FreeCAD's "
                            "own thread and cannot stop in the middle. For it, the answer gives the next steps: wait, or app_force_restart. Without stop, it changes nothing.",
              obj({"job": {"type": "string"}, "wait": {"type": "number"}, "stop": {"type": "boolean"}}), job_status),
-        Tool("job_start", "Run a call as a job: tool and its arguments. If it ends within 60 s, the answer is the tool's own. Else a job id (call-N) for "
+        Tool("job_start", "Run a call as a job: job is the tool's name, and arguments are its inputs. If it ends within 60 s, the answer is the tool's own. Else a job id (call-N) for "
                           "job_status. wait: false gives the id at once. A client drops a call after about 80 s. So the server does this for any call past about 60 s. Not "
                           "for job_ and app_ tools. No estimate refuses a call.",
-             obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
+             obj({"job": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["job"]), job_start),
         Tool("batch", "Run many calls in one request, and get a full answer for each call. The calls run one at a time, in order: a call sees what the calls before it made. "
                       "A call is a step: the tool's name in tool, and its inputs beside it. Example: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }. "
-                      "calls: [step, step]. each: { \"x\": [15, 45] } on a step runs it once for each value, in order. \"$x\" in the inputs is the value, also inside a list. "
+                      "calls: [step, step]. For one call, use run. For many calls with one short answer, use fast. each: { \"x\": [15, 45] } on a step runs it once for each value, in order. \"$x\" in the inputs is the value, also inside a list. "
                       "Each pass is one call: done, refused, notRun and $from count it. The old forms (arguments, as, when, let, try, choose, do) are refused. "
                       "Or path: a .json file that holds that list, or { calls, rollback, stopOnError "
                       "}. The file is read on this side: a long run of calls stays out of the conversation. A relative path is in the session's folder; files are read where "

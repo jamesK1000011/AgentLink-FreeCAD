@@ -133,10 +133,13 @@ for tool, case, prepare, args in cases(fc, tempfile.mkdtemp()):
         s = fc.Session(tempfile.mkdtemp()); prepare(s)
         t = [x for x in feat.tools(s) if x.name == tool][0]
         out[tool] = t.fn(args)["on"]
+        out[tool + "List"] = t.fn({**args, "edges": ["Edge2", "Body.Edge3"]})["on"]
 print(json.dumps(out))
 ''')
+        # 27 Nov: edges is one selector (here the nearest edge) or a list of references (two edges)
         for n in ("pd_fillet", "pd_chamfer"):
-            self.assertEqual(got[n], ["Edge2: line along x, 1 mm, mid [1.5, 0, 0]", "Edge3: line along x, 1 mm, mid [2.5, 0, 0]"], n)
+            self.assertEqual(got[n], ["Edge2: line along x, 1 mm, mid [1.5, 0, 0]"], n)
+            self.assertEqual(got[n + "List"], ["Edge2: line along x, 1 mm, mid [1.5, 0, 0]", "Edge3: line along x, 1 mm, mid [2.5, 0, 0]"], n)
 
 
 SETTLE = '''

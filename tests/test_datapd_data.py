@@ -114,7 +114,7 @@ class DatapdData(unittest.TestCase):
     @unittest.skipUnless(_have_base(), f"git has no {BASE} here")
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
-        self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        self.assertEqual(sorted({c["tool"] for c in got}), sorted(n for n in CONVERTED if n not in _meant.FLAT_1127))  # the six flat tools: tests/test_flat_inputs_1127.py
         for c in got:
             c["old"] = _meant.case_as_meant(c["tool"], c["case"], _meant.old_as_renamed(c["tool"], _meant.renamed_words(c["tool"], c["old"])))  # renamed inputs and meant changes: tests/_meant.py RENAMED, RENAMES, CASES
             c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
@@ -122,7 +122,7 @@ class DatapdData(unittest.TestCase):
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
         # Each tool: a case that answers, and (where it can refuse) one that is refused.
-        for name in CONVERTED:
+        for name in (n for n in CONVERTED if n not in _meant.FLAT_1127):
             kinds = {c["new"]["result"][0] for c in got if c["tool"] == name}
             self.assertIn("ok", kinds, name)
         by = {(c["tool"], c["case"]): c["new"] for c in got}
@@ -130,6 +130,8 @@ class DatapdData(unittest.TestCase):
 
         # Not two empty runs alike: what some of them must have done.
         for (tool, case), want in EXPECT.items():
+            if tool in _meant.FLAT_1127:
+                continue
             res = by[(tool, case)]["result"]
             if isinstance(want, dict):
                 self.assertEqual(res[0], "ok", f"{tool} {case}: {res}")
@@ -149,7 +151,7 @@ class DatapdData(unittest.TestCase):
             if c["new"]["result"][0] == "refused":
                 said.setdefault(c["tool"], []).append(c["new"]["result"][2])
         missing = []
-        for name in CONVERTED:
+        for name in (n for n in CONVERTED if n not in _meant.FLAT_1127):
             for msg in _refusals(runners.entries()[name]):
                 # A template's fixed parts, in order, must all be in one refusal a case got.
                 parts = [p for p in _fixed(msg) if p]
@@ -157,7 +159,7 @@ class DatapdData(unittest.TestCase):
                     missing.append(f"{name}: {msg[:70]}")
         from _datapd_cases import UNREACHED
 
-        self.assertEqual(sorted(missing), sorted(UNREACHED))
+        self.assertEqual(sorted(missing), sorted(u for u in UNREACHED if u.split(':')[0] not in _meant.FLAT_1127))
 
 
 def _refusals(e):
@@ -283,6 +285,8 @@ def _main(mode):
 
     rows = []
     for tool, case, prepare, args in cases(fc, tempfile.mkdtemp()):
+        if tool in _meant.FLAT_1127:
+            continue  # made flat on 27 Nov: its inputs differ from the handler's; see tests/test_flat_inputs_1127.py
         row = {"tool": tool, "case": case, "crash": case.startswith("crash:")}
         for which, mods in (("old", old), ("new", new)):
             del fc.trace[:]

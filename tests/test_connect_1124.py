@@ -22,7 +22,7 @@ from agentlink.protocol import close_in  # noqa: E402
 from test_local_fixes_1123 import run  # noqa: E402
 
 GUIDES = sorted(n[:-3] for n in os.listdir(os.path.join(ROOT, "agentlink", "guides")) if n.endswith(".md"))
-CARD = ("A tool's card (tool_find { tool: name }) gives its inputs and an example: read it before the first call of that tool. "
+CARD = ("A tool's card (tool_find { card: name }) gives its inputs and an example: read it before the first call of that tool. "
         "A guide gives the workflow and traps: read the section you need when a card is not enough.")
 ASK = ("What only the person knows (how a part is made, what it is made of, what it must carry): ask, when someone answers. "
        "When nobody answers (a run with no person), take the plain choice, and say it in your last answer. "
@@ -145,16 +145,16 @@ class GuideFuzzy(unittest.TestCase):
 
 
 class PickAsBatch(unittest.TestCase):
-    """Item 5: with the static list, pick is not listed: the example is a batch call."""
+    """Item 5: with the static list, pick is not listed: the example is a run call (27 Nov: run, one flat step)."""
 
     DOC_NEW = {"step": 0, "list": [{"n": 1, "tool": "doc_new", "arguments": {}, "ask": [{"arg": "name"}]}]}
 
-    def test_static_shows_a_batch_call(self):
+    def test_static_shows_a_run_call(self):
         self.assertEqual(options.pick_how(self.DOC_NEW, static=True),
-                         'batch { calls: [{ tool: "pick", arguments: { option: 1, fill: { name: "Part" } } }] } runs option 1; option: "1, Part" also works')
+                         'run { "tool": "pick", "option": 1, "fill": { "name": "Part" } } runs option 1; option: "1, Part" also works')
         self.assertEqual(options.pick_how({"step": 1, "list": [{"n": 2, "tool": "body_check", "arguments": {}}]}, static=True),
-                         'batch { calls: [{ tool: "pick", arguments: { option: 2 } }] } runs option 2')
-        self.assertTrue(options.pick_how(None, static=True).startswith('batch { calls: [{ tool: "pick", arguments: { option: 1, fill: { length: 4 } } }] }'))
+                         'run { "tool": "pick", "option": 2 } runs option 2')
+        self.assertTrue(options.pick_how(None, static=True).startswith('run { "tool": "pick", "option": 1, "fill": { "length": 4 } }'))
 
     def test_classic_keeps_the_short_form(self):
         self.assertEqual(options.pick_how(self.DOC_NEW, static=False), 'pick { option: 1, fill: { name: "Part" } } runs option 1; the text "1, Part" also works')
@@ -162,7 +162,7 @@ class PickAsBatch(unittest.TestCase):
 
     def test_the_mode_decides(self):
         with mock.patch.dict(os.environ, {"AGENTLINK_TOOLLIST": "static"}):
-            self.assertTrue(options.public(self.DOC_NEW)["pick"].startswith("batch {"))
+            self.assertTrue(options.public(self.DOC_NEW)["pick"].startswith('run { "tool": "pick"'))
         with mock.patch.dict(os.environ, {"AGENTLINK_TOOLLIST": "classic"}):
             self.assertTrue(options.public(self.DOC_NEW)["pick"].startswith("pick {"))
 

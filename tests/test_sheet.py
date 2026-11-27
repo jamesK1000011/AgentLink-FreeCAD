@@ -32,7 +32,7 @@ class SheetTools(Base):
     def test_3_drives_a_part(self):
         self.ok("pd_body_new", {"name": "Bar"})
         self.ok("sketch_new", {"plane": "XY", "name": "Outline"})
-        self.ok("sketch_add", {"sketch": "Outline", "items": [{"kind": "rectangle", "corner": [0, 0], "size": [40, 10], "dims": True, "name": "bar"}]})
+        self.ok("sketch_add", {"sketch": "Outline", "kind": "rectangle", "corner": [0, 0], "size": [40, 10], "dims": True, "name": "bar"})
         self.ok("pd_pad", {"sketch": "Outline", "length": 5})
         name = self.ok("sheet_list")["sheets"][0]["name"]
         self.ok("param_bind", {"target": "Pad.Length", "expression": f"{name}.length"})

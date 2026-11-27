@@ -12,7 +12,7 @@ class Health(Base):
     def test_1_a_free_sketch_names_its_freedom(self):
         self.ok("pd_body_new", {"name": "Block"})
         self.ok("sketch_new", {"plane": "XY", "name": "Base"})
-        out = self.ok("sketch_add", {"sketch": "Base", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]})
+        out = self.ok("sketch_add", {"sketch": "Base", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
         h = out["health"]
         self.assertTrue(h["ok"], h)
         self.assertIn("Base: ", h["verdict"])
@@ -29,8 +29,8 @@ class Health(Base):
 
     def test_2_the_verdict_follows_the_solver(self):
         self.ok("sketch_new", {"plane": "XZ", "name": "Full"})
-        self.ok("sketch_add", {"sketch": "Full", "items": [{"kind": "rectangle", "center": [0, 0], "size": [10, 6], "dims": True}]})
-        out = self.ok("sketch_constrain", {"sketch": "Full", "constraints": [{"type": "fix", "refs": [[0, 1]]}]})
+        self.ok("sketch_add", {"sketch": "Full", "kind": "rectangle", "center": [0, 0], "size": [10, 6], "dims": True})
+        out = self.ok("sketch_constrain", {"sketch": "Full", "type": "fix", "refs": [[0, 1]]})
         sk = self.session.doc.getObjectsByLabel("Full")[0]
         v = out["health"]["verdict"]
         if sk.DoF == 0:
@@ -100,8 +100,8 @@ class Health(Base):
         self.assertNotIn("health", out)
 
     def test_7_a_batch_carries_it_per_call_not_twice(self):
-        out = self.ok("batch", {"calls": [{"tool": "sketch_new", "arguments": {"plane": "YZ", "name": "InBatch"}},
-                                          {"tool": "sketch_add", "arguments": {"sketch": "InBatch", "items": [{"kind": "circle", "center": [0, 0], "radius": 3}]}}]})
+        out = self.ok("batch", {"calls": [{"tool": "sketch_new", "plane": "YZ", "name": "InBatch"},
+                                          {"tool": "sketch_add", "sketch": "InBatch", "kind": "circle", "center": [0, 0], "radius": 3}]})
         self.assertNotIn("health", out)
         self.assertIn("InBatch: ", out["results"][1]["result"]["health"]["verdict"])
 
@@ -115,7 +115,7 @@ class Health(Base):
         out = self.ok("recompute", {})
         self.assertNotIn("Base:", (out.get("health") or {}).get("verdict", ""))
         # a sketch tool's own call still reads it out
-        out = self.ok("sketch_add", {"sketch": "Base", "items": [{"kind": "circle", "center": [5, 0], "radius": 2}]})
+        out = self.ok("sketch_add", {"sketch": "Base", "kind": "circle", "center": [5, 0], "radius": 2})
         self.assertIn("Base: ", out["health"]["verdict"])
 
 

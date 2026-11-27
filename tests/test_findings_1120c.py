@@ -277,17 +277,18 @@ class NamedLineDimension(unittest.TestCase):
         got = child(PD, '''
             s, b = frame()
             sk = fc.drawing(s, b, "Frame sketch")
-            r = run(sketch, s, "sketch_add", {"sketch": "Frame sketch", "items": [
-                {"kind": "line", "from": [0, 0], "to": [300, 400], "dims": True, "name": "seat"},
-                {"kind": "line", "from": [0, 0], "to": [0, 50], "dims": True},
-                {"kind": "line", "from": [0, 0], "to": [10, 0], "name": "plain"},
-                {"kind": "point", "at": [1, 1], "dims": True}]})
+            shapes = [{"kind": "line", "from": [0, 0], "to": [300, 400], "dims": True, "name": "seat"},
+                      {"kind": "line", "from": [0, 0], "to": [0, 50], "dims": True},
+                      {"kind": "line", "from": [0, 0], "to": [10, 0], "name": "plain"},
+                      {"kind": "point", "at": [1, 1], "dims": True}]
+            rs = [run(sketch, s, "sketch_add", {"sketch": "Frame sketch", **shape}) for shape in shapes]
             cons = [[c.Type, c.Name, c.Value] for c in sk.__dict__["Constraints"]]
-            print(json.dumps([r, cons], default=str))
+            print(json.dumps([rs, cons], default=str))
         ''')
-        r, cons = got
-        self.assertEqual(r[0], "ok", r)
-        added = r[1]["added"]
+        rs, cons = got
+        for r in rs:
+            self.assertEqual(r[0], "ok", r)
+        added = [r[1]["added"][0] for r in rs]  # one shape for each call (27 Nov)
         self.assertEqual(added[0]["dims"], {"seat_length": 0})
         self.assertEqual(added[1]["dims"], {"length": 1})
         self.assertNotIn("dims", added[2])  # no dims asked

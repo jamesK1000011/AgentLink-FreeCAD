@@ -268,15 +268,15 @@ class CutSentence(unittest.TestCase):
                                "Nothing of it here."])
 
 
-SCHEMA = {"type": "object", "properties": {"tool": {"type": "string"}, "words": {"type": "string"}}, "additionalProperties": False}
+SCHEMA = {"type": "object", "properties": {"card": {"type": "string"}, "words": {"type": "string"}}, "additionalProperties": False}
 GET = {"type": "object", "properties": {"what": {"type": "string"}}, "required": ["what"], "additionalProperties": False}
 
 
 class Wrapped(unittest.TestCase):
     def test_the_step_form_on_a_direct_call(self):
-        a = {"tool": "agentlink_tool_find", "arguments": {"tool": "pd_pad"}}
+        a = {"tool": "agentlink_tool_find", "arguments": {"card": "pd_pad"}}
         said = check_input(SCHEMA, a, "tool_find")
-        self.assertEqual(a, {"tool": "pd_pad"})
+        self.assertEqual(a, {"card": "pd_pad"})
         self.assertEqual(said, ["inputs taken from inside arguments (a direct call takes them at the top level); ignored tool"])
         a = {"arguments": {"what": "Body.size"}, "rollback": False, "stopOnError": False}
         check_input(GET, a, "get")

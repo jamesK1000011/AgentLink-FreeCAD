@@ -54,6 +54,8 @@ ONE_S = 0.05            # one option's check
 MAX_LINE = 360          # the line a changing answer carries
 MAX_VALUE = 40          # one argument's value in the line
 PICK_HOW = "pick { option: 1, fill: { length: 4 } } runs option 1; the text \"1, 4mm\" also works"
+PICK_FLAT = '"option": 1, "fill": { "length": 4 }'
+PICK_TAIL = "; option: \"1, 4mm\" also works"
 # A value for an ask with no sample of its own, by its name (pick_how).
 ASK_SAMPLE = {"name": "Part"}
 
@@ -335,7 +337,7 @@ def public(opts):
         return None
     rows = []
     for o in opts["list"]:
-        r = {"n": o["n"], "tool": o["tool"], "arguments": o["arguments"]}
+        r = {"n": o["n"], "run": {"tool": o["tool"], **o["arguments"]}}
         if o.get("ask"):
             r["ask"] = [ask_words(a) for a in o["ask"]]
         if o.get("choices"):
@@ -352,39 +354,38 @@ def pick_how(opts, static=None):
     (local-model runs, 23 Nov: option 1 was doc_new, which asks for name,
     and the fixed example gave length). PICK_HOW when there is no option.
     static: pick is not listed (the static list, the default): the example
-    is a batch call, which a client that sends only listed tools can make;
+    is a run call, which a client that sends only listed tools can make;
     classic keeps the short form (design 1h, 24 Nov). None: read the mode."""
     rows = (opts or {}).get("list") or []
     if static is None:
         static = pick_unlisted()
     if not rows:
-        return as_batch(PICK_ARGS, 1, PICK_TAIL) if static else PICK_HOW
+        return as_run(PICK_FLAT, 1, PICK_TAIL) if static else PICK_HOW
     o = rows[0]
     n = o.get("n", 1)
     ask = o.get("ask") or []
     if not ask:
         args, tail = f"{{ option: {n} }}", ""
+        flat = f'"option": {n}'
     else:
         a = ask[0]
         v = a.get("sample", ASK_SAMPLE.get(a.get("arg")))
         if v is None:
             args, tail = f"{{ option: {n}, fill: {{ {a['arg']}: your value }} }}", ""
+            flat = f'"option": {n}, "fill": {{ "{a["arg"]}": your value }}'
         else:
             args = f"{{ option: {n}, fill: {{ {a['arg']}: {json.dumps(v, ensure_ascii=False)} }} }}"
+            flat = f'"option": {n}, "fill": {{ "{a["arg"]}": {json.dumps(v, ensure_ascii=False)} }}'
             tail = ""
             if not isinstance(v, bool) and isinstance(v, (int, float, str)):
                 text = f"{_val(v)}{a.get('unit') or ''}" if a.get("unit") == "mm" else _val(v)
                 tail = (f"; option: \"{n}, {text}\" also works" if static else f"; the text \"{n}, {text}\" also works")
-    return as_batch(args, n, tail) if static else f"pick {args} runs option {n}{tail}"
+    return as_run(flat, n, tail) if static else f"pick {args} runs option {n}{tail}"
 
 
-PICK_ARGS = "{ option: 1, fill: { length: 4 } }"
-PICK_TAIL = "; option: \"1, 4mm\" also works"
-
-
-def as_batch(args, n, tail=""):
-    """The pick call inside a batch: batch { calls: [{ tool: "pick", arguments: … }] }."""
-    return f'batch {{ calls: [{{ tool: "pick", arguments: {args} }}] }} runs option {n}{tail}'
+def as_run(flat, n, tail=""):
+    """The pick call as a run step: run { "tool": "pick", "option": 1, … }."""
+    return f'run {{ "tool": "pick", {flat} }} runs option {n}{tail}'
 
 
 def pick_unlisted():

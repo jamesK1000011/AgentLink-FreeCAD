@@ -24,7 +24,8 @@ class TechDrawGaps(Base):
         call = lambda n, a: cls.server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": n, "arguments": a}})  # noqa: E731
         call("pd_body_new", {"name": "Plate"})
         call("sketch_new", {"plane": "XY", "name": "Outline"})
-        call("sketch_add", {"sketch": "Outline", "items": [{"kind": "rectangle", "corner": [0, 0], "size": [60, 40]}, {"kind": "circle", "center": [30, 20], "diameter": 10}]})
+        call("sketch_add", {"sketch": "Outline", "kind": "rectangle", "corner": [0, 0], "size": [60, 40]})
+        call("sketch_add", {"sketch": "Outline", "kind": "circle", "center": [30, 20], "diameter": 10})
         call("pd_pad", {"sketch": "Outline", "length": 8})
         call("td_page", {"action": "new", "paper": "A4", "name": "Gaps"})
 

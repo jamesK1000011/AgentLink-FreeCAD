@@ -52,15 +52,9 @@ EXPECT = {
     ('pd_body_new', 'a name taken'): {'body': 'Body 2', 'step': 1},
     ('sketch_new', 'sketcher call 30'): {'sketch': 'PlateCopy', 'on': 'XY', 'offset': 10.0},
     ('sketch_new', 'both'): ['refused', 'invalid_input', 'Give plane (XY, XZ, YZ, a datum plane\'s name or "Pad.Face3") or face ({ at: [x,y,z], normal: [x,y,z] } on the body\'s solid), one of them, not both.'],
-    ('sketch_add', 'sketcher call 17'): {'added': [{'kind': 'rectangle', 'ids': [0, 1, 2, 3], 'constraints': [0, 7], 'dims': {'plate_width': 8, 'plate_height': 9}}, {'kind': 'circle', 'ids': [4], 'dims': {'hole_d': 10}}]},
-    ('sketch_add', 'an item not an object'): ['refused', 'invalid_input', 'items[1]: an object { kind, … }.'],
+    # 27 Nov: sketch_add, sketch_constrain and sketch_external take one shape, one constraint, one selector: their answers are checked in tests/test_flat_inputs_1127.py
     ('sketch_offset', 'sketcher call 29'): {'from': [0], 'distance': 1.0, 'added': [3]},
     ('sketch_offset', 'the offset fails'): ['refused', 'failed', 'The offset of -50 mm failed (makeOffset2D: result of offsetting is null!): a distance inward bigger than the profile allows, or a profile crossing itself.'],
-    ('sketch_external', 'sketcher call 24'): {'from': 'Pad', 'edges': ['Edge1', 'Edge4'], 'ids': [-3, -4]},
-    ('sketch_external', 'sketcher call 25'): ['refused', 'invalid_state', "Pad, the body's tip, is built from PlateSketch: a sketch cannot take edges from a solid made after it. Make a new sketch for what follows the solid (sketch_new { face: { at, normal } }), and bring the edges into that."],
-    ('sketch_constrain', 'sketcher call 18'): {'added': [13, 14, 15]},
-    ('sketch_constrain', 'sketcher call 19'): ['refused', 'invalid_state', 'These constraints over-constrain PlateSketch (conflicting constraints), and any one of them dropped clears it — new: #13 distance_x = 50: the start of line 0 and the end of line 0; existing: #8 distance_x = 40: the start of line 0 and the end of line 0. Nothing was added: leave out a new one, or sketch_edit deleteConstraints an existing one first.'],
-    ('sketch_constrain', 'sketcher call 28'): ['refused', 'invalid_input', 'constraints[0]: geometry -9 is not in TopSketch — its own are 0 to 2; -1 and -2 are the axes; outside edges -3 to -4. sketch_state lists them.'],
     ('sketch_edit', 'sketcher call 20'): {'done': ['set 8 = 70'], 'geometryCount': 8},
     ('sketch_edit', 'many at once'): {'done': ['moved 6.1', 'set 9 = 22', 'construction 5 True', 'renamed 12', 'deleted constraints [11]', 'deleted geometry [7] with its constraints (later ids shift down by the count before them: 7 left, 0 to 6)', 'trimmed 1 at [40.0, 5.0, 0.0] (+0 geometry)', 'split 0 at [20.0, 0.0, 0.0]: its second part is 7', 'mirrored [4] about x: new [8] (free copies: no symmetric constraint ties them to the originals)', 'axes alignment of [2] taken off: horizontal/vertical became parallel/perpendicular']},
     ('sketch_edit', 'fillet: none fits'): ['refused', 'failed', 'No fillet of 200 mm fits there: Not able to fillet geometry Id=0, PointPos=2 — a smaller radius, or a corner where exactly two curves meet (lines and arcs).'],
@@ -206,17 +200,20 @@ def cases(fc, tmp):
         case(tool, "no body", none, {pick: [sub]})
         case(tool, "no solid", empty, {pick: [sub]})
         case(tool, "default", padded, {pick: [sub]})
-        case(tool, "by where it is", padded, {pick: [{"n": 2, "near": [0, 0, 0], "at": [0, 0, 0]}, "Body." + sub], key: 2})
+        # 27 Nov: edges is one selector or a list of references, so the edges are not a list of objects
+        case(tool, "by where it is", padded, {pick: ({"n": 2, "near": [0, 0, 0], "at": [0, 0, 0]} if pick == "edges" else [{"n": 2, "near": [0, 0, 0], "at": [0, 0, 0]}, "Body." + sub]), key: 2})
+        if pick == "edges":
+            case(tool, "a list with a selector object", padded, {pick: [{"n": 2, "near": [0, 0, 0]}, "Body." + sub], key: 2})
         case(tool, "nothing asked for", padded, {key: 2})
-        case(tool, "not found", padded, {pick: [{"miss": True}]})
+        case(tool, "not found", padded, {pick: ({"miss": True} if pick == "edges" else [{"miss": True}])})
         case(tool, "size zero", padded, {pick: [sub], key: 0})
         case(tool, "size a word", padded, {pick: [sub], key: "big"})
         case(tool, "size a boolean", padded, {pick: [sub], key: True})
         case(tool, "it fails", padded, {pick: [sub]}, invalid={kind: "BRep_API: command not done"})
         case(tool, "it breaks an edge link", padded, {pick: [sub]}, invalid={"Pad": "Invalid edge link"})
         case(tool, "it changes nothing", padded, {pick: [sub]}, effect={kind: 0.0})
-    case("pd_fillet", "model call 28", padded, {"body": "Body", "edges": [{"near": [26.5, -26, 8]}], "radius": 2})
-    case("pd_chamfer", "model call 27", padded, {"body": "Body", "edges": [{"near": [0, 0, 26]}], "size": 1})
+    case("pd_fillet", "model call 28", padded, {"body": "Body", "edges": {"near": [26.5, -26, 8]}, "radius": 2})
+    case("pd_chamfer", "model call 27", padded, {"body": "Body", "edges": {"near": [0, 0, 26]}, "size": 1})
     case("pd_chamfer", "size2 and angle", padded, {"edges": ["Edge1"], "size2": 2, "angle": 30})
     case("pd_chamfer", "two distances", padded, {"edges": ["Edge1"], "size": 1, "size2": 2})
     case("pd_chamfer", "distance and angle", padded, {"edges": ["Edge1"], "size": 1, "angle": 30})
@@ -559,28 +556,37 @@ def cases(fc, tmp):
     case("sketch_new", "old FreeCAD", padded, {"plane": "YZ"}, old=True)
 
     case("sketch_add", "sketcher call 3", lambda s: fc.drawing(s, fc.body(s, "Star"), "StarSketch"),
-         {"sketch": "StarSketch", "items": [{"kind": "line", "from": [0, 0], "to": [0.0, 30.0], "construction": True}, {"kind": "line", "from": [0, 0], "to": [-28.5, 9.3], "construction": True}]})
+         {"sketch": "StarSketch", "kind": "line", "from": [0, 0], "to": [0.0, 30.0], "construction": True})
+    case("sketch_add", "sketcher call 3 (2)", lambda s: fc.drawing(s, fc.body(s, "Star"), "StarSketch"),
+         {"sketch": "StarSketch", "kind": "line", "from": [0, 0], "to": [-28.5, 9.3], "construction": True})
     case("sketch_add", "sketcher call 17", lambda s: fc.drawing(s, fc.body(s, "Plate"), "PlateSketch"),
-         {"sketch": "PlateSketch", "items": [{"kind": "rectangle", "center": [0, 0], "size": [60, 80], "dims": True, "name": "plate"},
-                                             {"kind": "circle", "center": [1, 9], "radius": 5, "dims": True, "name": "hole"}]})
-    case("sketch_add", "model call 7", plate, {"sketch": "PlateSketch", "items": [{"kind": "polyline", "points": [[0, 0], [0, 26], [-5, 26], [-26, 0]], "closed": True}]})
-    case("sketch_add", "sizes without a name, on what is there", plate, {"items": [{"kind": "rectangle", "corner": [5, 5], "size": [10, 4], "dims": True}, {"kind": "arc", "radius": 4, "dims": True}]})
-    case("sketch_add", "a name that is a number", plate, {"items": [{"kind": "circle", "diameter": 6, "dims": True, "name": 7}]})
-    case("sketch_add", "every other kind", plate, {"items": [
-        {"kind": "point", "at": [1, 2]}, {"kind": "rounded_rectangle", "size": [20, 10], "radius": 2, "dims": True, "name": "pad"},
-        {"kind": "polygon", "sides": 5, "radius": 8, "rotation": 18, "dims": True}, {"kind": "slot", "from": [0, 0], "to": [10, 0], "radius": 2, "dims": True},
-        {"kind": "arc_slot", "radius": 10, "width": 2, "start": 10, "end": 80, "construction": True}, {"kind": "bspline", "points": [[0, 0], [5, 4], [9, 1]]},
-        {"kind": "bspline", "points": [[0, 0], [5, 4], [9, 1], [12, 6]], "interpolate": False, "degree": 2}, {"kind": "ellipse", "major": 10, "minor": 6, "rotation": 30},
-        {"kind": "arc3", "points": [[0, 0], [5, 5], [10, 0]], "dims": True}, {"kind": "circle3", "points": [[0, 0], [5, 5], [10, 0]], "dims": True},
-        {"kind": "parabola", "focal": 2, "rotation": 90}, {"kind": "hyperbola", "major": 3, "minor": 2}, {"kind": "polyline", "points": [[0, 0], [4, 0], [4, 3]]}]})
-    case("sketch_add", "no sketch", none, {"items": [{"kind": "point", "at": [0, 0]}]})
-    case("sketch_add", "which sketch", plate_padded, {"items": [{"kind": "point", "at": [0, 0]}]})
-    case("sketch_add", "no items", plate, {})
-    case("sketch_add", "items not a list", plate, {"items": {"kind": "point"}})
-    case("sketch_add", "an item not an object", plate, {"items": [{"kind": "point", "at": [0, 0]}, "circle"]})
-    case("sketch_add", "kind wrong", plate, {"items": [{"kind": "squiggle"}]})
-    case("sketch_add", "a shape's own check, after one was added", plate, {"items": [{"kind": "point", "at": [0, 0]}, {"kind": "circle", "radius": 0}]})
-    case("sketch_add", "three points on a line", plate, {"items": [{"kind": "arc3", "points": [[0, 0], [5, 0], [10, 0]]}]})
+         {"sketch": "PlateSketch", "kind": "rectangle", "center": [0, 0], "size": [60, 80], "dims": True, "name": "plate"})
+    case("sketch_add", "sketcher call 17 (2)", lambda s: fc.drawing(s, fc.body(s, "Plate"), "PlateSketch"),
+         {"sketch": "PlateSketch", "kind": "circle", "center": [1, 9], "radius": 5, "dims": True, "name": "hole"})
+    case("sketch_add", "model call 7", plate, {"sketch": "PlateSketch", "kind": "polyline", "points": [[0, 0], [0, 26], [-5, 26], [-26, 0]], "closed": True})
+    case("sketch_add", "sizes without a name, on what is there", plate, {"kind": "rectangle", "corner": [5, 5], "size": [10, 4], "dims": True})
+    case("sketch_add", "sizes without a name, on what is there (2)", plate, {"kind": "arc", "radius": 4, "dims": True})
+    case("sketch_add", "a name that is a number", plate, {"kind": "circle", "diameter": 6, "dims": True, "name": 7})
+    case("sketch_add", "every other kind", plate, {"kind": "point", "at": [1, 2]})
+    case("sketch_add", "every other kind (2)", plate, {"kind": "rounded_rectangle", "size": [20, 10], "radius": 2, "dims": True, "name": "pad"})
+    case("sketch_add", "every other kind (3)", plate, {"kind": "polygon", "sides": 5, "radius": 8, "rotation": 18, "dims": True})
+    case("sketch_add", "every other kind (4)", plate, {"kind": "slot", "from": [0, 0], "to": [10, 0], "radius": 2, "dims": True})
+    case("sketch_add", "every other kind (5)", plate, {"kind": "arc_slot", "radius": 10, "width": 2, "start": 10, "end": 80, "construction": True})
+    case("sketch_add", "every other kind (6)", plate, {"kind": "bspline", "points": [[0, 0], [5, 4], [9, 1]]})
+    case("sketch_add", "every other kind (7)", plate, {"kind": "bspline", "points": [[0, 0], [5, 4], [9, 1], [12, 6]], "interpolate": False, "degree": 2})
+    case("sketch_add", "every other kind (8)", plate, {"kind": "ellipse", "major": 10, "minor": 6, "rotation": 30})
+    case("sketch_add", "every other kind (9)", plate, {"kind": "arc3", "points": [[0, 0], [5, 5], [10, 0]], "dims": True})
+    case("sketch_add", "every other kind (10)", plate, {"kind": "circle3", "points": [[0, 0], [5, 5], [10, 0]], "dims": True})
+    case("sketch_add", "every other kind (11)", plate, {"kind": "parabola", "focal": 2, "rotation": 90})
+    case("sketch_add", "every other kind (12)", plate, {"kind": "hyperbola", "major": 3, "minor": 2})
+    case("sketch_add", "every other kind (13)", plate, {"kind": "polyline", "points": [[0, 0], [4, 0], [4, 3]]})
+    case("sketch_add", "no sketch", none, {"kind": "point", "at": [0, 0]})
+    case("sketch_add", "which sketch", plate_padded, {"kind": "point", "at": [0, 0]})
+    case("sketch_add", "no kind", plate, {})
+    case("sketch_add", "kind wrong", plate, {"kind": "squiggle"})
+    case("sketch_add", "a shape's own check, after one was added", plate, {"kind": "point", "at": [0, 0]})
+    case("sketch_add", "a shape's own check, after one was added (2)", plate, {"kind": "circle", "radius": 0})
+    case("sketch_add", "three points on a line", plate, {"kind": "arc3", "points": [[0, 0], [5, 0], [10, 0]]})
 
     case("sketch_offset", "sketcher call 29", plate_padded, {"sketch": "TopSketch", "distance": 1, "geometry": [0], "construction": True})
     case("sketch_offset", "the whole profile", plate, {"distance": 2})
@@ -600,16 +606,19 @@ def cases(fc, tmp):
     case("sketch_offset", "the offset fails", plate, {"distance": -50}, no_offset=True)
     case("sketch_offset", "no sketch", none, {"distance": 1})
 
-    case("sketch_external", "sketcher call 24", plate_padded, {"sketch": "TopSketch", "edges": [{"type": "circle", "near": [5, 10, 2]}, {"type": "line", "near": [0, -40, 2], "first": 4}]})
+    case("sketch_external", "sketcher call 24", plate_padded, {"sketch": "TopSketch", "edges": {"type": "circle", "near": [5, 10, 2]}})
+    case("sketch_external", "sketcher call 24 (line)", plate_padded, {"sketch": "TopSketch", "edges": {"type": "line", "near": [0, -40, 2], "first": 4}})
     case("sketch_external", "sketcher call 25", plate_padded, {"sketch": "PlateSketch", "edges": ["Edge1"]})
     case("sketch_external", "by name", plate_padded, {"sketch": "TopSketch", "edges": ["Edge7", "Pad.Edge2"]})
-    case("sketch_external", "every match, and the nearest of several", plate_padded, {"sketch": "TopSketch", "edges": [{"type": "line", "hits": 3}, {"type": "circle", "hits": 3, "first": 7, "near": [0, 0, 0]}]})
+    case("sketch_external", "every match, and the nearest of several", plate_padded, {"sketch": "TopSketch", "edges": {"type": "line", "hits": 3}})
+    case("sketch_external", "every match, and the nearest of several (circles)", plate_padded, {"sketch": "TopSketch", "edges": {"type": "circle", "hits": 3, "first": 7, "near": [0, 0, 0]}})
     case("sketch_external", "one already there", plate_padded, {"sketch": "TopSketch", "edges": ["Edge7", "Edge7"]})
     case("sketch_external", "old FreeCAD", plate_padded, {"sketch": "TopSketch", "edges": ["Edge7", "Edge2"]}, old=True)
-    case("sketch_external", "nothing matches", plate_padded, {"sketch": "TopSketch", "edges": ["Edge1", {"type": "circle", "radius": 99, "hits": 0}]})
-    case("sketch_external", "near wrong", plate_padded, {"sketch": "TopSketch", "edges": [{"hits": 2, "near": [0, 0]}]})
+    case("sketch_external", "nothing matches", plate_padded, {"sketch": "TopSketch", "edges": {"type": "circle", "radius": 99, "hits": 0}})
+    case("sketch_external", "a list with a selector object", plate_padded, {"sketch": "TopSketch", "edges": ["Edge1", {"type": "circle", "radius": 99, "hits": 0}]})
+    case("sketch_external", "near wrong", plate_padded, {"sketch": "TopSketch", "edges": {"hits": 2, "near": [0, 0]}})
     case("sketch_external", "no edges", plate_padded, {"sketch": "TopSketch"})
-    case("sketch_external", "edges not a list", plate_padded, {"sketch": "TopSketch", "edges": "Edge1"})
+    case("sketch_external", "edges one reference", plate_padded, {"sketch": "TopSketch", "edges": "Edge1"})
     case("sketch_external", "in no body", loose_sketch, {"sketch": "Free", "edges": ["Edge1"]})
     case("sketch_external", "no solid yet", plate, {"edges": ["Edge1"]})
     case("sketch_external", "no sketch", none, {"edges": ["Edge1"]})
@@ -618,34 +627,48 @@ def cases(fc, tmp):
         plate_padded(s)
         s.doc.getObject("TopSketch").__dict__["ExternalGeo"] += [("Pad", "Edge7"), ("Pad", "Edge2")]
 
-    case("sketch_constrain", "sketcher call 4", plate, {"sketch": "PlateSketch", "constraints": [{"type": "coincident", "refs": [[7, 1], "origin"]}]})
-    case("sketch_constrain", "sketcher call 18", plate, {"sketch": "PlateSketch", "constraints": [
-        {"type": "symmetric", "refs": [[0, 1], [1, 2], "origin"]}, {"type": "point_on_object", "refs": [[4, 3], -2]}, {"type": "distance_y", "refs": [[4, 3]], "value": 10, "name": "hole_y"}]})
-    case("sketch_constrain", "sketcher call 19", plate, {"sketch": "PlateSketch", "constraints": [{"type": "distance_x", "refs": [[0, 1], [0, 2]], "value": 50}]})
-    case("sketch_constrain", "sketcher call 27", with_outside, {"sketch": "TopSketch", "constraints": [
-        {"type": "point_on_object", "refs": [[0, 3], -2]}, {"type": "distance", "refs": [[0, 3], [-3, 3]], "value": 30, "name": "pitch"}, {"type": "radius", "refs": [0], "value": 3}]})
-    case("sketch_constrain", "sketcher call 28", with_outside, {"sketch": "TopSketch", "constraints": [{"type": "distance", "refs": [[0, 3], -9], "value": 5}]})
-    case("sketch_constrain", "a geometry it has not, no outside edges", plate, {"constraints": [{"type": "horizontal", "refs": [0]}, {"type": "vertical", "refs": [8]}]})
-    case("sketch_constrain", "the others", plate, {"constraints": [
-        {"type": "Parallel", "refs": [0, 2]}, {"type": "tangent", "refs": [4, 5]}, {"type": "tangent", "refs": [[0, 2], [1, 1]]}, {"type": "equal", "refs": [1, 3]},
-        {"type": "symmetric", "refs": [[0, 1], [0, 2], 7]}, {"type": "distance", "refs": [7], "value": 30}, {"type": "distance", "refs": [[6, 1], 0], "value": 3},
-        {"type": "distance-x", "refs": [[6, 1]], "value": 3}, {"type": "diameter", "refs": [5], "value": 4}, {"type": "angle", "refs": [0, 7], "value": 90},
-        {"type": "angle", "refs": [1], "value": 90, "name": "up"}, {"type": "block", "refs": [5]}, {"type": "fix", "refs": [[4, 3]], "name": "pin"},
-        {"type": "vertical", "refs": [[0, 1], [3, 1]]}]})
-    case("sketch_constrain", "redundant: the same size again", plate, {"constraints": [{"type": "horizontal", "refs": [7]}, {"type": "distance_x", "refs": [[0, 1], [0, 2]], "value": 40, "name": "again"}]})
-    case("sketch_constrain", "it clashes, and no one of them clears it", plate, {"constraints": [{"type": "distance_x", "refs": [[0, 1], [0, 2]], "value": 50}]}, no_toggle=True)
-    case("sketch_constrain", "the solver fails", plate, {"constraints": [{"type": "horizontal", "refs": [7]}]}, solve=-1)
-    case("sketch_constrain", "malformed", plate, {"constraints": [{"type": "horizontal", "refs": [7]}, {"type": "equal", "refs": [0, 2]}]}, malformed=[13, 14], solve=-5)
-    case("sketch_constrain", "FreeCAD will not take it", plate, {"constraints": [{"type": "horizontal", "refs": [7]}, {"type": "radius", "refs": [0], "value": 3}]})
-    case("sketch_constrain", "a type it has not", plate, {"constraints": [{"type": "horizontal", "refs": [7]}, {"type": "concentric", "refs": [4, 5]}]})
-    case("sketch_constrain", "refs in the wrong form", plate, {"constraints": [{"type": "coincident", "refs": [0, 1]}]})
-    case("sketch_constrain", "no value", plate, {"constraints": [{"type": "radius", "refs": [4]}]})
-    case("sketch_constrain", "a vertex it has not", plate, {"constraints": [{"type": "coincident", "refs": [[0, 1], [1, 5]]}]})
-    case("sketch_constrain", "a ref that is no ref", plate, {"constraints": [{"type": "coincident", "refs": [[0, 1], "middle"]}]})
-    case("sketch_constrain", "fix the origin", plate, {"constraints": [{"type": "lock", "refs": [[-1, 1]]}]})
-    case("sketch_constrain", "one not an object", plate, {"constraints": [{"type": "horizontal", "refs": [7]}, "vertical"]})
-    case("sketch_constrain", "no constraints", plate, {})
-    case("sketch_constrain", "no sketch", none, {"constraints": [{"type": "horizontal", "refs": [0]}]})
+    case("sketch_constrain", "sketcher call 4", plate, {"sketch": "PlateSketch", "type": "coincident", "refs": [[7, 1], "origin"]})
+    case("sketch_constrain", "sketcher call 18", plate, {"sketch": "PlateSketch", "type": "symmetric", "refs": [[0, 1], [1, 2], "origin"]})
+    case("sketch_constrain", "sketcher call 18 (2)", plate, {"sketch": "PlateSketch", "type": "point_on_object", "refs": [[4, 3], -2]})
+    case("sketch_constrain", "sketcher call 18 (3)", plate, {"sketch": "PlateSketch", "type": "distance_y", "refs": [[4, 3]], "value": 10, "name": "hole_y"})
+    case("sketch_constrain", "sketcher call 19", plate, {"sketch": "PlateSketch", "type": "distance_x", "refs": [[0, 1], [0, 2]], "value": 50})
+    case("sketch_constrain", "sketcher call 27", with_outside, {"sketch": "TopSketch", "type": "point_on_object", "refs": [[0, 3], -2]})
+    case("sketch_constrain", "sketcher call 27 (2)", with_outside, {"sketch": "TopSketch", "type": "distance", "refs": [[0, 3], [-3, 3]], "value": 30, "name": "pitch"})
+    case("sketch_constrain", "sketcher call 27 (3)", with_outside, {"sketch": "TopSketch", "type": "radius", "refs": [0], "value": 3})
+    case("sketch_constrain", "sketcher call 28", with_outside, {"sketch": "TopSketch", "type": "distance", "refs": [[0, 3], -9], "value": 5})
+    case("sketch_constrain", "a geometry it has not, no outside edges", plate, {"type": "horizontal", "refs": [0]})
+    case("sketch_constrain", "a geometry it has not, no outside edges (2)", plate, {"type": "vertical", "refs": [8]})
+    case("sketch_constrain", "the others", plate, {"type": "Parallel", "refs": [0, 2]})
+    case("sketch_constrain", "the others (2)", plate, {"type": "tangent", "refs": [4, 5]})
+    case("sketch_constrain", "the others (3)", plate, {"type": "tangent", "refs": [[0, 2], [1, 1]]})
+    case("sketch_constrain", "the others (4)", plate, {"type": "equal", "refs": [1, 3]})
+    case("sketch_constrain", "the others (5)", plate, {"type": "symmetric", "refs": [[0, 1], [0, 2], 7]})
+    case("sketch_constrain", "the others (6)", plate, {"type": "distance", "refs": [7], "value": 30})
+    case("sketch_constrain", "the others (7)", plate, {"type": "distance", "refs": [[6, 1], 0], "value": 3})
+    case("sketch_constrain", "the others (8)", plate, {"type": "distance-x", "refs": [[6, 1]], "value": 3})
+    case("sketch_constrain", "the others (9)", plate, {"type": "diameter", "refs": [5], "value": 4})
+    case("sketch_constrain", "the others (10)", plate, {"type": "angle", "refs": [0, 7], "value": 90})
+    case("sketch_constrain", "the others (11)", plate, {"type": "angle", "refs": [1], "value": 90, "name": "up"})
+    case("sketch_constrain", "the others (12)", plate, {"type": "block", "refs": [5]})
+    case("sketch_constrain", "the others (13)", plate, {"type": "fix", "refs": [[4, 3]], "name": "pin"})
+    case("sketch_constrain", "the others (14)", plate, {"type": "vertical", "refs": [[0, 1], [3, 1]]})
+    case("sketch_constrain", "redundant: the same size again", plate, {"type": "horizontal", "refs": [7]})
+    case("sketch_constrain", "redundant: the same size again (2)", plate, {"type": "distance_x", "refs": [[0, 1], [0, 2]], "value": 40, "name": "again"})
+    case("sketch_constrain", "it clashes, and no one of them clears it", plate, {"type": "distance_x", "refs": [[0, 1], [0, 2]], "value": 50}, no_toggle=True)
+    case("sketch_constrain", "the solver fails", plate, {"type": "horizontal", "refs": [7]}, solve=-1)
+    case("sketch_constrain", "malformed", plate, {"type": "horizontal", "refs": [7]}, malformed=[13, 14], solve=-5)
+    case("sketch_constrain", "malformed (2)", plate, {"type": "equal", "refs": [0, 2]}, malformed=[13, 14], solve=-5)
+    case("sketch_constrain", "FreeCAD will not take it", plate, {"type": "horizontal", "refs": [7]})
+    case("sketch_constrain", "FreeCAD will not take it (2)", plate, {"type": "radius", "refs": [0], "value": 3})
+    case("sketch_constrain", "a type it has not", plate, {"type": "horizontal", "refs": [7]})
+    case("sketch_constrain", "a type it has not (2)", plate, {"type": "concentric", "refs": [4, 5]})
+    case("sketch_constrain", "refs in the wrong form", plate, {"type": "coincident", "refs": [0, 1]})
+    case("sketch_constrain", "no value", plate, {"type": "radius", "refs": [4]})
+    case("sketch_constrain", "a vertex it has not", plate, {"type": "coincident", "refs": [[0, 1], [1, 5]]})
+    case("sketch_constrain", "a ref that is no ref", plate, {"type": "coincident", "refs": [[0, 1], "middle"]})
+    case("sketch_constrain", "fix the origin", plate, {"type": "lock", "refs": [[-1, 1]]})
+    case("sketch_constrain", "no type", plate, {})
+    case("sketch_constrain", "no sketch", none, {"type": "horizontal", "refs": [0]})
 
     def clashing(s):
         plate(s)

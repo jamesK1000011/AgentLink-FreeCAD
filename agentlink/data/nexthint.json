@@ -259,7 +259,10 @@
      },
      "ask": [
       {
-       "arg": "constraints"
+       "arg": "type"
+      },
+      {
+       "arg": "refs"
       }
      ]
     },
@@ -278,7 +281,7 @@
      },
      "ask": [
       {
-       "arg": "items"
+       "arg": "kind"
       }
      ]
     }
@@ -373,7 +376,10 @@
      },
      "ask": [
       {
-       "arg": "constraints"
+       "arg": "type"
+      },
+      {
+       "arg": "refs"
       }
      ]
     },
@@ -385,7 +391,7 @@
      },
      "ask": [
       {
-       "arg": "items"
+       "arg": "kind"
       }
      ]
     }
@@ -665,7 +671,7 @@
      },
      "ask": [
       {
-       "arg": "items"
+       "arg": "kind"
       }
      ],
      "choices": {
@@ -715,7 +721,7 @@
      },
      "ask": [
       {
-       "arg": "items"
+       "arg": "kind"
       }
      ],
      "choices": {
@@ -834,7 +840,10 @@
      },
      "ask": [
       {
-       "arg": "constraints"
+       "arg": "type"
+      },
+      {
+       "arg": "refs"
       }
      ],
      "choices": {

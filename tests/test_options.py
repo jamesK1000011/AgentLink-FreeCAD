@@ -199,7 +199,7 @@ class Build(Base):
         self.assertEqual(pad["arguments"], {"sketch": "Sketch", "body": "Body"})
         o, _s, _ = self.opts(doc_of(b, sk), {"editing": "sketch", "sketch": {"name": "Sketch", "obj": "Sketch", "dof": 3}})
         self.assertEqual(o["list"][0]["tool"], "sketch_constrain")
-        self.assertEqual(o["list"][0]["ask"], [{"arg": "constraints"}])
+        self.assertEqual(o["list"][0]["ask"], [{"arg": "type"}, {"arg": "refs"}])
 
     def test_a_picked_edge(self):
         sk = sketch("Sketch")
@@ -225,7 +225,7 @@ class Build(Base):
 
     def test_an_ask_without_a_sample_does_not_drop_its_option(self):
         sk = sketch("Sketch", closed=False)
-        refuse = {"sketch_add": [{"refuse": "items: a list of geometry.", "when": "=not a.items"}]}
+        refuse = {"sketch_add": [{"refuse": "kind: the shape to add.", "when": "=not a.kind"}]}
         o, _s, _ = self.opts(doc_of(body_with("Body", sk), sk), refuse=refuse)
         self.assertIn("sketch_add", [x["tool"] for x in o["list"]])
         refuse = {"sketch_add": [{"refuse": "Sketch is not in a body.", "when": "=a.sketch == 'Sketch'"}]}
@@ -289,8 +289,8 @@ class Pick(Base):
         facts_reader(self, self.s)
         got, _ = call(self.server, "session_state", {})
         self.opts = got["options"]
-        self.assertEqual(self.opts["list"][0]["tool"], "pd_pad")
-        self.assertEqual(self.opts["list"][1]["tool"], "pd_pocket")
+        self.assertEqual(self.opts["list"][0]["run"]["tool"], "pd_pad")
+        self.assertEqual(self.opts["list"][1]["run"]["tool"], "pd_pocket")
 
     def test_pick_fills_and_runs_the_call_through_the_normal_path(self):
         got, err = call(self.server, "pick", {"option": 1, "fill": {"length": 4}})
@@ -351,7 +351,7 @@ class Pick(Base):
         self.assertEqual(got["error"]["code"], "invalid_state")
         self.assertIn("step 0 are old", got["error"]["message"])
         self.assertEqual(got["error"]["options"]["step"], 1)
-        self.assertEqual(got["error"]["options"]["list"][0]["tool"], "pd_pad")
+        self.assertEqual(got["error"]["options"]["list"][0]["run"]["tool"], "pd_pad")
         self.assertEqual(self.s.calls, [])
         # The new options are kept: a pick from them runs.
         got, err = call(self.server, "pick", {"option": "1, 3mm"})

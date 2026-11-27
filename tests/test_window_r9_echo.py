@@ -179,12 +179,12 @@ class PlainWords(unittest.TestCase):
         return echo.change_words(activity.did(name, args, body), body, name)
 
     def test_job_start(self):
-        a = {"tool": "measure_mass", "arguments": {"body": "Peg"}}
+        a = {"job": "measure_mass", "arguments": {"body": "Peg"}}
         got = self.read("job_start", a, {"volume": 6000, "job": "job-0123abcd"})
         # round 10: the inner read's own words after "Ran a job:"
         self.assertTrue(got.startswith("Ran a job: "), got)
         self.assertNotIn("Job start", got)
-        a = {"tool": "meshobj_info", "arguments": {"mesh": "Globe fine"}}
+        a = {"job": "meshobj_info", "arguments": {"mesh": "Globe fine"}}
         got = self.read("job_start", a, {"job": "job-0123abcd", "status": "running", "tool": "meshobj_info", "running": 2})
         self.assertTrue(got.startswith("Started a job: "), got)
         self.assertTrue(got.endswith(": running, 2 s so far"), got)

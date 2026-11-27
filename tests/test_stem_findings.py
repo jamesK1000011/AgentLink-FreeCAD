@@ -163,7 +163,7 @@ class StemFindings(Base):
         self.ok("doc_new", {"name": "Params1"})
         self.ok("pd_body_new", {"name": "Stem"})
         self.ok("sketch_new", {"plane": "XY", "name": "BaseSketch"})
-        self.ok("sketch_add", {"sketch": "BaseSketch", "items": [{"kind": "rectangle", "corner": [0, 0], "size": [40, 20], "dims": True, "name": "reach"}]})
+        self.ok("sketch_add", {"sketch": "BaseSketch", "kind": "rectangle", "corner": [0, 0], "size": [40, 20], "dims": True, "name": "reach"})
         self.ok("pd_pad", {"sketch": "BaseSketch", "length": 10})
         self.ok("param_set", {"name": "size", "value": 50})
         b = self.ok("param_bind", {"target": "BaseSketch.reach_width", "expression": "size"})
@@ -184,24 +184,23 @@ class StemFindings(Base):
         self.ok("doc_new", {"name": "Clash"})
         self.ok("pd_body_new", {"name": "B"})
         self.ok("sketch_new", {"plane": "XY", "name": "S"})
-        self.ok("sketch_add", {"sketch": "S", "items": [{"kind": "line", "from": [0, 5], "to": [30, 5]}, {"kind": "line", "from": [0, 20], "to": [30, 25]}]})
-        self.ok("sketch_constrain", {"sketch": "S", "constraints": [{"type": "horizontal", "refs": [0]}]})
-        e = self.refused("sketch_constrain", {"sketch": "S", "constraints": [
-            {"type": "distance", "refs": [1], "value": 30},
-            {"type": "parallel", "refs": [0, -1]},
-        ]})
+        self.ok("sketch_add", {"sketch": "S", "kind": "line", "from": [0, 5], "to": [30, 5]})
+        self.ok("sketch_add", {"sketch": "S", "kind": "line", "from": [0, 20], "to": [30, 25]})
+        self.ok("sketch_constrain", {"sketch": "S", "type": "horizontal", "refs": [0]})
+        self.ok("sketch_constrain", {"sketch": "S", "type": "distance", "refs": [1], "value": 30})
+        e = self.refused("sketch_constrain", {"sketch": "S", "type": "parallel", "refs": [0, -1]})
         m = e["message"]
         self.assertIn("horizontal", m)
         self.assertIn("parallel", m)
         self.assertIn("the x axis", m)
         self.assertNotIn("line 1", m)  # the length of the other line is no part of it
-        self.assertEqual(len(self.ok("sketch_state", {"sketch": "S"})["constraints"]), 1)
+        self.assertEqual(len(self.ok("sketch_state", {"sketch": "S"})["constraints"]), 2)
 
     def test_3_one_reference_resolver(self):
         self.ok("doc_new", {"name": "Refs"})
         self.ok("pd_body_new", {"name": "Block"})
         self.ok("sketch_new", {"plane": "XY", "name": "R"})
-        self.ok("sketch_add", {"sketch": "R", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]})
+        self.ok("sketch_add", {"sketch": "R", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
         self.ok("pd_pad", {"sketch": "R", "length": 10})
         # shape_query's filters straight into pd_fillet: the two top edges along x.
         f = self.ok("pd_fillet", {"edges": {"type": "line", "axis": [1, 0, 0], "z": 10}, "radius": 1})
@@ -277,7 +276,7 @@ class StemFindings(Base):
         self.ok("doc_new", {"name": "Attached"})
         self.ok("pd_body_new", {"name": "Stem"})
         self.ok("sketch_new", {"plane": "XY", "name": "A"})
-        self.ok("sketch_add", {"sketch": "A", "items": [{"kind": "rectangle", "center": [0, 0], "size": [20, 20]}]})
+        self.ok("sketch_add", {"sketch": "A", "kind": "rectangle", "center": [0, 0], "size": [20, 20]})
         self.ok("pd_pad", {"sketch": "A", "length": 5})
         doc = self.session.doc
         body = doc.getObjectsByLabel("Stem")[0]

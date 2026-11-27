@@ -212,10 +212,10 @@ class Set11Arguments(Base):
             with open(os.path.join(here, f), encoding="utf-8") as fh:
                 self.assertNotIn('"args"', fh.read(), f)
         got = examples.for_tool("sketch_new", {"bodyName": "Body"})
-        self.assertEqual(got["example"]["arguments"]["body"], "Body")
+        self.assertEqual(got["ready"]["body"], "Body")
         self.assertEqual(nexthint._expr_problems({"suggest": [{"tool": "x", "arguments": {"a": "=__import__('os')"}}]})[0][:14], "x.arguments.a:")
         pub = options.public({"step": 1, "list": [{"n": 1, "tool": "doc_new", "arguments": {}}]})
-        self.assertEqual(pub["list"][0], {"n": 1, "tool": "doc_new", "arguments": {}})
+        self.assertEqual(pub["list"][0], {"n": 1, "run": {"tool": "doc_new"}})  # 27 Nov: an option row is a flat step
 
 
 
@@ -225,32 +225,32 @@ class ConstraintAndSketchWords(Base):
     and the refusals name the right fields with one worked item."""
 
     def test_the_card_types_each_constraint(self):
+        # 27 Nov: one constraint for each call; its fields are the top-level inputs of the card.
         e = runners.entries()["sketch_constrain"]
-        item = e["inputSchema"]["properties"]["constraints"]["items"]
-        self.assertEqual(list(item["properties"]), ["type", "refs", "value", "name"])
-        self.assertEqual(item["required"], ["type"])
-        self.assertIn("tangent", item["properties"]["refs"]["description"])
-        self.assertIn('Example: { type: "tangent", refs: [0, 1] } makes line 0 tangent to circle 1.', e["description"])
+        props = e["inputSchema"]["properties"]
+        self.assertEqual(list(props), ["sketch", "type", "refs", "value", "name"])
+        self.assertEqual(e["inputSchema"]["required"], ["type"])
+        self.assertIn("tangent", props["refs"]["description"])
+        self.assertIn('Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] } makes line 0 tangent to circle 1.', e["description"])
         self.assertNotIn("a", protocol.FIELD_ALIASES.get("sketch_constrain", {}))
 
-    def test_a_b_kind_refused_with_the_fields_and_one_item(self):
-        r = run_case("datapd", "sketch_constrain", "sketcher call 4", {"sketch": "PlateSketch", "constraints": [{"kind": "tangent", "a": 0, "b": 4}]})
-        self.assertEqual(r[:2], ["refused", "invalid_input"])
-        m = r[2]
-        self.assertIn("kind, a, b: not fields of a constraint.", m)
+    def test_a_b_kind_refused_with_the_fields_and_one_constraint(self):
+        m = checked("sketch_constrain", {"sketch": "S", "kind": "tangent", "a": 0, "b": 4})
+        self.assertIsInstance(m, str)
+        self.assertIn("input.kind: not a known field", m)
+        self.assertIn("the fields here: sketch, type, refs, value, name.", m)
         self.assertIn("The constraint's kind goes in type.", m)
-        self.assertIn("go in refs", m)
         self.assertIn("A constraint has only type, refs, value and name.", m)
-        self.assertIn('Example: { "type": "tangent", "refs": [0, 1] } makes line 0 tangent to circle 1.', m)
+        self.assertIn('Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] }.', m)
 
     def test_sketch_add_body_says_it_takes_sketch(self):
-        said = checked("sketch_add", {"body": "Body", "items": [{"kind": "circle", "center": [0, 0], "radius": 5}]})
+        said = checked("sketch_add", {"body": "Body", "kind": "circle", "center": [0, 0], "radius": 5})
         self.assertIsInstance(said, str)
-        self.assertIn("input.body: not a known field — the fields here: sketch, items.", said)
+        self.assertIn("input.body: not a known field — the fields here: sketch, kind, from, to, points,", said)
         self.assertIn("sketch_add takes sketch, not body: a sketch is already in a body.", said)
-        self.assertIn('Example: { "sketch": "Sketch", "items": [{ "kind": "rectangle"', said)
+        self.assertIn('Example: { "tool": "sketch_add", "sketch": "Sketch", "kind": "rectangle"', said)
         # Another tool's unknown body is refused as before.
-        self.assertNotIn("already in a body", checked("sketch_constrain", {"body": "Body", "constraints": []}))
+        self.assertNotIn("already in a body", checked("sketch_constrain", {"body": "Body", "type": "horizontal"}))
 
 
 if __name__ == "__main__":

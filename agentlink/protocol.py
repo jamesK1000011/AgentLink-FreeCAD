@@ -391,8 +391,25 @@ WRONG_FIELD_WORDS = {
     "batch": {"do": "do is the old name of a list of steps, and batch takes calls: batch { calls: [{ \"tool\": \"sketch_new\", \"plane\": \"XY\" }] }."},
     "fast": {"do": "do is now calls: fast { calls: [{ \"tool\": \"sketch_new\", \"plane\": \"XY\" }] }. Nothing was run."},
     "sketch_add": {"body": 'sketch_add takes sketch, not body: a sketch is already in a body. '
-                           'Example: { "sketch": "Sketch", "items": [{ "kind": "rectangle", "center": [0, 0], "size": [40, 20] }] }.'},
+                           'Example: { "tool": "sketch_add", "sketch": "Sketch", "kind": "rectangle", "center": [0, 0], "size": [40, 20] }.',
+                   "items": "sketch_add adds one shape for each call, so it has no items: kind and the shape's inputs stand beside tool. "
+                            'Example: { "tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20] }. '
+                            "Several shapes are several calls: in a batch, or with each."},
+    "sketch_constrain": {"constraints": "sketch_constrain adds one constraint for each call, so it has no constraints: type, refs, value and name stand beside tool. "
+                                        'Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] }. Several constraints are several calls: in a batch, or with each.'},
 }
+
+
+# Fields models wrote for a constraint's kind, refs and size (local-model runs,
+# 24 Nov: a, b). Not aliases: the call is refused, and the words name the field.
+_CON_KIND_WORDS = ("kind", "constraint")
+_CON_REF_WORDS = ("a", "b", "c", "point", "points", "geometry", "geometries", "geo", "ref", "first", "second", "line", "circle", "edges", "ids")
+_CON_VALUE_WORDS = ("length", "distance", "radius", "diameter", "angle", "size", "mm", "deg")
+_CON_FORM = 'A constraint has only type, refs, value and name. Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] }.'
+WRONG_FIELD_WORDS["sketch_constrain"].update(
+    {**{k: "The constraint's kind goes in type. " + _CON_FORM for k in _CON_KIND_WORDS},
+     **{k: "Its geometry ids and points go in refs, one list, in order. " + _CON_FORM for k in _CON_REF_WORDS},
+     **{k: "A size goes in value (mm or deg). " + _CON_FORM for k in _CON_VALUE_WORDS}})
 
 # A field that means something only beside another one (per tool: field ->
 # the field it goes with). Given alone, it is left out and said in readAs
@@ -412,12 +429,19 @@ ANSWER_FIELDS = ("ms", "msBy", "around", "saidBefore", "record", "appliesNow", "
 
 # Optional text inputs that an empty string ("") means nothing for: read as
 # left out, so the call gets the answer it gives without them (live findings,
-# 22 Nov: tool_find { group: "", tool: "" }). Per tool, kept small: only where
+# 22 Nov: tool_find { group: "", card: "" }). Per tool, kept small: only where
 # an empty value cannot mean something of its own.
 EMPTY_IS_LEFT_OUT = {
-    "tool_find": ("words", "group", "tool", "to"),
-    "tool_groups": ("group", "tool", "find", "needs"),
+    "tool_find": ("words", "group", "card", "to"),
+    "tool_groups": ("group", "card", "find", "needs"),
 }
+
+
+# An input that was renamed so that no tool has an input named like a key of a
+# step (tool, each, writeTo). The old name is refused with the new one (rule R5:
+# no alias). Per tool: { old: new }, and what the new input shows in the words.
+RENAMED_INPUTS = {"tool_find": {"tool": "card"}, "tool_groups": {"tool": "card"}, "job_start": {"tool": "job"}}
+RENAMED_SHOWS = {"tool_find": '"pd_pad"', "tool_groups": '"pd_pad"', "job_start": '"body_check"'}
 
 
 def read_as_words(read_as):
@@ -443,8 +467,8 @@ def _as_alias(spec, v):
 # local model sent queries as objects three times; the old words did not
 # say that queries are plain strings).
 FIND_FORMS = ('tool_find takes: words: "pad sketch" (plain words); queries: ["pad sketch", "hole", "pd_pad"] '
-              '(searches, up to 6, and tool names, up to 20, in one list); tool: "pd_pad" (a name, or a list of names); groups: true. '
-              'tool and queries can be in one call.')
+              '(searches, up to 6, and tool names, up to 20, in one list); card: "pd_pad" (a name, or a list of names); groups: true. '
+              'card and queries can be in one call.')
 _QUERY_KEYS = ("words", "query", "q", "text", "find")
 
 
@@ -509,15 +533,15 @@ def loose_name(server, n):
 
 
 def sort_find(server, a):
-    """tool_find's input sorted: (names, searches, read_as). tool and
+    """tool_find's input sorted: (names, searches, read_as). card and
     queries (or words) can come in one call, and either can hold names or
     words: a name, also written loosely, gives its card; anything else is a
     search (owner, 22 Nov). Raises ToolError over the limits."""
     qs, read_as = find_queries(a)
-    tool = a.get("tool")
-    tl = [tool] if isinstance(tool, str) else (list(tool) if isinstance(tool, list) else [])
+    card = a.get("card")
+    tl = [card] if isinstance(card, str) else (list(card) if isinstance(card, list) else [])
     names, searches = [], []
-    for src, items in (("tool", tl), ("queries", qs)):
+    for src, items in (("card", tl), ("queries", qs)):
         for q in items:
             if not isinstance(q, str) or not q.strip():
                 continue
@@ -529,8 +553,8 @@ def sort_find(server, a):
                     read_as.append(f"{q.strip()} as the tool {n}")
             else:
                 searches.append(q.strip())
-                if src == "tool":
-                    read_as.append(f"tool: {q.strip()} is no tool name, so it was searched")
+                if src == "card":
+                    read_as.append(f"card: {q.strip()} is no tool name, so it was searched")
     if len(searches) > FIND_MAX_SEARCHES:
         raise ToolError("invalid_input", f"{len(searches)} searches, and the most is {FIND_MAX_SEARCHES} in one call (tool names do not count). "
                                          f"Split them into two calls. {FIND_FORMS}")
@@ -556,7 +580,7 @@ def does_hits(server, n, k=3):
 
 
 # A tool name that names a kind of sketch geometry (sketch_rectangle,
-# circle, draw_line): that kind is an item of sketch_add (local-model runs,
+# circle, draw_line): that kind is the kind of a sketch_add call (local-model runs,
 # 23 Nov: models made up such tools and drew a rectangle as four lines).
 # Tool names only, so a did-you-mean: no call is changed or guessed.
 # Other words for a kind, as models write them in a tool name.
@@ -610,7 +634,7 @@ def kind_in_name(server, n):
 
 
 def kind_example(server, kind):
-    """One sketch_add item of that kind, with values (KIND_VALUE), or None
+    """The inputs of one sketch_add call of that kind, with values (KIND_VALUE), or None
     when a field of the card has no known value."""
     fields = sketch_kinds(server).get(kind)
     if fields is None:
@@ -632,10 +656,10 @@ def kind_hint(server, n):
     if kind is None:
         return None
     ex = kind_example(server, kind)
-    words = f'In a sketch, a {kind} is one item of sketch_add: use sketch_add with items [{{ kind: "{kind}", … }}]'
+    words = f'In a sketch, a {kind} is one call of sketch_add: use sketch_add with kind: "{kind}"'
     if ex is None:
-        return words + ". Its fields are in sketch_add's card: tool_find { tool: \"sketch_add\" }"
-    return words + ". Example: " + json.dumps({"tool": "sketch_add", "items": [ex]}, separators=(", ", ": "))
+        return words + ". Its inputs are in sketch_add's card: tool_find { card: \"sketch_add\" }"
+    return words + ". Example: " + json.dumps({"tool": "sketch_add", **ex}, separators=(", ", ": "))
 
 
 def close_names(server, n, k=4):
@@ -745,6 +769,9 @@ def check_input(schema, args, tool=None):
             form = f"{tool} {{ {first}: … }}" if tool and first else "{ field: … }"
             raise ToolError("invalid_input", f"inputs go at the top level of a direct call: {form}, not inside arguments. "
                                              "A batch step is { tool, <its inputs> }: the inputs stand beside tool.")
+    for old, new in (RENAMED_INPUTS.get(tool) or {}).items():
+        if old in args and old not in props and new in props:
+            raise ToolError("invalid_input", f"input.{old}: not an input of {tool}. The input is now called {new}: {tool} {{ {new}: {RENAMED_SHOWS.get(tool, 'name')} }}.")
     required = set(schema.get("required", []))
     empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
     for k in empty:
@@ -1115,7 +1142,7 @@ class Server:
         self._stale_said = state
         out = {k: (v[:cap] + [f"… {len(v) - cap} more"] if len(v) > cap else v) for k, v in parts.items() if v}
         out["note"] = ("The tool list changed since it was last listed (tools/list): list it again to see the new descriptions and inputs. "
-                       "Meanwhile every tool here is callable by name, and tool_groups { tool: name } gives one tool's description and inputs.")
+                       "Meanwhile every tool here is callable by name, and tool_groups { card: name } gives one tool's description and inputs.")
         return out
 
     def set_groups(self, groups):
@@ -1502,7 +1529,7 @@ class Server:
                 hint = f"near: {', '.join(near)}" if near else (f"its family: {', '.join(same)}" if same else "tool_groups lists them all")
             does = does_hits(self, name)
             if does:
-                hint += f". By what it does, did you mean: {'; '.join(does)}? tool_find {{ tool: name }} gives its card"
+                hint += f". By what it does, did you mean: {'; '.join(does)}? tool_find {{ card: name }} gives its card"
             kh = kind_hint(self, name)
             if kh:
                 hint = kh + ". Also " + hint
@@ -2129,17 +2156,17 @@ def _try_next(server, name, keys, n, card):
         from . import examples
 
         if examples.load().get(name):
-            example = (examples.for_tool(name, {}) or {}).get("example")
+            example = (examples.for_tool(name, {}) or {}).get("ready")
     except Exception:  # noqa: BLE001
         example = None
     field = _field(keys)
     if example is not None:
-        val = (example.get("arguments") or {}).get(field) if field else None
+        val = example.get(field) if field else None
         if val is not None:
             shown = compact(val)
             words += f" Try this: the card's example gives {field} as {shown if len(shown) <= 160 else shown[:157] + '…'}. Use that form."
         else:
-            words += f" Try this: copy the card's example ({card}) and change only its values."
+            words += f" Try this: copy the card's ready call ({card}) and change only its values."
     else:
         words += f" Try this: read the form of {field or place} on the card ({card}), or use another tool for this step."
     left = REPEAT_STOP - n
@@ -2200,7 +2227,7 @@ def repeat_words(server, name, result, args=None):
     if n < REPEAT_SAME:
         return
     err["repeat"] = n
-    card = f'tool_find {{ tool: "{name}" }}' if name and name in server.tools else "tool_find { words }"
+    card = f'tool_find {{ card: "{name}" }}' if name and name in server.tools else "tool_find { words }"
     if n >= REPEAT_STOP and name not in FORGIVING_READS:
         err["message"] = f"{STOP_MARK}{REPEAT_STOP} tries of {name}. Do not call it again. Report it: {_first_sentence(first)}"
         set_kind(err, "stop")

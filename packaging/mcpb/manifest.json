@@ -121,7 +121,7 @@
     },
     {
       "name": "job_start",
-      "description": "Run a read as a job: tool and its arguments."
+      "description": "Run a read as a job: job (the tool's name) and its arguments."
     },
     {
       "name": "job_status",

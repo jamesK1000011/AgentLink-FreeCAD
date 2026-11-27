@@ -313,11 +313,9 @@ def _flat(word):
 def _sketch_command(name, a):
     """The Sketcher button for a sketch tool that goes by what was asked."""
     if name == "sketch_add":
-        first = next((it for it in a.get("items") or [] if isinstance(it, dict)), {}) if isinstance(a.get("items"), list) else {}
-        return SKETCH_ADD.get(_flat(first.get("kind")))
+        return SKETCH_ADD.get(_flat(a.get("kind")))
     if name == "sketch_constrain":
-        first = next((c for c in a.get("constraints") or [] if isinstance(c, dict)), {}) if isinstance(a.get("constraints"), list) else {}
-        return SKETCH_CONSTRAIN.get(_flat(first.get("type") or first.get("kind")))
+        return SKETCH_CONSTRAIN.get(_flat(a.get("type")))
     if name == "sketch_edit":
         return next((cmd for key, cmd in SKETCH_EDIT if a.get(key)), None)
     if name == "sketch_copy":

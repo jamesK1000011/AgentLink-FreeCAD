@@ -130,10 +130,10 @@ class StdMore(Base):
     def test_7_partdesign(self):
         b = self.ok("pd_body_new", {"name": "P one"})
         self.ok("sketch_new", {"body": "P one", "plane": "XY", "name": "P sk"})
-        self.ok("sketch_add", {"sketch": "P sk", "items": [{"kind": "rectangle", "center": [0, 0], "size": [20, 10]}]})
+        self.ok("sketch_add", {"sketch": "P sk", "kind": "rectangle", "center": [0, 0], "size": [20, 10]})
         pad = self.ok("pd_pad", {"sketch": "P sk", "length": 5})
         self.ok("sketch_new", {"body": "P one", "plane": "XY", "name": "P sk2"})
-        self.ok("sketch_add", {"sketch": "P sk2", "items": [{"kind": "circle", "center": [5, 2], "radius": 2}]})
+        self.ok("sketch_add", {"sketch": "P sk2", "kind": "circle", "center": [5, 2], "radius": 2})
         pocket = self.ok("pd_pocket", {"sketch": "P sk2", "extent": "through_all", "reversed": True})
         feats = [o.Label for o in self.session.doc.getObjectsByLabel("P one")[0].Group if o.TypeId.startswith("PartDesign::P")]
         self.assertEqual(len(feats), 2)
@@ -153,7 +153,7 @@ class StdMore(Base):
         self.assertEqual(len([o for o in self.session.doc.getObjectsByLabel("P two")[0].Group if o.TypeId.startswith("PartDesign::P")]), 0)
         self.ok("pd_body_new", {"name": "P three"})
         self.ok("sketch_new", {"body": "P three", "plane": "XY", "name": "P sk3"})
-        self.ok("sketch_add", {"sketch": "P sk3", "items": [{"kind": "rectangle", "center": [0, 0], "size": [5, 5]}]})
+        self.ok("sketch_add", {"sketch": "P sk3", "kind": "rectangle", "center": [0, 0], "size": [5, 5]})
         self.ok("pd_pad", {"body": "P three", "sketch": "P sk3", "length": 3})
         pad3 = next(o.Label for o in self.session.doc.getObjectsByLabel("P three")[0].Group if o.TypeId == "PartDesign::Pad")
         m = self.ok("pd_move_feature", {"feature": pad3, "to": "P two"})

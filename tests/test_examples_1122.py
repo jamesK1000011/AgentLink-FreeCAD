@@ -44,7 +44,8 @@ class Data(unittest.TestCase):
             t = tj.get(name)
             if t is None:
                 continue
-            ex = examples.for_tool(name, facts, how="null")["example"]["arguments"]
+            ex = examples.for_tool(name, facts, how="null")["ready"]
+            self.assertEqual(ex.pop("tool"), name)
             ex = {k: (1 if v is None else v) for k, v in ex.items()}
             check_input(t["inputSchema"], ex, name)
 
@@ -52,7 +53,8 @@ class Data(unittest.TestCase):
 class Build(unittest.TestCase):
     def test_from_the_document(self):
         got = examples.for_tool("pd_pad", {"bodyName": "Body", "sketchName": "Sketch001"}, how="null")
-        self.assertEqual(got["example"], {"tool": "pd_pad", "arguments": {"body": "Body", "sketch": "Sketch001", "length": 10}})
+        self.assertEqual(got["ready"], {"tool": "pd_pad", "body": "Body", "sketch": "Sketch001", "length": 10})
+        self.assertEqual(got["plain"], {"tool": "pd_pad", "body": None, "sketch": None, "length": 10})  # no document: the names are marked, the worked length stays
         self.assertTrue(got["fill"][0].startswith("length: mm"))
         self.assertIn("Change it to yours", got["fill"][0])
 
@@ -60,7 +62,8 @@ class Build(unittest.TestCase):
         # Audit top 10 #1 (24 Nov): the depth is in the call, not only named.
         for name in ("pd_pad", "pd_pocket"):
             got = examples.for_tool(name, {}, how="angle")
-            self.assertIsInstance(got["example"]["arguments"]["length"], (int, float))
+            self.assertIsInstance(got["ready"]["length"], (int, float))
+            self.assertIsInstance(got["plain"]["length"], (int, float))
             self.assertTrue(tools_json()[name]["inputSchema"]["properties"]["length"].get("description"))
 
     def test_null_fails_cleanly_and_names_the_field(self):
@@ -77,17 +80,20 @@ class Build(unittest.TestCase):
 
     def test_angle_marker(self):
         got = examples.for_tool("pd_fillet", {}, how="angle")
-        self.assertEqual(got["example"]["arguments"]["radius"], "<radius>")
+        self.assertEqual(got["ready"]["radius"], "<radius>")
+        self.assertEqual(got["plain"]["radius"], "<radius>")
 
     def test_open_sketch_first_and_no_facts_left_out(self):
         got = examples.for_tool("sketch_add", {"editSketch": "Sk2", "sketchName": "Sk1"})
-        self.assertEqual(got["example"]["arguments"]["sketch"], "Sk2")
+        self.assertEqual(got["ready"]["sketch"], "Sk2")
+        self.assertIsNone(got["plain"]["sketch"])
         got = examples.for_tool("pd_pad", {})
-        self.assertNotIn("body", got["example"]["arguments"])
+        self.assertIsNone(got["ready"]["body"])  # what the document does not give stays in the call, marked
 
     def test_picked_edges_fill_the_edges(self):
         got = examples.for_tool("pd_fillet", {"pickedEdges": ["Edge3"]})
-        self.assertEqual(got["example"]["arguments"]["edges"], ["Edge3"])
+        self.assertEqual(got["ready"]["edges"], ["Edge3"])
+        self.assertIsNone(got["plain"]["edges"])
         self.assertFalse(any(w.startswith("edges") for w in got["fill"]))
 
     def test_off_and_unknown(self):
@@ -102,31 +108,18 @@ class Placed(unittest.TestCase):
     used center [0, 0], and round ends were full circles. The examples now
     show a round-ended outline, a centred plate and a shape at an edge."""
 
-    def test_sketch_add_example_is_a_round_ended_link(self):
+    def test_sketch_add_example_is_one_flat_shape(self):
+        # 27 Nov: one call adds one shape, so the card's example is one centred rectangle, and the card's words
+        # give the facts about its inputs, not a part.
         got = examples.for_tool("sketch_add", {"sketchName": "Sketch"}, how="null")
-        items = got["example"]["arguments"]["items"]
-        self.assertEqual([i["kind"] for i in items], ["arc", "arc", "line", "line"])
-        import math
-
-        def ends(it):
-            if it["kind"] == "line":
-                return {1: tuple(it["from"]), 2: tuple(it["to"])}
-            c, r = it["center"], it["radius"]
-            at = lambda a: (round(c[0] + r * math.cos(math.radians(a)), 6) + 0.0, round(c[1] + r * math.sin(math.radians(a)), 6) + 0.0)  # noqa: E731
-            return {1: at(it["start"]), 2: at(it["end"])}
-
-        pts = [ends(i) for i in items]
-        what = got["fill"][0]
-        pairs = [[[2, 1], [0, 2]], [[2, 2], [1, 1]], [[1, 2], [3, 1]], [[3, 2], [0, 1]]]
-        self.assertIn("[[2, 1], [0, 2]], [[2, 2], [1, 1]], [[1, 2], [3, 1]], [[3, 2], [0, 1]]", what)
-        for (g1, v1), (g2, v2) in pairs:
-            self.assertEqual(pts[g1][v1], pts[g2][v2], (g1, v1, g2, v2))  # each tangent pair is one joint
-        used = sorted((g, v) for p in pairs for g, v in p)
-        self.assertEqual(used, [(g, v) for g in range(4) for v in (1, 2)])  # every end used once: one closed outline
-        self.assertIn("sketch_constrain tangent", what)
-        self.assertIn("rectangle { center: [0, 0], size: [w, h] }", what)
-        self.assertIn("corner [x min, y min] from sketch_new's bodyExtent", what)
-        # the [p, p] tangent form is the one sketch_constrain makes into an end-to-end tangent
+        for k in ("plain", "ready"):
+            self.assertEqual({x: v for x, v in got[k].items() if x != "sketch"},
+                             {"tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
+        self.assertEqual(got["ready"]["sketch"], "Sketch")
+        self.assertEqual([w.split(":")[0] for w in got["fill"]], ["kind", "center", "size"])
+        for w in got["fill"]:
+            self.assertLess(len(w), 200, w)
+        # the recipe for a round-ended outline is in the guide, as four flat calls
         with open(os.path.join(HERE, "..", "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
             src = f.read()
         self.assertIn('return [("Tangent", refs[0][0], refs[0][1], refs[1][0], refs[1][1])]', src)
@@ -145,9 +138,9 @@ class Placed(unittest.TestCase):
         self.assertEqual([ext["x"][0], ext["y"][0]], [-25.0, -20.0])
         tj = tools_json()
         add, new = tj["sketch_add"]["description"], tj["sketch_new"]["description"]
-        self.assertIn("a plate on XY is centred, rectangle { center: [0, 0], size: [50, 40] }, padded 4.", add)
+        self.assertIn('a plate on XY is centred: { "tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [50, 40] }, padded 4.', add)
         self.assertIn('sketch_new { face: { side: "+z" } } answers bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }.', add)
-        self.assertIn("rectangle { corner: [-25, -20], size: [10, 10] }", add)
+        self.assertIn("kind rectangle, corner [-25, -20], size [10, 10]", add)
         self.assertIn("Then pd_pad { length: 6 } makes the block.", add)
         self.assertIn("bodyExtent is { x: [-25.0, 25.0], y: [-20.0, 20.0] }.", new)
         self.assertIn("sketch_add rectangle { corner: [-25, -20], size: [10, 10] } is a block on one corner of the plate.", new)
@@ -165,13 +158,10 @@ class Placed(unittest.TestCase):
         with open(os.path.join(HERE, "..", "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
             g = f.read()
         self.assertEqual(g.count("Recipe for ends"), 1)
-        self.assertIn("x 0 (radius 10) and x 80 (radius 6); it is also the example on the `sketch_add` card", g)
-        items = examples.load()["sketch_add"]["arguments"]["items"]
-        for it in items:
-            if it["kind"] == "arc":
-                self.assertIn(f"arc {{ center: [{it['center'][0]}, {it['center'][1]}], radius: {it['radius']}, start: {it['start']}, end: {it['end']} }}", g)
-            else:
-                self.assertIn(f"line {{ from: [{it['from'][0]}, {it['from'][1]}], to: [{it['to'][0]}, {it['to'][1]}] }}", g)
+        self.assertIn("ends at x 0 (radius 10) and x 80 (radius 6), in one batch", g)
+        for call in ("arc { center: [0, 0], radius: 10, start: 90, end: 270 }", "arc { center: [80, 0], radius: 6, start: -90, end: 90 }",
+                     "line { from: [0, -10], to: [80, -6] }", "line { from: [80, 6], to: [0, 10] }"):
+            self.assertIn(call, g)
 
 
 if __name__ == "__main__":

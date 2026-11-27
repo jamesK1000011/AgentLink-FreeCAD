@@ -326,7 +326,7 @@ def _job_words(a, b):
     """job_start in plain words (p8: "Job start: 6000 mm³"): what the job
     runs, in that tool's own words, and its state — done within the call,
     started and running, or queued. Plain Python."""
-    tool = a.get("tool")
+    tool = a.get("job")
     if not isinstance(tool, str) or not tool or tool == "job_start":
         return None
     inner_args = a.get("arguments") if isinstance(a.get("arguments"), dict) else {}
@@ -358,7 +358,7 @@ def _job_outcome(a, b, ok):
     words hold it already) or else its own outcome — so a note comes only
     after a value, never in place of it (round 10). None for anything
     else."""
-    tool = a.get("tool") if isinstance(a, dict) else None
+    tool = a.get("job") if isinstance(a, dict) else None
     if not ok or not isinstance(tool, str) or isinstance(b.get("jobs"), list) or isinstance(b.get("status"), str) or "error" in b:
         return None
     inner_args = a.get("arguments") if isinstance(a.get("arguments"), dict) else {}

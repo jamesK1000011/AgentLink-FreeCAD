@@ -68,7 +68,7 @@ class JobStartInABatch(unittest.TestCase):
     def test_the_words_name_the_batch_and_what_to_do(self):
         w = jobs.start_in_batch_refusal("body_check")
         self.assertTrue(w.startswith("job_start: not inside a batch, which is one answer and starts no job"), w)
-        self.assertIn('call job_start { tool: "body_check", arguments } on its own', w)
+        self.assertIn('call job_start { job: "body_check", arguments } on its own', w)
         self.assertIn("call body_check itself here: a heavy read inside a batch runs in its place and the batch waits for it", w)
         self.assertNotIn("cannot run as a job", w)
 
@@ -82,19 +82,23 @@ class JobStartInABatch(unittest.TestCase):
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
         return [r.get("isError", False), json.loads(r["content"][0]["text"])]
     def start(tool, **arguments):
-        return {"tool": "job_start", "arguments": {"tool": tool, "arguments": arguments}}
+        return {"tool": "job_start", "job": tool, "arguments": arguments}
     b = call("batch", {"calls": [start("body_check"), start("session_state"), start("nosuchtool"), start("view_render")], "rollback": False, "stopOnError": False})
-    alone = call("job_start", {"tool": "session_state"})
+    alone = call("job_start", {"job": "session_state"})
     print(json.dumps({"batch": b, "alone": alone}))
 ''' % out)
         err, b = got["batch"]
         self.assertFalse(err, b)
         rows = b["results"]
         self.assertEqual([r["ok"] for r in rows], [False] * 4, rows)
-        # 26 Nov: job_start's own input is named tool, a key of the flat step, so a step cannot give it:
-        # job_start is refused in a batch for that (it is a direct call). Its words for a batch stay in jobs.py.
+        # 27 Nov: job_start's own input is called job (a step has the key tool), so a step can give it again:
+        # the batch is named for a read, and the other tools are refused for themselves.
         said = [r["error"]["message"] for r in rows]
-        self.assertTrue(all("input.tool: required" in m for m in said), said)
+        self.assertTrue(said[0].startswith("job_start: not inside a batch, which is one answer and starts no job"), said)
+        self.assertIn('call job_start { job: "body_check", arguments } on its own', said[0])
+        self.assertIn("session_state cannot run as a job", said[1])
+        self.assertIn("nosuchtool: no such tool", said[2])
+        self.assertIn("view_render cannot run as a job", said[3])
         self.assertEqual(rows[0]["error"]["code"], "invalid_input")
         self.assertEqual(rows[0]["error"]["kind"], "fixable")
         # alone, the same call is refused for what it is, and the repeat ladder's line follows (22 Nov)

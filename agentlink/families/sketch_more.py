@@ -394,7 +394,7 @@ def tools(session):
     # What the tools' entries (agentlink/data/tools.json) call by name.
     helpers = {"doc": doc, "finish": lambda tool, read: picks.finish(s, tool, read, recompute=False), "unique": lambda label, *own: s.unique(label, *own),
                "sketch_of": lambda ref: pc.sketch_of(doc(), ref, None, s), "broken": pc.newly_broken, "plane_ref": lambda *x: pc.plane_ref(*x),
-               "find_edges": lambda *x: pc.find_edges(*x), "support_prop": pc.support_prop, "version": lambda: ".".join(FreeCAD.Version()[:3]),
+               "find_edges": lambda *x: pc.find_edges(*x), "edges_form": pc.edges_form, "support_prop": pc.support_prop, "version": lambda: ".".join(FreeCAD.Version()[:3]),
                # FreeCAD's own
                "V": V, "placement": FreeCAD.Placement, "rotation": FreeCAD.Rotation, "setprop": setattr, "vec2": pc.vec2,
                # the family's: the solver's reading, a sketch kept and put back, the geometry

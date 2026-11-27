@@ -10,7 +10,7 @@ class ParamTools(Base):
     def test_1_bind_and_drive(self):
         self.ok("pd_body_new", {"name": "Plate"})
         self.ok("sketch_new", {"plane": "XY", "name": "Outline"})
-        self.ok("sketch_add", {"sketch": "Outline", "items": [{"kind": "rectangle", "corner": [0, 0], "size": [40, 20], "dims": True, "name": "plate"}]})
+        self.ok("sketch_add", {"sketch": "Outline", "kind": "rectangle", "corner": [0, 0], "size": [40, 20], "dims": True, "name": "plate"})
         self.ok("pd_pad", {"sketch": "Outline", "length": 10})
         p = self.ok("param_set", {"name": "width", "value": 50})
         self.assertEqual(p["value"], 50)

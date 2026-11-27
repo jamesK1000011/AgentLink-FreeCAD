@@ -175,7 +175,7 @@ class Noise(unittest.TestCase):
     once.health_said = lambda s: {"sketchNote": "N degrees of freedom", "broken": "history_undo"}
     out = {}
     for n in ("history_undo", "sketch_add"):
-        r = call("tool_find", {"tool": n})[1]
+        r = call("tool_find", {"card": n})[1]
         cards = r.get("tools") or [r]
         out[n] = (cards[0].get("said") or {}).get("health")
     print(json.dumps(out))

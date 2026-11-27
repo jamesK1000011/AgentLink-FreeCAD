@@ -522,7 +522,7 @@ class DetachHidden(Sup):
 
     def test_job_start_wait_false_answers_at_once(self):
         t0 = time.time()
-        err, out = self.call_args("job_start", {"tool": "heavy_slow", "arguments": {}, "wait": False}, timeout=5)
+        err, out = self.call_args("job_start", {"job": "heavy_slow", "arguments": {}, "wait": False}, timeout=5)
         self.assertLess(time.time() - t0, 2.5)
         self.assertEqual(out["tool"], "heavy_slow")
         err, st = self.call_args("job_status", {"job": out["job"], "wait": 10}, timeout=15)

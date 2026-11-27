@@ -151,7 +151,7 @@ class ChartWords(unittest.TestCase):
 
 
 class JobWords(unittest.TestCase):
-    A = {"tool": "measure_mass", "arguments": {"body": "Plate"}}
+    A = {"job": "measure_mass", "arguments": {"body": "Plate"}}
 
     def words(self, a, b):
         return echo.read_words(activity.did("job_start", a, b), activity.outcome("job_start", True, b, a))
@@ -169,7 +169,7 @@ class JobWords(unittest.TestCase):
         self.assertEqual(got, "Weighed Plate: mass of Plate 14.9 g (PLA assumed)")
 
     def test_a_read_with_no_value_of_its_own_then_its_outcome(self):
-        a = {"tool": "meshobj_info", "arguments": {"mesh": "Globe"}}
+        a = {"job": "meshobj_info", "arguments": {"mesh": "Globe"}}
         got = self.words(a, {"mesh": "Globe", "note": "A mesh with open edges."})
         self.assertTrue(got.startswith("Ran a job: "), got)
         self.assertNotIn("done", got)

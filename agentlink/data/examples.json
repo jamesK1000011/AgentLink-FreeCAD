@@ -2,7 +2,7 @@
  "$schema": "examples.schema.json",
  "dataVersion": "1.0.0",
  "licence": "LGPL-2.1-or-later",
- "about": "A ready call for each tool's card (tool_find { tool }): its arguments filled from the open document (=facts.… as in nexthint.json) and the values the agent must give marked. fill: each value to give (keep: true, a worked value to change; unless: an expression that, when it has a value, fills it). Owner, 22 Nov.",
+ "about": "Two example calls for each tool's card (tool_find { card }): plain, every input with no context, and ready, the same call filled from the open document (=facts.… as in nexthint.json). Each is one flat step. A value to give is marked. fill: each value to give (keep: true, a worked value to change). Owner, 22 Nov, 26 Nov.",
  "entries": {
   "pd_body_new": {
    "arguments": {
@@ -29,111 +29,64 @@
   "sketch_add": {
    "arguments": {
     "sketch": "=facts.editSketch or facts.sketchName",
-    "items": [
-     {
-      "kind": "arc",
-      "center": [
-       0,
-       0
-      ],
-      "radius": 10,
-      "start": 90,
-      "end": 270
-     },
-     {
-      "kind": "arc",
-      "center": [
-       80,
-       0
-      ],
-      "radius": 6,
-      "start": -90,
-      "end": 90
-     },
-     {
-      "kind": "line",
-      "from": [
-       0,
-       -10
-      ],
-      "to": [
-       80,
-       -6
-      ]
-     },
-     {
-      "kind": "line",
-      "from": [
-       80,
-       6
-      ],
-      "to": [
-       0,
-       10
-      ]
-     }
+    "kind": "rectangle",
+    "center": [
+     0,
+     0
+    ],
+    "size": [
+     40,
+     20
     ]
    },
    "fill": [
     {
-     "arg": "items",
+     "arg": "kind",
      "keep": true,
-     "what": "your geometry, in the sketch's x/y, mm. These four items are a link with two round ends (ids 0 to 3). Arc 0 has radius 10 at x 0, arc 1 radius 6 at x 80, and two lines join them. Use arcs, not full circles, for round ends. Then sketch_constrain tangent on the two end points at each joint: [[2, 1], [0, 2]], [[2, 2], [1, 1]], [[1, 2], [3, 1]], [[3, 2], [0, 1]]. A plate on XY is centred: rectangle { center: [0, 0], size: [w, h] }. A shape at an edge of the body takes corner [x min, y min] from sketch_new's bodyExtent"
+     "what": "the shape: rectangle, circle, line, arc … Its own inputs stand beside it; the description lists them for each kind"
+    },
+    {
+     "arg": "center",
+     "keep": true,
+     "what": "[x, y] in the sketch's own x/y, mm"
+    },
+    {
+     "arg": "size",
+     "keep": true,
+     "what": "[w, h], mm"
     }
    ],
    "source": "the tool's card and schema (tools.json); worked values written for this file",
-   "date": "2026-11-25"
+   "date": "2026-11-27"
   },
   "sketch_constrain": {
    "arguments": {
     "sketch": "=facts.editSketch or facts.sketchName",
-    "constraints": [
-     {
-      "type": "coincident",
-      "refs": [
-       [
-        0,
-        2
-       ],
-       [
-        1,
-        1
-       ]
-      ]
-     },
-     {
-      "type": "horizontal",
-      "refs": [
-       0
-      ]
-     },
-     {
-      "type": "distance",
-      "refs": [
-       0
-      ],
-      "value": 40
-     },
-     {
-      "type": "fix",
-      "refs": [
-       [
-        0,
-        1
-       ]
-      ]
-     }
-    ]
+    "type": "distance",
+    "refs": [
+     0
+    ],
+    "value": 40
    },
    "fill": [
     {
-     "arg": "constraints",
-     "what": "your constraints: a ref is a geometry id g, or a point [g, vertex] (vertex 1 start, 2 end, 3 centre); these four join line 0's end to line 1's start, make line 0 horizontal and 40 mm long, and fix its start",
-     "keep": true
+     "arg": "type",
+     "keep": true,
+     "what": "coincident, tangent, distance, radius …; the description lists each type with its refs"
+    },
+    {
+     "arg": "refs",
+     "keep": true,
+     "what": "a ref is a geometry id g, or a point [g, vertex] (vertex 1 start, 2 end, 3 centre); here line 0 is 40 mm long"
+    },
+    {
+     "arg": "value",
+     "keep": true,
+     "what": "mm, or deg for angle; only the sizes take it"
     }
    ],
    "source": "the tool's card and schema (tools.json); worked values written for this file",
-   "date": "2026-11-22"
+   "date": "2026-11-27"
   },
   "sketch_state": {
    "arguments": {
@@ -218,8 +171,7 @@
    "fill": [
     {
      "arg": "edges",
-     "what": "[{ near: [x,y,z] }], shape_query's \"Edge3\", or { all: true }",
-     "unless": "=facts.pickedEdges"
+     "what": "one selector: \"Edge3\", { near: [x,y,z] }, { face: { side: \"+z\" } }, { all: true } or shape_query's filters; or a list of references"
     },
     {
      "arg": "radius",
@@ -243,8 +195,7 @@
    "fill": [
     {
      "arg": "edges",
-     "what": "[{ near: [x,y,z] }], shape_query's \"Edge3\", or { all: true }",
-     "unless": "=facts.pickedEdges"
+     "what": "one selector: \"Edge3\", { near: [x,y,z] }, { face: { side: \"+z\" } }, { all: true } or shape_query's filters; or a list of references"
     },
     {
      "arg": "size",

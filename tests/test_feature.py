@@ -12,7 +12,7 @@ class FeatureTools(Base):
     def test_1_pad(self):
         self.ok("pd_body_new", {"name": "Block"})
         self.ok("sketch_new", {"plane": "XY", "name": "Base"})
-        self.ok("sketch_add", {"sketch": "Base", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]})
+        self.ok("sketch_add", {"sketch": "Base", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
         p = self.ok("pd_pad", {"sketch": "Base", "length": 10})
         self.assertAlmostEqual(p["volume"], 8000, delta=0.5)
         self.assertEqual(p["box"], [40, 20, 10])
@@ -22,14 +22,14 @@ class FeatureTools(Base):
         sk = self.ok("sketch_new", {"face": {"at": [5, 5, 10], "normal": [0, 0, 1]}, "name": "Top"})
         self.assertEqual(sk["frame"]["origin"], [0, 0, 10])
         self.assertEqual(sk["frame"]["xAxis"], [1, 0, 0])
-        self.ok("sketch_add", {"sketch": "Top", "items": [{"kind": "circle", "center": [10, 0], "radius": 3}]})
+        self.ok("sketch_add", {"sketch": "Top", "kind": "circle", "center": [10, 0], "radius": 3})
         p = self.ok("pd_pocket", {"sketch": "Top", "extent": "through_all"})
         self.assertAlmostEqual(p["volumeChange"], -math.pi * 9 * 10, delta=0.5)
 
     def test_3_pocket_that_cuts_nothing_is_refused(self):
         n = len(self.ok("feature_list")["features"])
         self.ok("sketch_new", {"face": {"at": [-5, -5, 10], "normal": [0, 0, 1]}, "name": "Away"})
-        self.ok("sketch_add", {"sketch": "Away", "items": [{"kind": "circle", "center": [-10, 0], "radius": 2}]})
+        self.ok("sketch_add", {"sketch": "Away", "kind": "circle", "center": [-10, 0], "radius": 2})
         self.refused("pd_pocket", {"sketch": "Away", "length": 5, "reversed": True})
         names = [f["name"] for f in self.ok("feature_list")["features"]]
         self.assertEqual(len(names), n + 1, names)  # the sketch stays, the pocket does not
@@ -44,7 +44,7 @@ class FeatureTools(Base):
 
     def test_5_threaded_hole_and_pattern(self):
         self.ok("sketch_new", {"face": {"at": [0, 0, 10], "normal": [0, 0, 1]}, "name": "Holes"})
-        self.ok("sketch_add", {"sketch": "Holes", "items": [{"kind": "circle", "center": [-10, 0], "radius": 2}]})
+        self.ok("sketch_add", {"sketch": "Holes", "kind": "circle", "center": [-10, 0], "radius": 2})
         h = self.ok("pd_hole", {"sketch": "Holes", "thread": "M5", "depth": "through"})
         self.assertLess(h["volumeChange"], -100)
         self.assertIn("M5", h["thread"])
@@ -73,7 +73,7 @@ class FeatureTools(Base):
     def test_7_shell(self):
         self.ok("pd_body_new", {"name": "Tray"})
         self.ok("sketch_new", {"body": "Tray", "plane": "XY", "name": "TrayBase"})
-        self.ok("sketch_add", {"sketch": "TrayBase", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]})
+        self.ok("sketch_add", {"sketch": "TrayBase", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
         self.ok("pd_pad", {"body": "Tray", "sketch": "TrayBase", "length": 10})
         t = self.ok("pd_thickness", {"body": "Tray", "faces": [{"at": [0, 0, 10], "normal": [0, 0, 1]}], "thickness": 2})
         self.assertAlmostEqual(t["volume"], 8000 - 36 * 16 * 8, delta=1)
@@ -81,17 +81,17 @@ class FeatureTools(Base):
     def test_8_revolution_and_loft(self):
         self.ok("pd_body_new", {"name": "Ring"})
         self.ok("sketch_new", {"body": "Ring", "plane": "XZ", "name": "RingProfile"})
-        self.ok("sketch_add", {"sketch": "RingProfile", "items": [{"kind": "rectangle", "corner": [5, 0], "size": [5, 10]}]})
+        self.ok("sketch_add", {"sketch": "RingProfile", "kind": "rectangle", "corner": [5, 0], "size": [5, 10]})
         r = self.ok("pd_revolution", {"body": "Ring", "sketch": "RingProfile", "axis": "V_Axis"})
         self.assertAlmostEqual(r["volume"], math.pi * (100 - 25) * 10, delta=1)
 
         self.ok("pd_body_new", {"name": "Frustum"})
         self.ok("sketch_new", {"body": "Frustum", "plane": "XY", "name": "Bottom"})
-        self.ok("sketch_add", {"sketch": "Bottom", "items": [{"kind": "rectangle", "center": [0, 0], "size": [20, 20]}]})
+        self.ok("sketch_add", {"sketch": "Bottom", "kind": "rectangle", "center": [0, 0], "size": [20, 20]})
         d = self.ok("pd_datum_plane", {"body": "Frustum", "plane": "XY", "offset": 20, "name": "Up"})
         self.assertEqual(d["origin"], [0, 0, 20])
         self.ok("sketch_new", {"body": "Frustum", "plane": "Up", "name": "TopSec"})
-        self.ok("sketch_add", {"sketch": "TopSec", "items": [{"kind": "rectangle", "center": [0, 0], "size": [10, 10]}]})
+        self.ok("sketch_add", {"sketch": "TopSec", "kind": "rectangle", "center": [0, 0], "size": [10, 10]})
         lo = self.ok("pd_loft", {"body": "Frustum", "sketch": "Bottom", "sections": ["TopSec"], "ruled": True})
         self.assertAlmostEqual(lo["volume"], 20 / 3 * (400 + 100 + 200), delta=1)
 
@@ -101,7 +101,7 @@ class FeatureTools(Base):
     def test_9a_two_sides_and_a_draft_from_a_face(self):
         self.ok("pd_body_new", {"name": "Hard"})
         self.ok("sketch_new", {"body": "Hard", "plane": "XY", "name": "HBase"})
-        self.ok("sketch_add", {"sketch": "HBase", "items": [{"kind": "rectangle", "center": [0, 0], "size": [30, 20]}]})
+        self.ok("sketch_add", {"sketch": "HBase", "kind": "rectangle", "center": [0, 0], "size": [30, 20]})
         # two sides without the second length is refused, saying which input
         e = self.refused("pd_pad", {"body": "Hard", "sketch": "HBase", "length": 6, "sides": "two"})
         self.assertIn("length2", e["message"])
@@ -125,7 +125,7 @@ class FeatureTools(Base):
     @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (needs test_9a's body)")
     def test_9b_through_all_both_ways(self):
         self.ok("sketch_new", {"body": "Hard", "plane": "XY", "name": "HCut"})
-        self.ok("sketch_add", {"sketch": "HCut", "items": [{"kind": "circle", "center": [0, 0], "radius": 2}]})
+        self.ok("sketch_add", {"sketch": "HCut", "kind": "circle", "center": [0, 0], "radius": 2})
         err, c = self.call("pd_pocket", {"body": "Hard", "sketch": "HCut", "extent": "through_all", "sides": "two"})
         if err:
             # before 1.1 two sides exist for a length only: said so, nothing kept
@@ -137,8 +137,9 @@ class FeatureTools(Base):
     @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (needs test_9a's body)")
     def test_9c_fine_thread_and_holes_at_points(self):
         self.ok("sketch_new", {"body": "Hard", "face": {"at": [10, 5, 6], "normal": [0, 0, 1]}, "name": "HHoles"})
-        self.ok("sketch_add", {"sketch": "HHoles", "items": [{"kind": "circle", "center": [10, 5], "radius": 1}, {"kind": "point", "at": [-10, 5]},
-                                                             {"kind": "circle", "center": [-10, -5], "radius": 1, "construction": True}]})
+        self.ok("sketch_add", {"sketch": "HHoles", "kind": "circle", "center": [10, 5], "radius": 1})
+        self.ok("sketch_add", {"sketch": "HHoles", "kind": "point", "at": [-10, 5]})
+        self.ok("sketch_add", {"sketch": "HHoles", "kind": "circle", "center": [-10, -5], "radius": 1, "construction": True})
         e = self.refused("pd_hole", {"body": "Hard", "sketch": "HHoles", "thread": "M8x7"})
         self.assertIn("M8", e["message"])
         # "M8x1" is FreeCAD's "M8x1.0" (ISO fine)
@@ -172,8 +173,8 @@ class FeatureTools(Base):
         # not "Edge1" of the sketch's shape, which is the profile's first edge.
         self.ok("pd_body_new", {"name": "Off"})
         self.ok("sketch_new", {"body": "Off", "plane": "XZ", "name": "OffProfile"})
-        self.ok("sketch_add", {"sketch": "OffProfile", "items": [{"kind": "line", "from": [120, 0], "to": [120, 10], "construction": True},
-                                                                 {"kind": "rectangle", "corner": [130, 0], "size": [4, 6]}]})
+        self.ok("sketch_add", {"sketch": "OffProfile", "kind": "line", "from": [120, 0], "to": [120, 10], "construction": True})
+        self.ok("sketch_add", {"sketch": "OffProfile", "kind": "rectangle", "corner": [130, 0], "size": [4, 6]})
         r = self.ok("pd_revolution", {"body": "Off", "sketch": "OffProfile", "axis": 0})
         self.assertAlmostEqual(r["volume"], math.pi * (14 ** 2 - 10 ** 2) * 6, delta=1)
         self.assertEqual(r["box"], [28, 28, 6])

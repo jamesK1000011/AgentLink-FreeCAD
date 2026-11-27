@@ -44,7 +44,7 @@ def tools(session):
                      "run does not run approve_file or approve_code: call them by their own names. "
                      "For many calls in one request, use batch (a full answer for each call) or fast (one short answer)."),
              dict(STEP_SCHEMA), run),
-        Tool("fast", ("Run many calls in one request, and get one short answer. Use it when you know the work. "
+        Tool("fast", ("Run many calls in one request, and get one short answer. Use it when you know the work. For one call, use run. For a full answer for each call, use batch. "
                       "calls: [steps]. A step is the same as a batch step: the tool's name in tool, and its inputs beside it. Example: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }. "
                       "each: { x: [15, 45] } runs the step once for each value, in order; \"$x\" in the inputs is the value, also inside a list. "
                       "{ \"$from\": 2, \"$at\": \"height\" } takes a value from the answer of call 2 of this block. Calls count from 0. Each pass of each is one call. "

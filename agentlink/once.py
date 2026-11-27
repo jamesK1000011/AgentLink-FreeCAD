@@ -14,7 +14,7 @@ Such a value is given the first time a tool answers with it in a
 conversation (since the client's initialize). Later answers of that tool
 with the very same value leave the key out and name it in saidBefore — so
 the answer still says the note applies (not for QUIET keys, whose name
-carries nothing); a value that differs is a new one and is given whole. tool_groups { tool: name } gives the words again
+carries nothing); a value that differs is a new one and is given whole. tool_groups { card: name } gives the words again
 (said), so nothing becomes unreachable.
 
 What counts as standing is decided from the tool itself, never guessed from

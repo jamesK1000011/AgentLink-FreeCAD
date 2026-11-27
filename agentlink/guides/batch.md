@@ -4,9 +4,11 @@
 The whole text of batch's description, kept here for ToolListMode static with ToolDescStyle ste (its listed description is short). Nothing is left out. run and fast take the same step; their section is at the end.
 
 ## Start here
-- The basic form: `batch { calls: [ { tool: "sketch_new", plane: "XY" }, { tool: "sketch_add", items: [ { kind: "rectangle", center: [0, 0], size: [40, 20] } ] } ] }`. A call is one flat step: the tool's name in `tool`, and its inputs beside it. There is no arguments wrapper. Give only calls for a first batch; the other fields are for later.
+- The basic form: `batch { calls: [ { tool: "sketch_new", plane: "XY" }, { tool: "sketch_add", kind: "rectangle", center: [0, 0], size: [40, 20] } ] }`. A call is one flat step: the tool's name in `tool`, and its inputs beside it. There is no arguments wrapper. Give only calls for a first batch; the other fields are for later.
+- One call: `run { tool: "pd_pad", sketch: "Sketch", length: 6 }`. Several calls: `batch`; with one short answer: `fast`. All three take the same step.
+- `sketch_add` takes one shape (`kind` and its inputs) and `sketch_constrain` one constraint (`type`, `refs`, `value`) in each call. Several are several calls: in a batch, or one step with `each`.
 - A step has three keys of its own: `tool`, `each` and `writeTo`. A tool input never has one of these names.
-- A loop: `{ tool: "sketch_add", each: { x: [15, 45] }, items: [ { kind: "circle", center: ["$x", 15], radius: 5 } ] }` runs the step once for each value, in order. `"$x"` is the value, in a scalar or inside a list. One variable. Each pass is one call: done, refused, notRun and `$from` count it.
+- A loop: `{ tool: "sketch_add", each: { x: [15, 45] }, kind: "circle", center: ["$x", 15], radius: 5 }` runs the step once for each value, in order. `"$x"` is the value, in a scalar or inside a list. One variable. Each pass is one call: done, refused, notRun and `$from` count it.
 - The old forms are refused, with the new form in the words: `{ tool, arguments }`, `{ call }`, `do`, `as`, `when`, `then`, `else`, `let`, `try`, `choose`, and `each` with `in` and `steps`.
 - The calls run one at a time, in order: a call sees what the calls before it made. They never run at the same time.
 - Read `calls and rollback` and `chaining` first. Read the others when their moment comes (the index lists them under later): `health and timings`, `the window pace`, `writeTo, lines and records`, `build end`, `record_read`, `run and fast`.

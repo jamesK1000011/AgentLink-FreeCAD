@@ -321,6 +321,7 @@ tests/_datatd_before.py
 tests/_datatd_cases.py
 tests/_datatd_standin.py
 tests/_fc.py
+tests/_flat_1127.py
 tests/_meant.py
 tests/_pd_base.py
 tests/data/freecad-1.1.0-commands.txt
@@ -422,6 +423,7 @@ tests/test_fitting.py
 tests/test_fixes_1122b.py
 tests/test_flat2d.py
 tests/test_flat_call_1126.py
+tests/test_flat_inputs_1127.py
 tests/test_gaps_redteam.py
 tests/test_grab_stacked.py
 tests/test_gui_input.py

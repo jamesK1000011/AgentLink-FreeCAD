@@ -1760,7 +1760,7 @@ def run(script, argv):
     lines_in = queue.Queue()
 
     def came(line):
-        """A call is timed from when it came in; job_start { tool,
+        """A call is timed from when it came in; job_start { job,
         arguments } becomes the call it starts (sup_jobs.job_start_inner):
         it runs as any call does, where calls run, and its answer moves to
         the background at once (wait: false) or after DETACH_AFTER. The

@@ -133,8 +133,8 @@ class Buttons(unittest.TestCase):
 
     def test_sketcher_buttons(self):
         self.assertEqual(echo.command_for("sketch_new", {}), "Sketcher_NewSketch")
-        self.assertEqual(echo.command_for("sketch_add", {"items": [{"kind": "rounded_rectangle"}]}), "Sketcher_CreateOblong")
-        self.assertEqual(echo.command_for("sketch_constrain", {"constraints": [{"type": "distance_x"}]}), "Sketcher_ConstrainDistanceX")
+        self.assertEqual(echo.command_for("sketch_add", {"kind": "rounded_rectangle"}), "Sketcher_CreateOblong")
+        self.assertEqual(echo.command_for("sketch_constrain", {"type": "distance_x"}), "Sketcher_ConstrainDistanceX")
         self.assertEqual(echo.command_for("sketch_array", {"rows": 2}), "Sketcher_Translate")
         self.assertEqual(echo.command_for("sketch_mirror", {}), "Sketcher_MirrorSketch")
         self.assertEqual(echo.command_for("sketch_merge", {}), "Sketcher_MergeSketches")
@@ -144,7 +144,7 @@ class Buttons(unittest.TestCase):
     def test_every_changing_sketch_tool_has_a_button(self):
         with open(os.path.join(HERE, "..", "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             entries = json.load(f)["entries"]
-        examples = {"sketch_add": {"items": [{"kind": "line"}]}, "sketch_constrain": {"constraints": [{"type": "horizontal"}]},
+        examples = {"sketch_add": {"kind": "line"}, "sketch_constrain": {"type": "horizontal"},
                     "sketch_edit": {"trim": {"geometry": 1}}}
         missing = [n for n, t in entries.items() if n.startswith("sketch_") and t.get("changes")
                    and not echo.command_for(n, examples.get(n, {}))]

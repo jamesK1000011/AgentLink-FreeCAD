@@ -21,7 +21,9 @@ class StaticWords(unittest.TestCase):
     def test_static_note_names_tool_find(self):
         note = _const("STATIC_NOTE")
         self.assertIn("tool_find { words:", note)
-        self.assertIn("tool_find { tool: name }", note)
+        self.assertIn("tool_find { card: name }", note)
+        for word in ("run", "batch", "fast"):
+            self.assertIn(word, note)
         self.assertNotIn("tool_groups", note)
 
     def test_working_words_name_tool_find(self):
@@ -30,7 +32,7 @@ class StaticWords(unittest.TestCase):
         self.assertNotIn("tool_groups { tool: name } gives them again", w)
         # The guide list is made at connect from the guide files (24 Nov), not typed here.
         self.assertIn("The guides here: {guides}. {words}", w)
-        self.assertIn("A tool's card (tool_find { tool: name })", w)
+        self.assertIn("A tool's card (tool_find { card: name })", w)
 
     def test_static_is_chosen_by_the_mode(self):
         src = open(SRC, encoding="utf-8").read()

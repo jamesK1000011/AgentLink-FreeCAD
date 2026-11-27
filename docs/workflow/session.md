@@ -134,7 +134,7 @@ The live server also ranks the tools written in code, so its order can be a litt
   {"find": "pad", "tools": [
     {"tool": "pd_pad", "group": "feature", "does": "Pad a closed sketch into the body, along its normal.", "listed": false},
     {"tool": "part_extrude", "group": "model", "does": "Extrude a profile into a solid.", "listed": false}]}],
- "note": "Callable by name, listed or not; tool_find { tool: name } gives its whole description and inputs.",
+ "note": "Callable by name, listed or not; tool_find { card: name } gives its whole description and inputs.",
  "ms": "…"}
 ```
 
@@ -142,27 +142,28 @@ The live server also ranks the tools written in code, so its order can be a litt
 - `listed` tells if the app was shown the tool (`Server.is_listed()`).
 - A hit that its own leading checks would refuse now comes last, with `applies: false` (`appliesnow.order()`).
 
-**Get the cards.** `tool_find { tool: ["sketch_add", "pd_pad"] }` gives each card: `tool`, `group`, `listed`, `changes`, `description` and `inputSchema`.
+**Get the cards.** `tool_find { card: ["sketch_add", "pd_pad"] }` gives each card: `tool`, `group`, `listed`, `changes`, `description` and `inputSchema`, and two example calls: `plain` (every input, a null where you give the value) and `ready` (the same call filled from the open document).
 Only these two cards are loaded. The other tools of their groups are not.
 
 **Other reads.** `tool_groups { now: true }` gives the tools that fit the state now. `tool_groups { needs, arguments }` reads a tool's own leading checks and does not run it (`agentlink/needs.py`).
 
-## 3. Action: one `batch`
+## 3. Action: `run`, `batch` or `fast`
 
-The agent calls `batch` with the calls in order. `batch` is in the base, so it also sends tools that the app does not list.
-In a call's arguments, `{ "$from": i, "$at": "path" }` takes a part of the answer of call `i` of the same batch (`agentlink/chain.py`).
+A call is one flat step: `{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }`. The tool's inputs stand beside `tool`.
+For one call, the agent uses `run { ... }`. For several calls, it uses `batch { calls }`, which gives a full answer for each call.
+For several calls with one short answer, it uses `fast { calls }`. `run`, `batch` and `fast` are in the base, so they also send tools that the app does not list.
+In a call's inputs, `{ "$from": i, "$at": "path" }` takes a part of the answer of call `i` of the same batch (`agentlink/chain.py`).
 `{ "$file": "x.json", "$at": "path" }` reads a file that an earlier call wrote with `to`.
 
-A body, a sketch, a rectangle and a pad in one call. The arguments are those of `tests/test_batch_chain_fc.py` (`new_sketch()`, `sketch_calls()`).
+A body, a sketch, a rectangle and a pad in one batch. The calls are those of `tests/test_batch_chain_fc.py` (`new_sketch()`, `sketch_calls()`).
 The `$at` paths are the answer fields in `agentlink/data/tools.json`: `body` of `pd_body_new` and `sketch` of `sketch_new`.
 
 ```json
 {"name": "batch", "arguments": {"calls": [
-  {"tool": "pd_body_new", "arguments": {"name": "B"}},
-  {"tool": "sketch_new", "arguments": {"body": {"$from": 0, "$at": "body"}, "plane": "XY", "name": "Sk"}},
-  {"tool": "sketch_add", "arguments": {"sketch": {"$from": 1, "$at": "sketch"},
-    "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]}},
-  {"tool": "pd_pad", "arguments": {"sketch": {"$from": 1, "$at": "sketch"}, "length": 5}}
+  {"tool": "pd_body_new", "name": "B"},
+  {"tool": "sketch_new", "body": {"$from": 0, "$at": "body"}, "plane": "XY", "name": "Sk"},
+  {"tool": "sketch_add", "sketch": {"$from": 1, "$at": "sketch"}, "kind": "rectangle", "center": [0, 0], "size": [40, 20]},
+  {"tool": "pd_pad", "sketch": {"$from": 1, "$at": "sketch"}, "length": 5}
 ]}}
 ```
 
@@ -226,7 +227,7 @@ The kinds of `approve_file` are `dialog`, `recover` and `save-all` (`approvals.F
 - **Window or hidden FreeCAD.** A `tools/call` goes to the window first (`Window.call()`, port 7318, paired with `link_token`). In the window, the call runs on the GUI thread, and `echo.wrap()` shows it. With no window, the hidden FreeCAD runs it. `initialize` and `tools/list` always go to the hidden FreeCAD.
 - **Jobs for heavy reads.** A heavy or slow read runs on a worker thread (`agentlink/jobs.py`). The call waits up to `JOB_WAIT` (55 s). Then it answers with a job id `job-…`, and the read goes on.
 - **Jobs for slow calls.** A call with no answer after `DETACH_AFTER` (60 s) gets the job id `call-N` from the supervisor (`sup_jobs.Jobs.tick()`). The call goes on. The app drops a call after about 80 s, so the job id always comes first.
-- **`job_start { tool, arguments }`** runs any call as a job. `wait: false` gives the id at once. `job_status { job, wait }` gives the state, and the answer when the job is done.
+- **`job_start { job, arguments }`** runs any call as a job. `wait: false` gives the id at once. `job_status { job, wait }` gives the state, and the answer when the job is done.
 
 ## Tokens for each step
 

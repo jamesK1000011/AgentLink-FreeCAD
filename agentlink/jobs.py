@@ -13,7 +13,7 @@
 # (keep.HEAVY, an add-on's declared heavy tools) or whose past runs here
 # took more than SLOW_READ, or that the watchdog stopped FreeCAD in before
 # (keep.stopped_before); any read with background: true; job_start
-# { tool, arguments } for any read. Never a picture or a window tool (Qt
+# { job, arguments } for any read. Never a picture or a window tool (Qt
 # and the 3D view are the GUI thread's), never a change, never a read that
 # drives the document on the way (IN_PLACE below). While a job runs,
 # changing calls on the document are refused (the worker reads it).
@@ -246,7 +246,7 @@ def background_refusal(tool, args, in_batch, session=None):
                     f"the file written before the next call starts. (On its own, {name} with background: true runs as a job: it answers with a job id past 55 s, "
                     "and the file is whole only once job_status says done.)")
         return (f"background: not inside a batch, which is one answer — call {name} on its own with background: true "
-                "(or job_start { tool, arguments }), or leave background out here.")
+                "(or job_start { job, arguments }), or leave background out here.")
     try:
         changing = bool(tool.changes_for(args or {}))
     except Exception:  # noqa: BLE001
@@ -266,7 +266,7 @@ def start_in_batch_refusal(name):
     """job_start inside a batch, for a read that would be a job on its own:
     it is the batch that starts no job (wanted), not the tool that cannot be
     one — and what to do instead."""
-    return (f"job_start: not inside a batch, which is one answer and starts no job — call job_start {{ tool: \"{name}\", arguments }} on its own, "
+    return (f"job_start: not inside a batch, which is one answer and starts no job — call job_start {{ job: \"{name}\", arguments }} on its own, "
             f"or call {name} itself here: a heavy read inside a batch runs in its place and the batch waits for it.")
 
 

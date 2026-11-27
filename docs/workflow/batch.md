@@ -10,7 +10,7 @@ The agent's rules for it are in the batch guide (`agentlink/guides/batch.md`, `g
 
 1. A batch record or a `writeTo` file is read back by its own tool, `record_read { path, at }` (it was `batch { read, at }` until 24 Nov).
 2. The calls come from `calls`, or from `path` (a JSON file, read through `paths.in_file()`, 20 MB at most).
-3. Each call must be `{ tool, arguments }`. A call's `writeTo` file is checked as a write. Exact card fields beside `tool` are moved inside `arguments` (`callshape.split()`); other keys are refused (`paths.check()`).
+3. Each call is one flat step: `{ "tool": name, <the inputs> }`, with the inputs beside `tool` (`agentlink/callshape.py`). The step's own keys are `tool`, `each` and `writeTo`. A call's `writeTo` file is checked as a write (`paths.check()`). An old form (`arguments`, `do`, `as`, `when`) is refused with the new form in the words. For one call, `run` takes the same step. `fast` takes the same steps and gives one short answer.
 4. `build` is checked (`hold.mode()`).
 5. Every tool name must be known. An unknown name refuses the batch, with near names.
 6. `budget` is 1 to 100 s (55 s by default, `BATCH_BUDGET`). `start` is the index to start at.

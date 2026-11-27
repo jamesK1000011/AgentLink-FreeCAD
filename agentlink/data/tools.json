@@ -7035,7 +7035,7 @@
   },
   "pd_fillet": {
    "group": "feature",
-   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\", outside: true } is the outside vertical corners. Without outside, { type: \"line\", axis: \"z\" } is every vertical edge, inside corners too. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An outside (convex) edge loses material; an inside (concave) edge gets material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
+   "description": "Round edges of the body. edges: one selector. { near: [x,y,z] } is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give a reference that shape_query answers (\"Edge3\", \"Body.Edge3\"), or a list of such references. Or give shape_query's filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\", outside: true } is the outside vertical corners. Without outside, { type: \"line\", axis: \"z\" } is every vertical edge, inside corners too. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An outside (convex) edge loses material; an inside (concave) edge gets material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7044,7 +7044,21 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "edges": {
-      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, outside, … })"
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object"
+       },
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      ],
+      "description": "One selector: { near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle | shape_query's filters ({ type: circle, radius, axis, near, outside, … }); or a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges), or a list of references."
      },
      "radius": {
       "type": "number"
@@ -7057,7 +7071,7 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/feature.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "runner": "steps",
    "steps": [
     {"let": {"b": "=body(a.body)"}},
@@ -7065,22 +7079,16 @@
     {"let": {"v": "=a.get('radius', 1)"}},
     {"refuse": "radius: mm, over 0.", "when": "=not is_num(v) or v <= 0"},
     {"let": {"rs": "=ref_shape(b, shape)"}},
-    {"let": {"subs": "=find_edges(rs, a.edges, ref_names(b, tip))"}},
+    {"let": {"subs": "=find_edges(rs, edges_form(a.edges), ref_names(b, tip))"}},
     {"let": {"seen": "=edge_words(rs, subs)"}},
     {"let": {"f": "=new(b, 'PartDesign::Fillet', 'Fillet')"}},
     {"set": {"f.Base": "=(tip, subs)", "f.Radius": "=float(v)"}}
    ],
-   "answer": {
-    "via": "settle",
-    "with": ["=b", "=f", "pd_fillet", "=before", "changed", "A radius larger than a face beside the edge fails, and edges that are already smooth (tangent) cannot be rounded: try smaller, or fewer edges."],
-    "then": [
-     {"put": {"on": "=seen"}}
-    ]
-   }
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_fillet", "=before", "changed", "A radius larger than a face beside the edge fails, and edges that are already smooth (tangent) cannot be rounded: try smaller, or fewer edges."], "then": [{"put": {"on": "=seen"}}]}
   },
   "pd_chamfer": {
    "group": "feature",
-   "description": "Bevel edges of the body. edges: as pd_fillet. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. outside: true keeps the outside edges, false the inside edges. The tool refuses only a chamfer that changes nothing. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Bevel edges of the body. edges: as pd_fillet: one selector, or a list of references. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. outside: true keeps the outside edges, false the inside edges. The tool refuses only a chamfer that changes nothing. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7089,7 +7097,21 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "edges": {
-      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, outside, … })"
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object"
+       },
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      ],
+      "description": "One selector: { near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle | shape_query's filters ({ type: circle, radius, axis, near, outside, … }); or a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges), or a list of references."
      },
      "size": {
       "type": "number"
@@ -7108,7 +7130,7 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/feature.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "runner": "steps",
    "steps": [
     {"let": {"b": "=body(a.body)"}},
@@ -7117,20 +7139,14 @@
     {"refuse": "size: mm, over 0.", "when": "=not is_num(v) or v <= 0"},
     {"refuse": "size2 or angle, not both: size2 is the second distance (two distances), angle goes with size (distance and angle).", "when": "='size2' in a and 'angle' in a"},
     {"let": {"rs": "=ref_shape(b, shape)"}},
-    {"let": {"subs": "=find_edges(rs, a.edges, ref_names(b, tip))"}},
+    {"let": {"subs": "=find_edges(rs, edges_form(a.edges), ref_names(b, tip))"}},
     {"let": {"seen": "=edge_words(rs, subs)"}},
     {"let": {"f": "=new(b, 'PartDesign::Chamfer', 'Chamfer')"}},
     {"set": {"f.Base": "=(tip, subs)", "f.Size": "=float(v)"}},
     {"set": {"f.ChamferType": "Two distances", "f.Size2": "=float(a.size2)"}, "when": "='size2' in a"},
     {"set": {"f.ChamferType": "Distance and Angle", "f.Angle": "=float(a.angle)"}, "when": "='size2' not in a and 'angle' in a"}
    ],
-   "answer": {
-    "via": "settle",
-    "with": ["=b", "=f", "pd_chamfer", "=before", "changed", "A chamfer wider than a face beside the edge fails: try smaller."],
-    "then": [
-     {"put": {"on": "=seen"}}
-    ]
-   }
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_chamfer", "=before", "changed", "A chamfer wider than a face beside the edge fails: try smaller."], "then": [{"put": {"on": "=seen"}}]}
   },
   "pd_draft": {
    "group": "feature",
@@ -8237,7 +8253,7 @@
   },
   "sketch_add": {
    "group": "sketch",
-   "description": "Add geometry to a sketch: rectangle, circle, line, arc, slot, polygon, ellipse, point and more, in its own x/y (mm). Angles are deg, counter-clockwise from +x. items: [{ kind, …, construction, dims, name }]. A rectangle or a circle is one item, not four lines. The kinds follow. line {from, to}. polyline {points, closed}. arc {center, radius, start, end}: always ccw from start to end. arc3 {points: start, through, end}. circle {center, radius|diameter}. circle3 {points: three on it}. ellipse {center, major, minor (full sizes), rotation}. parabola {vertex, focal, rotation, from, to}. hyperbola {center, major, minor (semi-axes), rotation, from, to}. bspline {points it goes through, closed}. Or bspline {interpolate: false, points its poles, degree}. rectangle {center|corner, size [w,h]}. rounded_rectangle {…, radius}. center puts the middle of the shape on that point. A shape at center [0, 0] goes to the two sides of the sketch origin. corner is the lower-left corner of a rectangle. Use corner to start a shape at an edge of the body (sketch_new gives bodyExtent). Example: a plate on XY is centred, rectangle { center: [0, 0], size: [50, 40] }, padded 4. On its top, sketch_new { face: { side: \"+z\" } } answers bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }. A block on one corner takes corner [x min, y min]: rectangle { corner: [-25, -20], size: [10, 10] }. Then pd_pad { length: 6 } makes the block. polygon {center, radius (to corners), sides, rotation}. slot {from, to (end centres), radius}. arc_slot {center, radius (its middle), width, start, end}. point {at}. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints. The tool does not join separate items to each other; sketch_constrain coincident or tangent does that. Round ends joined by straight sides: draw arcs, not full circles. A full circle is a closed loop of its own. Join each line to an arc with sketch_constrain tangent on their two end points [[line, v], [arc, v]]. That makes them coincident and smooth. slot does this for two equal ends. dims: true adds its sizes as constraints. With name, they are <name>_width, _height, _d, _r, _length; param_bind binds these. Answer: added [{ ids, constraints, dims }] and state. ids: geometry ids from 0, in the order made. The last id of a polygon is its construction circle. constraints: [first, last] ids. state: dof, closedWires, openVertices, readyForFeature. Vertices: 1 start, 2 end, 3 centre.",
+   "description": "Add one shape to a sketch: rectangle, circle, line, arc, slot, polygon, ellipse, point and more. Its x/y are the sketch's own, in mm. Angles are deg, counter-clockwise from +x. One call adds one shape: a rectangle or a circle is one call, not four lines. Several shapes are several calls: in a batch, or with each. kind is the shape, and its own inputs stand beside it. The kinds follow. line {from, to}. polyline {points, closed}. arc {center, radius, start, end}. arc3 {points}. circle {center, radius|diameter}. circle3 {points}. ellipse {center, major, minor, rotation}. parabola {vertex, focal, rotation, from, to}. hyperbola {center, major, minor, rotation, from, to}. bspline {points, closed}. Or bspline {interpolate: false, points, degree}. rectangle {center|corner, size}. rounded_rectangle {…, radius}. polygon {center, radius, sides, rotation}. slot {from, to, radius}. arc_slot {center, radius, width, start, end}. point {at}. Example: a plate on XY is centred: { \"tool\": \"sketch_add\", \"kind\": \"rectangle\", \"center\": [0, 0], \"size\": [50, 40] }, padded 4. On its top, sketch_new { face: { side: \"+z\" } } answers bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }. A block on one corner takes corner [x min, y min]: kind rectangle, corner [-25, -20], size [10, 10]. Then pd_pad { length: 6 } makes the block. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints. The tool does not join separate shapes to each other; sketch_constrain coincident or tangent does that. Round ends joined by straight sides: draw arcs, not full circles. A full circle is a closed loop of its own. Join each line to an arc with sketch_constrain tangent on their two end points [[line, v], [arc, v]]. That makes them coincident and smooth. slot does this for two equal ends. With dims and name, param_bind binds the sizes. Answer: added [{ ids, constraints, dims }] and state. ids: the geometry ids of the shape, in the order made. The first shape of a sketch has ids from 0, and each next shape takes the next ids. The last id of a polygon is its construction circle. constraints: [first, last] ids. state: dof, closedWires, openVertices, readyForFeature. Vertices: 1 start, 2 end, 3 centre.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8245,74 +8261,179 @@
       "type": "string",
       "description": "The sketch's name; may be left out when there is one."
      },
-     "items": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "line",
+       "polyline",
+       "arc",
+       "arc3",
+       "circle",
+       "circle3",
+       "ellipse",
+       "parabola",
+       "hyperbola",
+       "bspline",
+       "rectangle",
+       "rounded_rectangle",
+       "polygon",
+       "slot",
+       "arc_slot",
+       "point"
+      ],
+      "description": "The shape. Its own inputs stand beside it."
+     },
+     "from": {
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "number"
+        }
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "description": "line, slot: the start point [x, y] (slot: the centre of one end). parabola, hyperbola: a number, where the curve starts."
+     },
+     "to": {
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "number"
+        }
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "description": "line, slot: the end point [x, y] (slot: the centre of the other end). parabola, hyperbola: a number, where the curve ends."
+     },
+     "points": {
       "type": "array",
       "items": {
-       "type": "object"
-      }
+       "type": "array",
+       "items": {
+        "type": "number"
+       }
+      },
+      "description": "[x, y] points. polyline: the corners. arc3: start, through, end. circle3: three points on it. bspline: the points it goes through (its poles when interpolate is false)."
+     },
+     "closed": {
+      "type": "boolean",
+      "description": "polyline, bspline: true joins the last point to the first."
+     },
+     "center": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "[x, y]: the middle of the shape. A shape at [0, 0] goes to the two sides of the sketch origin. A rectangle takes center or corner."
+     },
+     "corner": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "rectangle: [x, y] of its lower-left corner. Use it to start a shape at an edge of the body (sketch_new gives bodyExtent)."
+     },
+     "size": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "rectangle: [w, h], mm."
+     },
+     "radius": {
+      "type": "number",
+      "description": "mm. circle (or diameter), arc, rounded_rectangle (its corners), polygon (to the corners), slot (half its width), arc_slot (of its middle)."
+     },
+     "diameter": {
+      "type": "number",
+      "description": "circle: mm, in place of radius."
+     },
+     "start": {
+      "type": "number",
+      "description": "arc, arc_slot: deg. The arc runs ccw from start to end."
+     },
+     "end": {
+      "type": "number",
+      "description": "arc, arc_slot: deg."
+     },
+     "major": {
+      "type": "number",
+      "description": "ellipse: the full size, mm (the larger). hyperbola: the semi-axis, mm."
+     },
+     "minor": {
+      "type": "number",
+      "description": "ellipse: the full size, mm. hyperbola: the semi-axis, mm."
+     },
+     "rotation": {
+      "type": "number",
+      "description": "deg. ellipse, hyperbola, polygon: the turn about center. parabola: the way it opens (0 is +x)."
+     },
+     "sides": {
+      "type": "integer",
+      "description": "polygon: 3 or more."
+     },
+     "width": {
+      "type": "number",
+      "description": "arc_slot: mm, under twice the radius."
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "point: [x, y]."
+     },
+     "vertex": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "parabola: [x, y]."
+     },
+     "focal": {
+      "type": "number",
+      "description": "parabola: mm from the vertex to the focus."
+     },
+     "interpolate": {
+      "type": "boolean",
+      "description": "bspline: false takes points as its poles. The default, true, goes through them."
+     },
+     "degree": {
+      "type": "integer",
+      "description": "bspline with interpolate false: 1 to 9."
+     },
+     "construction": {
+      "type": "boolean",
+      "description": "true makes the shape construction geometry."
+     },
+     "dims": {
+      "type": "boolean",
+      "description": "true adds the sizes of the shape as constraints. A kind with no size to dimension says so in dimsNote."
+     },
+     "name": {
+      "type": "string",
+      "description": "With dims: the name of the sizes. They are named <name>_width, _height, _d, _r, _length; param_bind binds these."
      }
     },
     "required": [
-     "items"
+     "kind"
     ],
     "additionalProperties": false
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/sketch.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "runner": "steps",
    "steps": [
-    {"let": {"sk": "=sketch_of(a.sketch)", "items": "=a.items"}},
-    {"refuse": "items: a list, [{ kind: \"rectangle\", center: [0, 0], size: [40, 20] }, …] — the kinds are in sketch_add's description.", "when": "=not is_list(items) or not items"},
+    {"let": {"sk": "=sketch_of(a.sketch)", "it": "={k: v for k, v in a.items() if k != 'sketch'}", "items": "=[it]"}},
     {"let": {"out": "=[]"}},
-    {
-     "each": "it",
-     "in": "=items",
-     "index": "n",
-     "steps": [
-      {"refuse": {"fmt": "items[{n}]: an object {{ kind, … }}."}, "when": "=not is_dict(it)"},
-      {
-       "try": [
-          {"let": {"G, C, D": "=build(it)", "cons": "=bool(it.get('construction'))", "ids": "=[]", "cids": "=[]", "dims": "={}"}},
-          {
-           "each": "g",
-           "in": "=G",
-           "steps": [
-            {"push": {"ids": "=sk.addGeometry(g[1], True) if is_tuple(g) else sk.addGeometry(g, cons)"}}
-           ]
-          },
-          {
-           "each": "t",
-           "in": "=C",
-           "steps": [
-            {"push": {"cids": "=sk.addConstraint(constraint(remap(t, ids)))"}}
-           ]
-          },
-          {
-           "when": "=it.get('dims')",
-           "then": [
-            {
-             "each": "name, t",
-             "in": "=D",
-             "steps": [
-              {"let": {"ci": "=sk.addConstraint(constraint(remap(t, ids)))"}},
-              {"do": "=sk.renameConstraint(ci, str(it.name) + '_' + name)", "when": "=it.get('name')"},
-              {"do": "=dims.update({name: ci})"}
-             ]
-            }
-           ]
-          },
-          {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}},
-          {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"},
-          {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"},
-          {"put": {"dimsNote": "=str(it.get('kind')) + ': no size to dimension here; sketch_constrain adds one.'"}, "into": "r", "when": "=it.get('dims') and not dims"},
-          {"push": {"out": "=r"}}
-       ],
-       "on": "error",
-       "except": [{"do": "=item_error(n, error)"}]
-      }
-     ]
-    },
+    {"each": "it", "in": "=items", "steps": [{"try": [{"let": {"G, C, D": "=build(it)", "cons": "=bool(it.get('construction'))", "ids": "=[]", "cids": "=[]", "dims": "={}"}}, {"each": "g", "in": "=G", "steps": [{"push": {"ids": "=sk.addGeometry(g[1], True) if is_tuple(g) else sk.addGeometry(g, cons)"}}]}, {"each": "t", "in": "=C", "steps": [{"push": {"cids": "=sk.addConstraint(constraint(remap(t, ids)))"}}]}, {"when": "=it.get('dims')", "then": [{"each": "name, t", "in": "=D", "steps": [{"let": {"ci": "=sk.addConstraint(constraint(remap(t, ids)))"}}, {"do": "=sk.renameConstraint(ci, str(it.name) + '_' + name)", "when": "=it.get('name')"}, {"do": "=dims.update({name: ci})"}]}]}, {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}}, {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"}, {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"}, {"put": {"dimsNote": "=str(it.get('kind')) + ': no size to dimension here; sketch_constrain adds one.'"}, "into": "r", "when": "=it.get('dims') and not dims"}, {"push": {"out": "=r"}}], "on": "error", "except": [{"do": "=item_error(error)"}]}]},
     {"do": "=doc().recompute()"},
     {"let": {"st": "=state_of(sk)"}}
    ],
@@ -8412,7 +8533,7 @@
   },
   "sketch_external": {
    "group": "sketch",
-   "description": "Bring edges of the body's solid (its tip) into a sketch as outside geometry to constrain to. edges: [\"Edge7\" or a query { type: circle|line, radius, axis, near, inside }], as shape_query takes. The query is safer, because edge numbers change with edits. Answer: ids (negative, -3 down, in order) for the refs of sketch_constrain. A constraint to them follows the part. The tool refuses when the tip is built from this sketch. From a datum, binder or other sketch: use sketch_project.",
+   "description": "Bring edges of the body's solid (its tip) into a sketch as outside geometry to constrain to. edges: \"Edge7\", one query { type: circle|line, radius, axis, near, inside } as shape_query takes, or a list of references [\"Edge7\", \"Edge9\"]. The query is safer, because edge numbers change with edits. Answer: ids (negative, -3 down, in order) for the refs of sketch_constrain. A constraint to them follows the part. The tool refuses when the tip is built from this sketch. From a datum, binder or other sketch: use sketch_project.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8421,8 +8542,21 @@
       "description": "The sketch's name; may be left out when there is one."
      },
      "edges": {
-      "type": "array",
-      "items": {}
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object"
+       },
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      ],
+      "description": "\"Edge7\", one query { type, radius, axis, near, inside } as shape_query takes, or a list of references."
      }
     },
     "required": [
@@ -8441,41 +8575,12 @@
     {"let": {"tip": "=body.Tip"}},
     {"refuse": {"fmt": "{body.Label} has no solid yet to take edges from: pd_pad a sketch first, or sketch_project from a datum or another sketch."}, "code": "invalid_state", "when": "=tip is None or tip.Shape.isNull()"},
     {"refuse": {"fmt": "{tip.Label}, the body's tip, is built from {sk.Label}: a sketch cannot take edges from a solid made after it. Make a new sketch for what follows the solid (sketch_new {{ face: {{ at, normal }} }}), and bring the edges into that."}, "code": "invalid_state", "when": "=sk in tip.OutListRecursive"},
-    {"let": {"qs": "=a.edges"}},
-    {"refuse": "edges: [\"Edge7\" or a query { type, radius, axis, near, inside } on the body], the edges to bring in.", "when": "=not is_list(qs) or not qs"},
+    {"let": {"qs": "=edges_form(a.edges)"}},
+    {"refuse": "edges: \"Edge7\", one query { type, radius, axis, near, inside } on the body, or a list of references: the edges to bring in.", "when": "=not qs"},
     {"let": {"names": "=[]"}},
-    {
-     "each": "q",
-     "in": "=qs",
-     "steps": [
-      {
-       "when": "=is_str(q)",
-       "then": [
-        {"push": {"names": "=q.split('.')[-1]"}}
-       ],
-       "else": [
-        {"let": {"hits": "=edge_refs(body, q)"}},
-        {"refuse": {"fmt": "edges: nothing on {body.Label} matches {q} — shape_query lists them."}, "code": "not_found", "when": "=not hits"},
-        {"do": "=names.extend(hits)"}
-       ]
-      }
-     ]
-    },
+    {"each": "q", "in": "=qs", "steps": [{"when": "=is_str(q)", "then": [{"push": {"names": "=q.split('.')[-1]"}}], "else": [{"let": {"hits": "=edge_refs(body, q)"}}, {"refuse": {"fmt": "edges: nothing on {body.Label} matches {q} — shape_query lists them."}, "code": "not_found", "when": "=not hits"}, {"do": "=names.extend(hits)"}]}]},
     {"let": {"before": "=ext_count(sk)"}},
-    {
-     "each": "n",
-     "in": "=names",
-     "steps": [
-      {
-       "try": [
-        {"do": "=sk.addExternal(tip.Name, n)"}
-       ],
-       "except": [
-        {"refuse": {"fmt": "{tip.Label}.{n} could not be brought in: {error} — nothing was added. An edge already in the sketch is refused (sketch_state shows the ids in use); shape_query lists {body.Label}'s edges."}, "code": "failed"}
-       ]
-      }
-     ]
-    },
+    {"each": "n", "in": "=names", "steps": [{"try": [{"do": "=sk.addExternal(tip.Name, n)"}], "except": [{"refuse": {"fmt": "{tip.Label}.{n} could not be brought in: {error} — nothing was added. An edge already in the sketch is refused (sketch_state shows the ids in use); shape_query lists {body.Label}'s edges."}, "code": "failed"}]}]},
     {"do": "=doc().recompute()"},
     {"let": {"ext_ids": "=[-3 - k for k in range(before, ext_count(sk))]"}},
     {"do": "=snapshot('sketch_external')"}
@@ -8484,7 +8589,7 @@
   },
   "sketch_constrain": {
    "group": "sketch",
-   "description": "Constrain a sketch with geometric and dimensional constraints. constraints: [{ type, refs, value, name }], one item for each constraint. Example: { type: \"tangent\", refs: [0, 1] } makes line 0 tangent to circle 1. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex], or \"origin\". Vertex: 1 start, 2 end, 3 centre. -1 is the horizontal axis, -2 the vertical axis, -3 down are outside edges. Each type and its refs follow. coincident [p, p]. point_on_object [p, g]. horizontal | vertical [g] or [p, p]. parallel | perpendicular | equal [g, g]. tangent [g, g] or end points [p, p]. symmetric [p, p, g] (about a line) or [p, p, p]. distance [g] (length), [p, p] or [p, g]. distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first). radius | diameter [g]. All lengths are mm. angle [g] (from +x) or [g, g] (first to second, ccw), deg. fix [p]: holds a point where it is. fix [g]: blocked; add it last. name: lets you bind it to a parameter later. All or nothing: the tool refuses a constraint that conflicts or is redundant. It names what clashes, and adds nothing. Answer: added (constraint ids from 0) and state.",
+   "description": "Constrain a sketch with one geometric or dimensional constraint for each call: type, refs, value, name. Several constraints are several calls: in a batch, or with each. Example: { \"tool\": \"sketch_constrain\", \"type\": \"tangent\", \"refs\": [0, 1] } makes line 0 tangent to circle 1. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex], or \"origin\". Vertex: 1 start, 2 end, 3 centre. -1 is the horizontal axis, -2 the vertical axis, -3 down are outside edges. Each type and its refs follow. coincident [p, p]. point_on_object [p, g]. horizontal | vertical [g] or [p, p]. parallel | perpendicular | equal [g, g]. tangent [g, g] or end points [p, p]. symmetric [p, p, g] (about a line) or [p, p, p]. distance [g] (length), [p, p] or [p, g]. distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first). radius | diameter [g]. All lengths are mm. angle [g] (from +x) or [g, g] (first to second, ccw), deg. fix [p]: holds a point where it is. fix [g]: blocked; add it last. name: lets you bind it to a parameter later. All or nothing: the tool refuses a constraint that conflicts or is redundant. It names what clashes, and adds nothing. Answer: added (constraint ids from 0) and state.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8492,131 +8597,36 @@
       "type": "string",
       "description": "The sketch's name; may be left out when there is one."
      },
-     "constraints": {
+     "type": {
+      "type": "string",
+      "description": "coincident, point_on_object, horizontal, vertical, parallel, perpendicular, equal, tangent, symmetric, distance, distance_x, distance_y, radius, diameter, angle or fix (the description gives the refs of each)."
+     },
+     "refs": {
       "type": "array",
-      "description": "One item for each constraint: { type, refs, value, name }.",
-      "items": {
-       "type": "object",
-       "properties": {
-        "type": {
-         "type": "string",
-         "description": "coincident, tangent, distance, radius … (the card lists all)."
-        },
-        "refs": {
-         "type": "array",
-         "description": "Ids g or points [g, vertex]. Line 0 tangent to circle 1: [0, 1]."
-        },
-        "value": {
-         "type": "number",
-         "description": "A size: mm, or deg for angle."
-        },
-        "name": {
-         "type": "string",
-         "description": "A name for param_bind."
-        }
-       },
-       "required": [
-        "type"
-       ],
-       "additionalProperties": false
-      }
+      "description": "Ids g or points [g, vertex], in order. Line 0 tangent to circle 1: [0, 1]."
+     },
+     "value": {
+      "type": "number",
+      "description": "A size: mm, or deg for angle."
+     },
+     "name": {
+      "type": "string",
+      "description": "A name for param_bind."
      }
     },
     "required": [
-     "constraints"
+     "type"
     ],
     "additionalProperties": false
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/sketch.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "runner": "steps",
    "steps": [
-    {"let": {"sk": "=sketch_of(a.sketch)", "cs": "=a.constraints"}},
-    {"refuse": "constraints: a list, [{ type: \"distance\", refs: [[0, 1], [0, 2]], value: 30, name: \"len\" }, …] — the types and their refs are in sketch_constrain's description.", "when": "=not is_list(cs) or not cs"},
+    {"let": {"sk": "=sketch_of(a.sketch)", "cs": "=[{k: v for k, v in a.items() if k != 'sketch'}]"}},
     {"let": {"before": "=len(sk.Constraints)", "ng": "=len(sk.Geometry)", "ne": "=ext_count(sk)", "added": "=[]", "far": "=[]"}},
-    {
-     "try": [
-      {
-       "each": "c",
-       "in": "=cs",
-       "index": "i",
-       "steps": [
-        {"refuse": {"fmt": "constraints[{i}]: an object {{ type, refs, value, name }}."}, "when": "=not is_dict(c)"},
-        {"let": {"c": "=con_keys(c, i)"}},
-        {"let": {"refs": "=[ref(r, 'constraints[' + str(i) + '].refs') for r in c.get('refs') or []]", "outside": "='; outside edges -3 to ' + str(-2 - ne) if ne else '; it has no outside edges (sketch_external brings them in)'"}},
-        {
-         "each": "g, p",
-         "in": "=refs",
-         "steps": [
-          {"refuse": {"fmt": "constraints[{i}]: geometry {g} is not in {sk.Label} — its own are 0 to {ng - 1}; -1 and -2 are the axes{outside}. sketch_state lists them."}, "when": "=g >= ng or g < -2 - ne"}
-         ]
-        },
-        {
-         "try": [
-          {"let": {"ts": "=make_constraint(sk, c)"}}
-         ],
-         "on": "refusal",
-         "except": [
-          {"refuse": {"fmt": "constraints[{i}] {error.message}"}}
-         ]
-        },
-        {"let": {"far": "=far + far_joins(sk, ts)"}},
-        {
-         "each": "t",
-         "in": "=ts",
-         "index": "j",
-         "steps": [
-          {
-           "try": [
-            {"let": {"ci": "=sk.addConstraint(constraint(t))"}}
-           ],
-           "except": [
-            {"refuse": {"fmt": "constraints[{i}] ({c.get('type')}): FreeCAD would not take it ({error}) — nothing was added. Check each ref's geometry kind and vertex against sketch_state (a line has vertices 1 and 2, a circle only 3)."}}
-           ]
-          },
-          {"push": {"added": "=ci"}},
-          {"do": "=sk.renameConstraint(ci, c.name if len(ts) == 1 else str(c.name) + '_' + 'xy'[j])", "when": "=c.get('name')"}
-         ]
-        }
-       ]
-      },
-      {"let": {"st": "=state_of(sk)"}},
-      {"let": {"bad": "=[x for x in st.get('conflicting', []) + st.get('redundant', []) + st.get('malformed', []) if x >= before]"}},
-      {
-       "when": "=bad or st['solver'] != 'solved'",
-       "then": [
-        {"let": {"bent": "=[x for x in st.get('malformed', []) if x >= before]"}},
-        {"let": {"bentw": "='; '.join([con_words(sk, i) for i in bent])"}, "when": "=bent"},
-        {"refuse": {"fmt": "FreeCAD's solver cannot use these new constraints of {sk.Label} (malformed constraints): {bentw}. Nothing was added. Check each ref's geometry kind and vertex against sketch_state: a line has vertices 1 and 2, a circle only 3, an arc 1, 2 and 3."}, "code": "invalid_input", "when": "=bent"},
-        {"let": {"who": "=clashing(sk)"}},
-        {
-         "when": "=who",
-         "then": [
-          {"let": {"new_": "='; '.join([con_words(sk, i) for i in who if i >= before]) or 'none'", "old_": "='; '.join([con_words(sk, i) for i in who if i < before]) or 'none'"}},
-          {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}), and any one of them dropped clears it — new: {new_}; existing: {old_}. Nothing was added: leave out a new one, or sketch_edit deleteConstraints an existing one first."}, "code": "invalid_state"}
-         ]
-        },
-        {"let": {"clash": "=sorted(set(st.get('conflicting', []) + st.get('redundant', [])) - set(bad))"}},
-        {"let": {"news": "=[con_words(sk, i) for i in (bad or added)]", "olds": "=[con_words(sk, i) for i in clash] or '—'"}},
-        {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}, against existing {olds}. Nothing was added — drop one, or sketch_edit deleteConstraints the old one first."}, "code": "invalid_state"}
-       ]
-      },
-      {"let": {"st": "=far_join_words(st, sk, far)"}, "when": "=far"}
-     ],
-     "reraise": true,
-     "except": [
-      {
-       "each": "ci",
-       "in": "=sorted(range(before, len(sk.Constraints)), reverse=True)",
-       "steps": [
-        {"do": "=sk.delConstraint(ci)"}
-       ]
-      },
-      {"do": "=sk.solve()"},
-      {"do": "=fresh(sk)"}
-     ]
-    }
+    {"try": [{"each": "c", "in": "=cs", "index": "i", "steps": [{"let": {"refs": "=[ref(r, 'refs') for r in c.get('refs') or []]", "outside": "='; outside edges -3 to ' + str(-2 - ne) if ne else '; it has no outside edges (sketch_external brings them in)'"}}, {"each": "g, p", "in": "=refs", "steps": [{"refuse": {"fmt": "geometry {g} is not in {sk.Label} — its own are 0 to {ng - 1}; -1 and -2 are the axes{outside}. sketch_state lists them."}, "when": "=g >= ng or g < -2 - ne"}]}, {"try": [{"let": {"ts": "=make_constraint(sk, c)"}}], "on": "refusal", "except": [{"refuse": {"fmt": "{error.message}"}}]}, {"let": {"far": "=far + far_joins(sk, ts)"}}, {"each": "t", "in": "=ts", "index": "j", "steps": [{"try": [{"let": {"ci": "=sk.addConstraint(constraint(t))"}}], "except": [{"refuse": {"fmt": "{c.get('type')}: FreeCAD would not take it ({error}) — nothing was added. Check each ref's geometry kind and vertex against sketch_state (a line has vertices 1 and 2, a circle only 3)."}}]}, {"push": {"added": "=ci"}}, {"do": "=sk.renameConstraint(ci, c.name if len(ts) == 1 else str(c.name) + '_' + 'xy'[j])", "when": "=c.get('name')"}]}]}, {"let": {"st": "=state_of(sk)"}}, {"let": {"bad": "=[x for x in st.get('conflicting', []) + st.get('redundant', []) + st.get('malformed', []) if x >= before]"}}, {"when": "=bad or st['solver'] != 'solved'", "then": [{"let": {"bent": "=[x for x in st.get('malformed', []) if x >= before]"}}, {"let": {"bentw": "='; '.join([con_words(sk, i) for i in bent])"}, "when": "=bent"}, {"refuse": {"fmt": "FreeCAD's solver cannot use these new constraints of {sk.Label} (malformed constraints): {bentw}. Nothing was added. Check each ref's geometry kind and vertex against sketch_state: a line has vertices 1 and 2, a circle only 3, an arc 1, 2 and 3."}, "code": "invalid_input", "when": "=bent"}, {"let": {"who": "=clashing(sk)"}}, {"when": "=who", "then": [{"let": {"new_": "='; '.join([con_words(sk, i) for i in who if i >= before]) or 'none'", "old_": "='; '.join([con_words(sk, i) for i in who if i < before]) or 'none'"}}, {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}), and any one of them dropped clears it — new: {new_}; existing: {old_}. Nothing was added: leave out a new one, or sketch_edit deleteConstraints an existing one first."}, "code": "invalid_state"}]}, {"let": {"clash": "=sorted(set(st.get('conflicting', []) + st.get('redundant', [])) - set(bad))"}}, {"let": {"news": "=[con_words(sk, i) for i in (bad or added)]", "olds": "=[con_words(sk, i) for i in clash] or '—'"}}, {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}, against existing {olds}. Nothing was added — drop one, or sketch_edit deleteConstraints the old one first."}, "code": "invalid_state"}]}, {"let": {"st": "=far_join_words(st, sk, far)"}, "when": "=far"}], "reraise": true, "except": [{"each": "ci", "in": "=sorted(range(before, len(sk.Constraints)), reverse=True)", "steps": [{"do": "=sk.delConstraint(ci)"}]}, {"do": "=sk.solve()"}, {"do": "=fresh(sk)"}]}
    ],
    "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"sketch": "=sk.Label", "added": "=added", "state": "=st"}}
   },
@@ -20893,7 +20903,7 @@
   },
   "sketch_project": {
    "group": "sketch",
-   "description": "Bring edges of a binder, datum or another sketch of the same body into this sketch as external geometry. from: the source. edges: [\"Edge3\" | { near, kind }] (default all). defining: true makes them part of the profile (FreeCAD 1.1 and later). Answer: ids (-3 down, in order) for sketch_constrain. For the body's own solid: sketch_external.",
+   "description": "Bring edges of a binder, datum or another sketch of the same body into this sketch as external geometry. from: the source. edges: \"Edge3\", one selector { near, kind } or shape_query's filters, or a list of references [\"Edge3\", \"Edge5\"] (default all). defining: true makes them part of the profile (FreeCAD 1.1 and later). Answer: ids (-3 down, in order) for sketch_constrain. For the body's own solid: sketch_external.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20905,8 +20915,21 @@
       "type": "string"
      },
      "edges": {
-      "type": "array",
-      "items": {}
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object"
+       },
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      ],
+      "description": "\"Edge3\", one selector { near, kind } or shape_query's filters, or a list of references. Left out: every edge."
      },
      "defining": {
       "type": "boolean"
@@ -20926,8 +20949,8 @@
     {"let": {"sk": "=sketch_of(a.sketch)"}},
     {"let": {"src": "=first([o for o in doc().Objects if a.get('from') in (o.Label, o.Name)])"}},
     {"refuse": {"fmt": "from {a.get('from')!r}: no such object with a shape — give the name of a binder (pd_binder makes one from another body), a datum or another sketch in this sketch's body (feature_list names them). For the body's own solid: sketch_external."}, "code": "not_found", "when": "=src is None or not has(src, 'Shape')"},
-    {"let": {"edges": "=a.edges", "names": "=[]"}},
-    {"when": "=edges", "then": [{"each": "e", "in": "=edges", "steps": [{"when": "=is_str(e) and e.startswith(('Edge', 'Vertex'))", "then": [{"push": {"names": "=e"}}], "else": [{"refuse": {"fmt": "edges: \"Edge3\", {{ near: [x, y, z], kind }} or shape_query's filters each; left out, every edge."}, "when": "=not is_dict(e)"}, {"do": "=names.extend(find_edges(src.Shape, [e]))"}]}]}], "else": [{"let": {"names": "=['Edge' + str(i + 1) for i in range(len(src.Shape.Edges))]"}}]},
+    {"let": {"edges": "=edges_form(a.edges)", "names": "=[]"}},
+    {"when": "=edges", "then": [{"each": "e", "in": "=edges", "steps": [{"when": "=is_str(e) and e.startswith(('Edge', 'Vertex'))", "then": [{"push": {"names": "=e"}}], "else": [{"refuse": {"fmt": "edges: \"Edge3\", one selector { near: [x, y, z], kind } or shape_query's filters, or a list of references; left out, every edge."}, "when": "=not is_dict(e)"}, {"do": "=names.extend(find_edges(src.Shape, [e]))"}]}]}], "else": [{"let": {"names": "=['Edge' + str(i + 1) for i in range(len(src.Shape.Edges))]"}}]},
     {"refuse": {"fmt": "{src.Label} has no edges to bring in."}, "when": "=not names"},
     {"let": {"before": "=ext_count(sk)", "added": "=0"}},
     {"each": "name", "in": "=names", "steps": [{"try": [{"try": [{"when": "=a.defining", "then": [{"do": "=sk.addExternal(src.Name, name, True)"}], "else": [{"do": "=sk.addExternal(src.Name, name)"}]}, {"let": {"added": "=added + 1"}}], "on": ["TypeError"], "except": [{"refuse": {"fmt": "defining: this FreeCAD ({version()}) takes no defining external geometry ({error}) — leave defining out and trace the edges with sketch_add instead."}, "code": "unavailable"}]}], "on": "failure", "except": [{"refuse": {"fmt": "{src.Label}.{name} would not come in: {error} — nothing was added. FreeCAD takes outside geometry from the sketch's own body only (from another body: pd_binder first, then project the binder), not from anything built from {sk.Label}, and each edge once."}, "code": "failed"}]}]},

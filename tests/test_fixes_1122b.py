@@ -22,7 +22,7 @@ class SortFind(unittest.TestCase):
         self.assertEqual((names, qs), (["pd_pad", "sketch_add"], ["round an edge"]))
 
     def test_tool_and_queries_in_one_call(self):
-        names, qs, _ = sort_find(Srv, {"tool": ["pd_pad"], "queries": ["hole"]})
+        names, qs, _ = sort_find(Srv, {"card": ["pd_pad"], "queries": ["hole"]})
         self.assertEqual((names, qs), (["pd_pad"], ["hole"]))
 
     def test_loose_names(self):
@@ -35,7 +35,7 @@ class SortFind(unittest.TestCase):
         self.assertTrue(any("pd_pocket" in r for r in read_as))
 
     def test_word_in_tool_is_searched(self):
-        names, qs, read_as = sort_find(Srv, {"tool": "round edges"})
+        names, qs, read_as = sort_find(Srv, {"card": "round edges"})
         self.assertEqual((names, qs), ([], ["round edges"]))
         self.assertTrue(read_as)
 
@@ -175,15 +175,19 @@ class Stubbed(unittest.TestCase):
             self.assertIn('"corner": [10, 0]', e.exception.message)
 
     def test_constraint_fields_refused_with_the_form(self):
-        self.assertEqual(self.sk.con_keys({"type": "fix", "refs": [[1, 2]]}, 0), {"type": "fix", "refs": [[1, 2]]})
-        with self.assertRaises(self.sk.ToolError) as e:
-            self.sk.con_keys({"kind": "fix", "point": [1, 0]}, 2)
+        # 27 Nov: one constraint for each call; the card's schema refuses a field that is not one of its inputs.
+        from agentlink import protocol, runners
+
+        schema = runners.entries()["sketch_constrain"]["inputSchema"]
+        protocol.check_input(schema, {"type": "fix", "refs": [[1, 2]]}, "sketch_constrain")
+        with self.assertRaises(protocol.ToolError) as e:
+            protocol.check_input(schema, {"kind": "fix", "point": [1, 0]}, "sketch_constrain")
         m = e.exception.message
-        self.assertIn("constraints[2]: kind, point: not fields", m)
+        self.assertIn("input.kind: not a known field", m)
         self.assertIn("goes in type", m)
         self.assertIn('"type": "tangent"', m)
-        with self.assertRaises(self.sk.ToolError):
-            self.sk.con_keys({"refs": [0]}, 0)
+        with self.assertRaises(protocol.ToolError):
+            protocol.check_input(schema, {"refs": [0]}, "sketch_constrain")
 
 
 class RectangleWords(Stubbed):

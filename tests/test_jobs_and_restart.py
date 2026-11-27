@@ -227,10 +227,10 @@ class JobsTest(unittest.TestCase):
         self.assertEqual(len(self.out), n)
 
     def test_job_start_inner(self):
-        self.assertEqual(sup_jobs.job_start_inner({"tool": "export", "arguments": {"format": "stl"}, "wait": False}), ("export", {"format": "stl"}, 0.0))
-        self.assertEqual(sup_jobs.job_start_inner({"tool": "batch", "arguments": {}})[2], None)
-        self.assertIsNone(sup_jobs.job_start_inner({"tool": "job_status"}))
-        self.assertIsNone(sup_jobs.job_start_inner({"tool": "app_restart"}))
+        self.assertEqual(sup_jobs.job_start_inner({"job": "export", "arguments": {"format": "stl"}, "wait": False}), ("export", {"format": "stl"}, 0.0))
+        self.assertEqual(sup_jobs.job_start_inner({"job": "batch", "arguments": {}})[2], None)
+        self.assertIsNone(sup_jobs.job_start_inner({"job": "job_status"}))
+        self.assertIsNone(sup_jobs.job_start_inner({"job": "app_restart"}))
         self.assertIsNone(sup_jobs.job_start_inner({}))
 
 

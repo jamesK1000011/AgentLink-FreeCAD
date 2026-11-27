@@ -42,7 +42,7 @@ flowchart LR
 2. The launcher reads the line. It sends it on to the supervisor's stdin (`send()`).
 3. The supervisor's reader thread takes the line (`reader()`).
    - It answers some calls at once, on a thread of their own (`urgent()`): `job_status`, `app_open`, `app_force_restart` and `gui_unstick`. A batch that holds only one of these counts too. These calls never wait behind a held window.
-   - `came()` starts the clock for the call (`sup_jobs.Jobs.came()`). `job_start { tool, arguments }` becomes the call that it names.
+   - `came()` starts the clock for the call (`sup_jobs.Jobs.came()`). `job_start { job, arguments }` becomes the call that it names.
 4. The main loop checks the call.
    - A call with the same tool and arguments that hung FreeCAD two times is refused for the rest of the session.
    - A heavy tool waits for its turn (`queue_admit()`). It waits while macOS reports heat or memory pressure. It is held when the person works in the window while a heavy job runs.

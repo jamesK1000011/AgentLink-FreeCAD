@@ -163,7 +163,7 @@ def _child(case):
                 raise ToolError("invalid_input", "sketch: there are several sketches, name one.")
             sk = found[0]
         doc.add("Geo", "Part::GeomCircle", sk)  # a step of its own, as a real sketch edit is
-        return {"sketch": sk.Label, "added": len(a.get("items") or []), "health": {"ok": True, "verdict": "nothing red"}}
+        return {"sketch": sk.Label, "added": 1, "kind": a.get("kind"), "center": a.get("center"), "health": {"ok": True, "verdict": "nothing red"}}
 
     def pd_pad(a):
         sk = doc.getObject(a.get("sketch") or "") if a.get("sketch") else None
@@ -226,7 +226,7 @@ def _child(case):
 
     design = {"calls": [
         {"tool": "sketch_new", "plane": "XY"},
-        {"tool": "sketch_add", "each": {"x": [10, 30, 50]}, "items": [{"circle": {"at": ["$x", 0], "radius": 3}}]},
+        {"tool": "sketch_add", "each": {"x": [10, 30, 50]}, "kind": "circle", "center": ["$x", 0], "radius": 3},
         {"tool": "pd_pad", "length": 4}]}
     out = {}
     if case == "design":
@@ -240,7 +240,7 @@ def _child(case):
         n = 0
         n += one("sketch_new", {"plane": "XY"})["chars"]
         for x in (10, 30, 50):
-            n += one("sketch_add", {"sketch": "Sketch", "items": [{"circle": {"at": [x, 0], "radius": 3}}]})["chars"]
+            n += one("sketch_add", {"sketch": "Sketch", "kind": "circle", "center": [x, 0], "radius": 3})["chars"]
         n += one("pd_pad", {"sketch": "Sketch", "length": 4})["chars"]
         out["chars"] = n
         out["fastChars"] = None
@@ -276,7 +276,7 @@ def _child(case):
         out["labels"] = labels()
         out["undoNames"] = list(doc.UndoNames)
     elif case == "dry":
-        out["bad"] = fast({"check": True, "calls": [{"tool": "sketch_add", "each": {"x": [1, 2]}, "items": [], "bogus": 1}]})
+        out["bad"] = fast({"check": True, "calls": [{"tool": "sketch_add", "each": {"x": [1, 2]}, "kind": "circle", "bogus": 1}]})
         out["good"] = fast({"check": True, **design})
         out["seen"] = seen
         out["labels"] = labels()
@@ -316,6 +316,34 @@ def _child(case):
         out["run"] = fast({"calls": [{"tool": "run", "tool_": "x"}]})
         out["unknown"] = fast({"calls": [{"tool": "no_such_tool"}]})
         out["labels"] = labels()
+    elif case == "flat1127":
+        # 27 Nov: the renamed inputs (card, job) and the flat sketch inputs, through run, batch and fast.
+        out["findRun"] = one("run", {"tool": "tool_find", "card": "sketch_add"})
+        out["findBatch"] = one("batch", {"calls": [{"tool": "tool_find", "card": "pd_pad"}]})
+        out["findFast"] = fast({"calls": [{"tool": "tool_find", "card": "pd_pad"}]})
+        out["groupsRun"] = one("run", {"tool": "tool_groups", "card": "pd_pad"})
+        out["groupsBatch"] = one("batch", {"calls": [{"tool": "tool_groups", "card": "pd_pad"}]})
+        out["groupsFast"] = fast({"calls": [{"tool": "tool_groups", "card": "pd_pad"}]})
+        out["jobRun"] = one("run", {"tool": "job_start", "job": "measure_mass", "arguments": {}})
+        out["jobBatch"] = one("batch", {"calls": [{"tool": "job_start", "job": "measure_mass", "arguments": {}}]})
+        out["jobFast"] = fast({"calls": [{"tool": "job_start", "job": "measure_mass", "arguments": {}}]})
+        out["oldFind"] = one("tool_find", {"tool": "pd_pad"})
+        out["oldGroups"] = one("tool_groups", {"tool": "pd_pad"})
+        out["oldJob"] = one("job_start", {"tool": "probe_change"})
+        one("sketch_new", {"plane": "XY"})
+        del seen[:]
+        out["addRun"] = one("run", {"tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
+        out["itemsRun"] = one("run", {"tool": "sketch_add", "items": [{"kind": "circle", "center": [0, 0], "radius": 3}]})
+        out["badKind"] = one("run", {"tool": "sketch_add", "kind": "squiggle"})
+        out["eachBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "each": {"x": [15, 45]}, "kind": "circle", "center": ["$x", 15], "radius": 5}]})
+        out["twoBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20]},
+                                                  {"tool": "sketch_add", "kind": "circle", "center": [5, 5], "radius": 2}]})
+        out["conRun"] = one("run", {"tool": "sketch_constrain", "type": "horizontal", "refs": [0]})
+        out["consRun"] = one("run", {"tool": "sketch_constrain", "constraints": [{"type": "horizontal", "refs": [0]}]})
+        out["seenSketch"] = [[t, a] for t, a in seen if t == "sketch_add"]
+        from agentlink import staticbase as _sb, tools as _tools
+        out["props"] = {n: sorted(srv.tools[n].schema["properties"]) for n in ("tool_find", "tool_groups", "job_start")}
+        out["texts"] = {"STATIC_NOTE": _tools.STATIC_NOTE, "WORKING": _tools.WORKING, "TG_CARDS_NOTE": _tools.TG_CARDS_NOTE, "BASIC_FORM": _sb.BASIC_FORM}
     elif case == "flat":
         # One flat step everywhere (26 Nov): run, batch and fast take the same steps.
         calls = [{"tool": "probe_change", "n": 1}, {"tool": "probe_change", "n": 2}]
@@ -331,8 +359,8 @@ def _child(case):
         del seen[:]
         out["eachRun"] = one("run", {"tool": "probe_change", "each": {"x": [15, 45]}, "n": "$x"})
         one("sketch_new", {"plane": "XY"})
-        out["eachBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "each": {"x": [15, 45]}, "sketch": "Sketch", "items": [{"circle": {"at": ["$x", 15], "radius": 5}}]}]})
-        out["eachFast"] = fast({"calls": [{"tool": "sketch_add", "each": {"x": [3, 4, 5]}, "sketch": "Sketch", "items": [{"circle": {"at": ["$x", 0], "radius": 1}}]}]})
+        out["eachBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "each": {"x": [15, 45]}, "sketch": "Sketch", "kind": "circle", "center": ["$x", 15], "radius": 5}]})
+        out["eachFast"] = fast({"calls": [{"tool": "sketch_add", "each": {"x": [3, 4, 5]}, "sketch": "Sketch", "kind": "circle", "center": ["$x", 0], "radius": 1}]})
         out["seenEach"] = [[t, a] for t, a in seen if t in ("probe_change", "sketch_add")]
         del seen[:]
         out["twoVars"] = one("batch", {"calls": [{"tool": "probe_change", "each": {"x": [1], "y": [2]}, "n": "$x"}]})
@@ -393,7 +421,7 @@ class FastPath(unittest.TestCase):
         self.assertEqual(tools, ["fast", "sketch_new", "sketch_add", "sketch_add", "sketch_add", "pd_pad"])
         self.assertEqual([a.get("sketch") for t, a in got["seen"] if t in ("sketch_add", "pd_pad")], ["Sketch"] * 4)
         # The loop: one call for each value, "$x" put in a list.
-        self.assertEqual([a["items"][0]["circle"]["at"] for t, a in got["seen"] if t == "sketch_add"], [[10, 0], [30, 0], [50, 0]])
+        self.assertEqual([a["center"] for t, a in got["seen"] if t == "sketch_add"], [[10, 0], [30, 0], [50, 0]])
         self.assertIn("pd_pad.sketch=Sketch", body["filled"])
         # The record holds each call's whole answer, by its step.
         rec = got["record"]

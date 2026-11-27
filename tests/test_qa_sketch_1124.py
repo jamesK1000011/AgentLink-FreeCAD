@@ -330,7 +330,9 @@ class OpenEnds(unittest.TestCase):
 
 
 class ItemIndex(unittest.TestCase):
-    def run_add(self, items):
+    """The failing shape is named by its own words (27 Nov: sketch_add takes one shape for each call, so there is no items[i] prefix)."""
+
+    def run_add(self, shape):
         return in_a_process(SETUP + '''
     import os, types
     from agentlink import runners
@@ -358,19 +360,17 @@ class ItemIndex(unittest.TestCase):
                "remap": lambda t, ids: t, "item_error": sketch.item_error, "doc": lambda: types.SimpleNamespace(recompute=lambda: 0),
                "state_of": lambda sk: {}}
     try:
-        runners.run_steps("sketch_add", {"steps": e["steps"]}, {"items": %r}, helpers)
+        runners.run_steps("sketch_add", {"steps": e["steps"]}, %r, helpers)
         print(json.dumps(["ok", len(sk.geo)]))
     except ToolError as x:
         print(json.dumps([x.code, x.message]))
-''' % (ROOT, items))
+''' % (ROOT, shape))
 
     def test_the_failing_item_is_named(self):
-        ok = [{"kind": "line"}] * 4
-        self.assertEqual(self.run_add(ok + [{"kind": "same"}]), ["failed", "items[4]: Both points are equal"])
-        self.assertEqual(self.run_add(ok[:1] + [{"kind": "bad"}]), ["invalid_input", "items[1]: circle: radius (or diameter), mm."])
-        self.assertEqual(self.run_add([{"kind": "num"}]), ["invalid_input", "items[0]: size: not a number"])
-        self.assertEqual(self.run_add([{"kind": "line"}, 5]), ["invalid_input", "items[1]: an object { kind, … }."])
-        self.assertEqual(self.run_add(ok), ["ok", 4])
+        self.assertEqual(self.run_add({"kind": "same"}), ["failed", "Both points are equal"])
+        self.assertEqual(self.run_add({"kind": "bad"}), ["invalid_input", "circle: radius (or diameter), mm."])
+        self.assertEqual(self.run_add({"kind": "num"}), ["invalid_input", "size: not a number"])
+        self.assertEqual(self.run_add({"kind": "line"}), ["ok", 1])
 
 
 class BodyExtent(unittest.TestCase):
@@ -400,9 +400,12 @@ class BodyExtent(unittest.TestCase):
         self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)"}})
         self.assertIn("bodyExtent: the box of the body's solid in the sketch's own x/y", new["description"])
         add = e["sketch_add"]["description"]
-        self.assertIn("rectangle {center|corner, size [w,h]}. rounded_rectangle {…, radius}. center puts the middle of the shape on that point. "
-                      "A shape at center [0, 0] goes to the two sides of the sketch origin. corner is the lower-left corner of a rectangle. "
-                      "Use corner to start a shape at an edge of the body (sketch_new gives bodyExtent).", add)
+        self.assertIn("rectangle {center|corner, size}. rounded_rectangle {…, radius}.", add)
+        # 27 Nov: the facts about each input are in the schema's own descriptions
+        props = e["sketch_add"]["inputSchema"]["properties"]
+        self.assertIn("[x, y]: the middle of the shape. A shape at [0, 0] goes to the two sides of the sketch origin.", props["center"]["description"])
+        self.assertIn("rectangle: [x, y] of its lower-left corner. Use it to start a shape at an edge of the body (sketch_new gives bodyExtent).",
+                      props["corner"]["description"])
 
 
 if __name__ == "__main__":

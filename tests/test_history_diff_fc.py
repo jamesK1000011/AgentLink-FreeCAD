@@ -63,7 +63,7 @@ class HistoryDiff(unittest.TestCase):
             self.skipTest("no PartDesign or Sketcher here")
         self.ok("pd_body_new", {"name": "Block"})
         self.ok("sketch_new", {"plane": "XY", "name": "Base"})
-        self.ok("sketch_add", {"sketch": "Base", "items": [{"kind": "rectangle", "corner": [0, 0], "size": [40, 20], "dims": True}]})
+        self.ok("sketch_add", {"sketch": "Base", "kind": "rectangle", "corner": [0, 0], "size": [40, 20], "dims": True})
         self.ok("pd_pad", {"sketch": "Base", "length": 10})
         sk = self.session.doc.getObjectsByLabel("Base")[0]
         i = next(k for k, c in enumerate(sk.Constraints) if c.Type in ("DistanceX", "Distance") and abs(c.Value - 40) < 1e-6)

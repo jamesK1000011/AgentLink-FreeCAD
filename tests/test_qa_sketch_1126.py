@@ -232,7 +232,8 @@ class Words(unittest.TestCase):
         self.assertIn("It is false for an open wire, a branch, or closed loops that cross or touch.", e["sketch_state"]["description"])
         with open(os.path.join(ROOT, "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
             g = f.read()
-        self.assertIn("`[[2, 1], [0, 2]]`, `[[2, 2], [1, 1]]`, `[[1, 2], [3, 1]]`, `[[3, 2], [0, 1]]`", g)
+        for pair in ("`refs: [[2, 1], [0, 2]]`", "`[[2, 2], [1, 1]]`", "`[[1, 2], [3, 1]]`", "`[[3, 2], [0, 1]]`"):
+            self.assertIn(pair, g)
         # the tangent [p, p] form is the one sketch_constrain makes into an end-to-end tangent
         with open(os.path.join(ROOT, "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
             src = f.read()

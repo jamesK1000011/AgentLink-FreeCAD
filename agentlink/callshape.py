@@ -32,7 +32,7 @@ OLD_KEYS = ("arguments", "as", "when", "then", "else", "let", "try", "choose")
 MAX_EACH = 200  # the values of one each (a block takes at most 200 calls)
 EXAMPLE = '{ "tool": "sketch_new", "plane": "XY" }'
 RUN_EXAMPLE = '{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }'
-LOOP_EXAMPLE = '{ "tool": "sketch_add", "each": { "x": [15, 45] }, "items": [{ "kind": "circle", "center": ["$x", 15], "radius": 5 }] }'
+LOOP_EXAMPLE = '{ "tool": "sketch_add", "each": { "x": [15, 45] }, "kind": "circle", "center": ["$x", 15], "radius": 5 }'
 _NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _VAR = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*$")
 

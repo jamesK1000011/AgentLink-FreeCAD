@@ -110,8 +110,8 @@ class SketchKindNames(unittest.TestCase):
     print(json.dumps(out))
 ''')
         m = got["sketch_rectangle"]
-        self.assertIn('use sketch_add with items [{ kind: "rectangle", … }]', m)
-        self.assertIn('{"tool": "sketch_add", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]}', m)
+        self.assertIn('use sketch_add with kind: "rectangle"', m)
+        self.assertIn('{"tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20]}', m)
         self.assertIn('kind: "circle"', got["circle"])
         self.assertIn('"radius": 10', got["circle"])
         self.assertIn('kind: "circle"', got["Sketcher_CreateCircle"])
@@ -119,7 +119,7 @@ class SketchKindNames(unittest.TestCase):
         self.assertIn('kind: "rounded_rectangle"', got["draw_rounded_rectangle"])
         self.assertIn('"radius": 4', got["draw_rounded_rectangle"])  # under half the short side
         self.assertIn('kind: "polyline"', got["sketch_polyline"])
-        self.assertNotIn("sketch_add with items", got["pd_zzz"])
+        self.assertNotIn("sketch_add with kind", got["pd_zzz"])
         # Each worked item has only fields that the card names for its kind.
         for kind, ex in got["examples"].items():
             if ex is not None:
@@ -128,7 +128,7 @@ class SketchKindNames(unittest.TestCase):
         self.assertIsNotNone(got["examples"]["slot"])
         # The one line tool_find gives names the main kinds.
         does = next(h["does"] for h in got["does"]["tools"] if h["tool"] == "sketch_add")
-        self.assertTrue(does.startswith("Add geometry to a sketch: rectangle, circle, line, arc, slot, polygon"), does)
+        self.assertTrue(does.startswith("Add one shape to a sketch: rectangle, circle, line, arc, slot, polygon"), does)
         # In a batch too, on the refused call.
         self.assertIn('kind: "circle"', got["batch"]["refused"]["error"])
 
@@ -138,7 +138,7 @@ class NoListedInFind(unittest.TestCase):
 
     def test_find_hits_and_cards_have_no_listed(self):
         got = run('''
-    print(json.dumps({"find": call("tool_find", {"words": "pad"})[2], "card": call("tool_find", {"tool": "pd_pad"})[2],
+    print(json.dumps({"find": call("tool_find", {"words": "pad"})[2], "card": call("tool_find", {"card": "pd_pad"})[2],
                       "both": call("tool_find", {"queries": ["fillet", "pd_pad"]})[2]}))
 ''')
         for k, text in got.items():
@@ -194,7 +194,7 @@ class ConnectText(unittest.TestCase):
     print(json.dumps([tools.instructions(True, False, static=True), tools.instructions(True, True, static=False)]))
 ''')
         for text in texts:
-            self.assertIn("batch { calls: [{ tool, inputs }] }", text)
+            self.assertIn("batch { calls: [step, step] }", text)
             self.assertIn('guide_read { topic: "batch" }', text)
             for field in ("$from", "$file", "build: ", "(writeTo)", "lines", "record_read"):
                 self.assertNotIn(field, text, field)

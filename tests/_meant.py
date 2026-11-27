@@ -220,9 +220,21 @@ def _meant_only(name, old):
     return old
 
 
+def _flat():
+    """The six tools whose inputs were made flat on 27 Nov (tests/_flat_1127.py:
+    description and inputSchema as made then; the new tests check what they say)."""
+    import _flat_1127
+    return _flat_1127.FLAT
+
+
+FLAT_1127 = ("sketch_add", "sketch_constrain", "pd_fillet", "pd_chamfer", "sketch_project", "sketch_external")
+
+
 def description(name, old):
     """The snapshot's description of a tool with its meant change made, and
     then the STE rewrite when the result is main's original word for word."""
+    if name in FLAT_1127:
+        return _flat()[name]["description"]
     text = _rename_words(name, _meant_only(name, old))
     s = _ste()
     if name in s["now"] and s["orig"].get(name, {}).get("description") == text:
@@ -366,6 +378,8 @@ def schema(name, old):
     """The snapshot's inputSchema of a tool with its meant change made."""
     import copy
 
+    if name in FLAT_1127:
+        return _flat()[name]["inputSchema"]
     m = SCHEMAS.get(name) or {}
     if not m and name not in RENAMES:
         return old

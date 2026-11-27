@@ -22,14 +22,14 @@ class BatchChain(unittest.TestCase):
         return out
 
     def box(self, name):
-        return {"tool": "part_primitive", "arguments": {"kind": "box", "size": [5, 6, 7], "name": name}}
+        return {"tool": "part_primitive", "kind": "box", "size": [5, 6, 7], "name": name}
 
     def test_a_calls_answer_to_a_file_and_back(self):
         b = self.ok("batch", {"calls": [
             {**self.box("Lid"), "to": "lid.json"},
             {"tool": "session_state", "arguments": {}, "to": "state.json"},
-            {"tool": "object_get", "arguments": {"object": {"$file": "state.json", "$at": "bodies.0.name"}, "filter": "Length"}},
-            {"tool": "object_get", "arguments": {"object": {"$from": 1, "$at": "bodies.-1.name"}, "filter": "Width"}},
+            {"tool": "object_get", "object": {"$file": "state.json", "$at": "bodies.0.name"}, "filter": "Length"},
+            {"tool": "object_get", "object": {"$from": 1, "$at": "bodies.-1.name"}, "filter": "Width"},
         ]})
         self.assertEqual(b["ran"], 4, b)
         first = b["results"][0]
@@ -44,7 +44,7 @@ class BatchChain(unittest.TestCase):
 
     def test_a_reference_that_is_not_there_refuses_that_call(self):
         n = len(self.ok("session_state")["bodies"])
-        err, b = self.call("batch", {"calls": [self.box("A"), {"tool": "object_get", "arguments": {"object": {"$from": 0, "$at": "nothere.0"}}}]})
+        err, b = self.call("batch", {"calls": [self.box("A"), {"tool": "object_get", "object": {"$from": 0, "$at": "nothere.0"}}]})
         self.assertFalse(err, b)
         self.assertEqual(b["stopped"], 1)
         e = b["results"][1]["error"]
@@ -53,7 +53,7 @@ class BatchChain(unittest.TestCase):
         self.assertIn("was not run", e["message"])
         # It counts as a refusal: the batch is rolled back whole.
         self.assertEqual(len(self.ok("session_state")["bodies"]), n)
-        err, b = self.call("batch", {"calls": [{"tool": "object_get", "arguments": {"object": {"$file": "missing.json"}}}]})
+        err, b = self.call("batch", {"calls": [{"tool": "object_get", "object": {"$file": "missing.json"}}]})
         self.assertIn("no such file", b["results"][0]["error"]["message"])
 
     def test_paths_are_checked(self):
@@ -62,12 +62,12 @@ class BatchChain(unittest.TestCase):
         self.assertIn("Nothing was run", e["error"]["message"])
         err, e = self.call("batch", {"calls": [{**self.box("A"), "to": "answer.py"}]})
         self.assertTrue(err)
-        err, b = self.call("batch", {"calls": [{"tool": "object_get", "arguments": {"object": {"$file": "~/.ssh/known.json"}}}]})
+        err, b = self.call("batch", {"calls": [{"tool": "object_get", "object": {"$file": "~/.ssh/known.json"}}]})
         self.assertIn("off limits", b["results"][0]["error"]["message"])
         self.assertEqual(len(self.ok("session_state")["bodies"]), 0)
 
     def test_calls_without_references_are_as_before(self):
-        b = self.ok("batch", {"calls": [self.box("A"), {"tool": "session_state", "arguments": {}}]})
+        b = self.ok("batch", {"calls": [self.box("A"), {"tool": "session_state"}]})
         self.assertEqual(b["ran"], 2)
         self.assertIn("result", b["results"][0])
         for k in ("build", "builds", "buildNote"):
@@ -75,11 +75,10 @@ class BatchChain(unittest.TestCase):
 
     def sketch_calls(self):
         return [
-            {"tool": "sketch_add", "arguments": {"sketch": "Sk", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]}},
-            {"tool": "sketch_add", "arguments": {"sketch": "Sk", "items": [{"kind": "circle", "center": [0, 0], "radius": 4}]}},
-            {"tool": "sketch_constrain", "arguments": {"sketch": "Sk", "constraints": [
-                # The circle's id from the call before, not through the conversation.
-                {"type": "radius", "refs": [[{"$from": 1, "$at": "added.0.ids.0"}]], "value": 4}]}},
+            {"tool": "sketch_add", "sketch": "Sk", "kind": "rectangle", "center": [0, 0], "size": [40, 20]},
+            {"tool": "sketch_add", "sketch": "Sk", "kind": "circle", "center": [0, 0], "radius": 4},
+            # The circle's id from the call before, not through the conversation.
+            {"tool": "sketch_constrain", "sketch": "Sk", "type": "radius", "refs": [[{"$from": 1, "$at": "added.0.ids.0"}]], "value": 4},
         ]
 
     def new_sketch(self):
@@ -131,9 +130,9 @@ class BatchChain(unittest.TestCase):
     def test_a_tool_that_builds_for_itself_builds_first(self):
         self.new_sketch()
         b = self.ok("batch", {"build": "end", "calls": self.sketch_calls()[:1] + [
-            {"tool": "sketch_state", "arguments": {"sketch": "Sk", "detail": False}},
-            {"tool": "pd_pad", "arguments": {"sketch": "Sk", "length": 5}},
-            {"tool": "object_set", "arguments": {"object": "Pad", "values": {"Length": 8}}},
+            {"tool": "sketch_state", "sketch": "Sk", "detail": False},
+            {"tool": "pd_pad", "sketch": "Sk", "length": 5},
+            {"tool": "object_set", "object": "Pad", "values": {"Length": 8}},
         ]})
         self.assertEqual(b["ran"], 4, b)
         self.assertEqual([x["when"] for x in b["builds"]], ["before call 1 (sketch_state)", "end"])
@@ -150,7 +149,7 @@ class BatchChain(unittest.TestCase):
         self.new_sketch()
         doc = self.session.doc
         sk = doc.getObjectsByLabel("Sk")[0]
-        err, b = self.call("batch", {"build": "end", "calls": self.sketch_calls()[:2] + [{"tool": "sketch_add", "arguments": {"sketch": "Sk", "items": [{"kind": "nope"}]}}]})
+        err, b = self.call("batch", {"build": "end", "calls": self.sketch_calls()[:2] + [{"tool": "sketch_add", "sketch": "Sk", "kind": "nope"}]})
         self.assertFalse(err, b)
         self.assertEqual(b["stopped"], 2)
         self.assertEqual(len(sk.Geometry), 0)
@@ -158,13 +157,13 @@ class BatchChain(unittest.TestCase):
 
     def test_a_build_that_breaks_a_feature_stops_the_batch(self):
         self.new_sketch()
-        self.ok("sketch_add", {"sketch": "Sk", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]})
+        self.ok("sketch_add", {"sketch": "Sk", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
         self.ok("pd_pad", {"sketch": "Sk", "length": 5})
         doc = self.session.doc
         sk = doc.getObjectsByLabel("Sk")[0]
         n = len(sk.Geometry)
         # One side of the pad's profile deleted: only the rebuild shows it.
-        err, b = self.call("batch", {"build": "end", "calls": [{"tool": "sketch_edit", "arguments": {"sketch": "Sk", "delete": [0]}}]})
+        err, b = self.call("batch", {"build": "end", "calls": [{"tool": "sketch_edit", "sketch": "Sk", "delete": [0]}]})
         self.assertFalse(err, b)
         self.assertTrue(b.get("buildFailed"), b)
         self.assertFalse(b["builds"][-1]["health"]["ok"])

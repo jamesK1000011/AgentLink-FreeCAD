@@ -801,6 +801,25 @@ def _edges_legacy(shape, q, names=()):
     return [(f"Edge{i + 1}", edges[i]) for i in idx]
 
 
+EDGES_FORM = ('edges: one selector — "Edge3", { near: [x, y, z] }, { face: { side: "+z" } }, { all: true } or shape_query\'s filters such as '
+              '{ type: "line", axis: "z" } — or a list of references ["Edge3", "Edge5"]. A list of selector objects is not taken: make one call '
+              "for each selector, or take the references from shape_query and give them as a list (one feature).")
+
+
+def edges_form(q):
+    """The edges input as a list for find_edges: one selector (an object or a
+    reference) is a list of one, and a list holds references only. A list that
+    holds an object, a number or a list is refused with the form (27 Nov:
+    one selector, or a list of references)."""
+    if isinstance(q, (str, dict)):
+        return [q]
+    if isinstance(q, list) and all(isinstance(x, str) for x in q):
+        return q
+    if q is None or q == []:
+        return q
+    raise ToolError("invalid_input", EDGES_FORM)
+
+
 def find_edges(shape, queries, names=()):
     """Edge names (Edge1 …) for queries (families/refs.py): a reference
     "Edge3" / "Body.Edge3" (a face's reference: its edges), shape_query's
@@ -810,7 +829,7 @@ def find_edges(shape, queries, names=()):
     from . import refs
 
     if not queries:
-        raise ToolError("invalid_input", "edges: [{ near: [x,y,z] } | { face: { side: \"+z\" } or { at, normal } } | { all: true } | \"Edge3\" | shape_query's filters { type, radius, axis, … }, …], kind: line | circle to filter.")
+        raise ToolError("invalid_input", EDGES_FORM + " kind: line | circle filters.")
     try:
         got = refs.pick(shape, queries, "edge", "edges", legacy=lambda q: _edges_legacy(shape, q, names), is_legacy=refs.legacy_of(EDGE_KEYS), names=names)
     except ToolError as e:
