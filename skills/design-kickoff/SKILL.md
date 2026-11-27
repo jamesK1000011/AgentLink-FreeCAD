@@ -10,6 +10,8 @@ This skill is the design-engineering method for FreeCAD with Agent Link. It tell
 
 The method in one line: clarify the task, freeze the interfaces, then add detail level by level on a parametric skeleton, check each level, and hand off what each process needs. Rework is cheapest at the start, so spend effort there.
 
+What only the person knows (how a part is made, what it is made of, what it must carry): ask, when someone answers. When nobody answers (a run with no person), take the plain choice, and say it in your last answer.
+
 Write to the person in plain, short sentences. Assume no CAD or engineering skill. Go deeper only when the person shows more skill.
 
 The details are in this skill's own file `design.md`, beside this file (in the AgentLink-FreeCAD repository: `skills/design-kickoff/design.md`). Read each section at its step, by its `##` heading (start with `Start here`). Agent Link's own guides (`guide_read`) hold only facts about FreeCAD and the tools: the design method is here, not there.

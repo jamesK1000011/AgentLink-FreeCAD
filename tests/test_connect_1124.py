@@ -24,9 +24,10 @@ from test_local_fixes_1123 import run  # noqa: E402
 GUIDES = sorted(n[:-3] for n in os.listdir(os.path.join(ROOT, "agentlink", "guides")) if n.endswith(".md"))
 CARD = ("A tool's card (tool_find { card: name }) gives its inputs and an example: read it before the first call of that tool. "
         "A guide gives the workflow and traps: read the section you need when a card is not enough.")
-ASK = ("What only the person knows (how a part is made, what it is made of, what it must carry): ask, when someone answers. "
-       "When nobody answers (a run with no person), take the plain choice, and say it in your last answer. "
-       "Never start, pause or stop a print without the person's typed say-so.")
+# 27 Nov, facts only: the two sentences on asking the person are the design-kickoff skill's
+# (skills/design-kickoff/SKILL.md), not the hub's connect text. The print rule stays.
+ASK = "Never start, pause or stop a print without the person's typed say-so."
+GONE = ("What only the person knows", "When nobody answers")
 WORDS = "PartDesign work (bodies, pads, pockets, holes, fillets) is in feature and sketch."
 
 
@@ -55,7 +56,13 @@ class ConnectWords(unittest.TestCase):
     def test_the_ask_line(self):
         for text in self.texts:
             self.assertIn(ASK, text)
+            for words in GONE:
+                self.assertNotIn(words, text)
             self.assertNotIn("Ask the person what only they know", text)
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills", "design-kickoff", "SKILL.md"), encoding="utf-8") as f:
+            skill = f.read()
+        self.assertIn("What only the person knows (how a part is made, what it is made of, what it must carry): ask, when someone answers. "
+                      "When nobody answers (a run with no person), take the plain choice, and say it in your last answer.", skill)
 
     def test_no_placeholder_is_left(self):
         for text in self.texts:
