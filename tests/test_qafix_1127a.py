@@ -5,6 +5,11 @@
 # QA test part as a special case.
 #   Group A: refusals say what arrived (F2), a place taken by default is
 #            said (F3), and a document from doc_new is an agent's at once (F5).
+#   Group B: where a new sketch shape lies against the face and the body
+#            (F1), the measured change of a body whose sketch was edited (F6),
+#            a partial cut in the result line (F7), removal calls written from
+#            the state (F9), which face a sketch is on (F10), and a true
+#            pd_body_new example.
 # The FreeCAD-facing code runs on the stand-in (tests/_datapd_standin.py) in
 # a child process. Real shapes need a real FreeCAD.
 import json
@@ -266,6 +271,334 @@ class OwnDocument(unittest.TestCase):
         body = src[src.index("    def orientation(self):"):src.index("    def session_state(self, a):")]
         self.assertIn("mine = self.doc.Name in self.agent_docs", body)
         self.assertIn("The agent's document is one an agent made.", body)
+
+
+# ---- F1: where a new shape lies --------------------------------------------------------------
+
+FAKES0 = """
+class BB:
+    def __init__(s, b): s.XMin, s.XMax, s.YMin, s.YMax, s.ZMin, s.ZMax = b; s.DiagonalLength = 100.0
+class Shp:
+    def __init__(s, b, solids=1, vol=100.0):
+        s.BoundBox = BB(b); s.Solids = [s] * solids; s.Faces = [object()] * 6; s.Volume = vol
+    def isNull(s): return False
+class Pl:
+    def __init__(s, ident=True): s.ident = ident
+    def isIdentity(s): return s.ident
+    def toMatrix(s): return "M"
+"""
+FAKES = textwrap.indent(FAKES0, "        ")
+
+
+class Lies(unittest.TestCase):
+    BODY = (-4, 8, -3, 3, 0, 2)
+
+    def test_the_sentence_uses_the_words_of_a_features_answer(self):
+        got = rl.lies_text("the body", (-6, -1, 1, 5, 2, 2), self.BODY)
+        self.assertEqual(got, "Against the body (x -4..8, y -3..3, z 0..2): x past -x by 2; y past +y by 2; z inside (2 from -z, 0 from +z).")
+        self.assertIn(rl.against((-6, -1, 1, 5, 2, 2), self.BODY), got)  # one set of words
+
+    def test_inside_gives_the_distance_to_each_side(self):
+        for i, ax in enumerate("xyz"):
+            lo, hi = self.BODY[2 * i], self.BODY[2 * i + 1]
+            new = list(self.BODY)
+            new[2 * i], new[2 * i + 1] = lo + 0.25, hi - 1.5
+            self.assertIn(f"{ax} inside (0.25 from -{ax}, 1.5 from +{ax})", rl.against(tuple(new), self.BODY))
+
+    def test_a_flat_face_leaves_out_the_axis_it_has_no_size_on(self):
+        face = (-4, 8, -3, 3, 2, 2)
+        got = rl.lies_text("the face", (-6, -1, 1, 2, 2, 2), face, flat=True)
+        self.assertEqual(got, "Against the face (x -4..8, y -3..3, z 2): x past -x by 2; y inside (4 from -y, 1 from +y).")
+        for i in range(3):  # the same on each axis
+            f = [0, 10, 0, 10, 0, 10]
+            f[2 * i + 1] = 0
+            said = rl.lies_text("the face", (1, 2, 1, 2, 1, 2), tuple(f), flat=True)
+            self.assertNotIn(f"{'xyz'[i]} inside", said)
+            self.assertNotIn(f"past -{'xyz'[i]}", said)
+            self.assertEqual(said.count("inside") + said.count("past"), 2)
+
+    def test_a_sketch_plane_inside_the_body(self):
+        got = rl.lies_text("the body", (0, 0, -1, 1, 0, 1), (-7, 5, -3, 3, 0, 2))
+        self.assertIn("x inside (7 from -x, 5 from +x)", got)
+
+    def test_measured_from_the_face_and_the_body_on_stand_ins(self):
+        got = child(FAKES + """
+        face = Shp((-4, 8, -3, 3, 2, 2))
+        feat = types.SimpleNamespace(Shape=types.SimpleNamespace(getElement=lambda n: face), Label="Pad")
+        body = types.SimpleNamespace(Shape=Shp((-4, 8, -3, 3, 0, 2)), Placement=Pl())
+        empty = types.SimpleNamespace(Shape=Shp((0, 0, 0, 0, 0, 0), solids=0), Placement=Pl())
+        on_face = types.SimpleNamespace(PropertiesList=["AttachmentSupport"], AttachmentSupport=[(feat, ("Face6",))])
+        on_plane = types.SimpleNamespace(PropertiesList=["AttachmentSupport"], AttachmentSupport=[(feat, ("",))])
+        world = (-6, -1, 1, 2, 2, 2)
+        out = {}
+        pc.body_of = lambda o: body
+        out["face"] = sketch.lies_words(on_face, world)
+        out["plane"] = sketch.lies_words(on_plane, world)
+        pc.body_of = lambda o: empty
+        out["noSolid"] = sketch.lies_words(on_plane, world)
+        pc.body_of = lambda o: None
+        out["noBody"] = sketch.lies_words(on_plane, world)
+        pc.body_of = lambda o: body
+        on_face.Document = types.SimpleNamespace(RecomputesFrozen=True)
+        out["held"] = sketch.lies_words(on_face, world)
+        print(json.dumps(out))
+        """)
+        self.assertEqual(got["face"], ["Against the face (x -4..8, y -3..3, z 2): x past -x by 2; y inside (4 from -y, 1 from +y).",
+                                       "Against the body (x -4..8, y -3..3, z 0..2): x past -x by 2; y inside (4 from -y, 1 from +y); z inside (2 from -z, 0 from +z)."])
+        self.assertEqual(len(got["plane"]), 1)
+        self.assertTrue(got["plane"][0].startswith("Against the body"))
+        self.assertEqual((got["noSolid"], got["noBody"], got["held"]), ([], [], []))  # nothing measured: nothing said
+
+    def test_the_result_line_has_it_after_the_shape_and_before_the_wires(self):
+        line = rl.sketch_add_result(["circle, id 0: centre (1, 1), radius 2."], 1, 1, 0, ["Against the body (x 0..1, y 0..1, z 0..1): x inside (0 from -x, 0 from +x)."])
+        self.assertEqual(line, "circle, id 0: centre (1, 1), radius 2. Against the body (x 0..1, y 0..1, z 0..1): x inside (0 from -x, 0 from +x). The sketch has 1 wire, 1 closed, 0 open ends.")
+        self.assertEqual(rl.sketch_add_result(["a."], 1, 1, 0), "a. The sketch has 1 wire, 1 closed, 0 open ends.")
+
+    def test_sketch_add_on_the_stand_in_has_the_sentence_in_result(self):
+        got = child(FAKES + """
+        s = fc.Session(tempfile.mkdtemp())
+        b = fc.body(s, "B")
+        fc.drawing(s, b, "S")
+        solid = types.SimpleNamespace(Shape=Shp((-4, 8, -3, 3, 0, 2)), Placement=Pl())
+        pc.body_of = lambda o: solid
+        r = tool(sketch, s, "sketch_add").fn({"sketch": "S", "kind": "rectangle", "corner": [6, 1], "size": [4, 1]})
+        print(json.dumps([list(r)[0], r["result"]]))
+        """)
+        self.assertEqual(got[0], "result")
+        self.assertIn("Against the body (x -4..8, y -3..3, z 0..2): x past +x by 2; y inside (4 from -y, 1 from +y); z inside (0 from -z, 2 from +z).", got[1])
+        self.assertLess(got[1].index("Against the body"), got[1].index("The sketch has"))
+
+
+# ---- F10: which face a sketch is on ----------------------------------------------------------
+
+class WhichFace(unittest.TestCase):
+    def test_the_face_is_said_by_its_side_not_by_its_centre(self):
+        got = child("""
+        V = fc.Vec if hasattr(fc, "Vec") else __import__("FreeCAD").Vector
+        def face(n, c):
+            return types.SimpleNamespace(ParameterRange=(0, 1, 0, 1), normalAt=lambda u, v: V(*n), CenterOfMass=V(*c))
+        def link(n, c, label="Pad"):
+            f = face(n, c)
+            return types.SimpleNamespace(Shape=types.SimpleNamespace(getElement=lambda name: f), Label=label), ["Face6"]
+        out = []
+        for n, c in (((0, 0, 1), (7, 4, 2.5)), ((0, 0, -1), (7, 4, 0)), ((1, 0, 0), (9, 4, 1)), ((0, -1, 0), (7, -3, 1))):
+            l = link(n, c)
+            out.append(sketch.face_said(types.SimpleNamespace(Tip=l[0]), l, "face at [7.0, 4.0, 2.5]"))
+        l = link((0, 0, 1), (7, 4, 2.5), "Base")
+        out.append(sketch.face_said(types.SimpleNamespace(Tip=None), l, "x"))
+        out.append(sketch.face_said(types.SimpleNamespace(Tip=None), (None, ["Face1"]), "face at [1, 2, 3]"))
+        pl = types.SimpleNamespace(Base=V(0, 0, 2.5), Rotation=types.SimpleNamespace(multVec=lambda v: v))
+        out.append(sketch.on_words(out[0], pl))
+        print(json.dumps(out))
+        """)
+        self.assertEqual(got[:4], ["the face +z at z 2.5", "the face -z at z 0", "the face +x at x 9", "the face -y at y -3"])
+        self.assertEqual(got[4], "the face +z at z 2.5 (Base's)")
+        self.assertEqual(got[5], "face at [1, 2, 3] (its centre)")  # not read: plane_ref's words, marked as the centre
+        self.assertEqual(got[6], "the face +z at z 2.5; sketch origin at [0, 0, 2.5]")
+        self.assertNotIn("centre", " ".join(got[:5] + got[6:]))
+
+    def test_the_result_line_and_on_use_it(self):
+        e = runners.entries()["sketch_new"]
+        f = e["answer"]["fields"]
+        self.assertEqual(f["result"], "=new_result(sk, b, said, link)")
+        self.assertEqual(f["on"], "=on_words(said, sk.Placement) if 'face' in a else what")
+        self.assertEqual(rl.sketch_new_result("S", "the face +z at z 2.5", "x runs +X.", None, ((0, 4), (0, 2), (0, 0)))[:46], "Sketch S is on the face +z at z 2.5. x runs +X")
+
+
+# ---- F6: the measured change of a body whose sketch was edited --------------------------------
+
+class UsedSketch(unittest.TestCase):
+    def test_the_sentences(self):
+        box = (0, 9, 0, 4, 0, 2)
+        self.assertEqual(rl.body_change_text("Body", 72.0, 65.75, box, box, 1, 1), "This call changed Body: volume change -6.25 mm³, now 65.75 mm³.")
+        self.assertEqual(rl.body_change_text("Body", 72.0, 72.004, box, box, 1, 1), "This call left the volume of Body as it was (72 mm³).")
+        got = rl.body_change_text("Body", 72.0, 80.0, box, (0, 10, 0, 4, 0, 2), 1, 2)
+        self.assertEqual(got, "This call changed Body: volume change +8 mm³, now 80 mm³. The body before is x 0..9, y 0..4, z 0..2. "
+                              "The body now is x 0..10, y 0..4, z 0..2. The body is 2 solids (was 1).")
+
+    def test_measured_before_and_after_on_stand_ins(self):
+        got = child(FAKES + """
+        pad = types.SimpleNamespace(TypeId="PartDesign::Pad", Label="Pad", State=[], Profile=None)
+        doc = types.SimpleNamespace(RecomputesFrozen=False)
+        sk = types.SimpleNamespace(Name="Sketch", Label="Base", InList=[pad], Document=doc, State=[], TypeId="Sketcher::SketchObject")
+        pad.Profile = sk
+        free = types.SimpleNamespace(Name="Sketch001", Label="Free", InList=[], Document=doc, State=[], TypeId="Sketcher::SketchObject")
+        body = types.SimpleNamespace(Name="Body", Label="Body", Shape=Shp((0, 9, 0, 4, 0, 2), vol=72.0), Group=[sk, pad], State=[], TypeId="PartDesign::Body")
+        pc.body_of = lambda o: body
+        out = {}
+        mark = pc.used_mark(sk)
+        out["mark"] = [mark["volume"], list(mark["box"]), mark["solids"]]
+        out["unusedHasNoMark"] = pc.used_mark(free)
+        body.Shape = Shp((0, 9, 0, 4, 0, 2), vol=65.75)
+        out["changed"] = pc.used_change(sk, mark)
+        out["note"] = pc.used_sketch_note(sk, tool="sketch_add", change=out["changed"])
+        out["forecast"] = pc.used_sketch_note(sk, tool="sketch_add")
+        body.Group.append(free)
+        out["noteFree"] = pc.used_sketch_note(sk, tool="sketch_add", change=out["changed"])
+        body.Group.pop()
+        doc.RecomputesFrozen = True
+        out["held"] = pc.used_change(sk, mark)
+        doc.RecomputesFrozen = False
+        pad.State = ["Touched"]
+        out["touched"] = pc.used_change(sk, mark)
+        pad.State = []
+        out["noMark"] = pc.used_change(sk, None)
+        out["otherSketch"] = pc.used_change(free, mark)
+        body.Shape = Shp((0, 9, 0, 4, 0, 2), vol=72.0)
+        out["same"] = pc.used_change(sk, mark)
+        # the session keeps the reading of the first sketch a call works on
+        s = types.SimpleNamespace(sketch_now=None, filled_now=[], sketch_before=None)
+        pc.note_named(s, sk)
+        out["kept"] = s.sketch_before["volume"]
+        print(json.dumps(out))
+        """)
+        self.assertEqual(got["mark"], [72.0, [0, 9, 0, 4, 0, 2], 1])
+        self.assertIsNone(got["unusedHasNoMark"])
+        self.assertEqual(got["changed"], "This call changed Body: volume change -6.25 mm³, now 65.75 mm³.")
+        self.assertEqual(got["note"], "Note: Base is the profile of Pad. This call changed Body: volume change -6.25 mm³, now 65.75 mm³.")
+        self.assertEqual(got["forecast"], "Note: Base is the profile of Pad; adding to it changes Pad.")  # not measured: the words as before
+        self.assertTrue(got["noteFree"].startswith("Base is used by Pad. This call changed Body: volume change -6.25 mm³, now 65.75 mm³. Body also has a sketch that is not used: Free."), got["noteFree"])
+        for k in ("held", "touched", "noMark", "otherSketch"):  # not measured: not said
+            self.assertIsNone(got[k], k)
+        self.assertEqual(got["same"], "This call left the volume of Body as it was (72 mm³).")
+        self.assertEqual(got["kept"], 72.0)
+
+    def test_a_constraint_is_a_change_to_a_used_sketch_too(self):
+        self.assertIn("sketch_constrain", protocol.SKETCH_CHANGE_TOOLS)
+        self.assertLessEqual(protocol.SKETCH_GEOMETRY_TOOLS, protocol.SKETCH_CHANGE_TOOLS)
+
+
+# ---- F7: a partial cut in the result line ----------------------------------------------------
+
+class PartialCut(unittest.TestCase):
+    def test_the_sentence(self):
+        self.assertEqual(rl.profiles_text(2, 2, [62.5, 37.5], 0), "2 of 2 profiles cut in part (62.5% and 37.5% of the volume that each area gives over the same depth).")
+        self.assertEqual(rl.profiles_text(1, 1, [40], 0), "1 of 1 profile cut in part (40% of the volume that its area gives over the same depth).")
+        self.assertEqual(rl.profiles_text(3, 3, [40], 1), "1 of 3 profiles cut in part (40% of the volume that its area gives over the same depth). 1 of 3 profiles cut nothing.")
+        self.assertEqual(rl.profiles_text(3, 3, [], 0), "")  # every profile did all of it: nothing is said
+        self.assertEqual(rl.profiles_text(2, 2, [10], 0, cut=False), "1 of 2 profiles added in part (10% of the volume that its area gives over the same depth).")
+        self.assertIn("12 of 20 profiles were measured.", rl.profiles_text(20, 12, [], 3))
+
+    def test_it_stands_in_the_result_line_before_the_solids(self):
+        old = (0, 9, 0, 4, 0, 2)
+        got = rl.feature_result("Pocket", "pd_pocket", -3.0, region=[(8, 9, 1, 2, 0, 2)], old_box=old, cut=True, faces=["+z at z 2"], solids=1, solids_was=1,
+                                profiles=rl.profiles_text(1, 1, [50], 0))
+        self.assertTrue(got.endswith("It opens on +z at z 2. 1 of 1 profile cut in part (50% of the volume that its area gives over the same depth). The body is 1 solid (was 1)."), got)
+
+    def test_measured_by_the_profile_code_for_one_profile_and_for_several(self):
+        got = child(FAKES + """
+        V = __import__("FreeCAD").Vector
+        class Hit:
+            def __init__(s, vol, depth): s.Volume = vol; s.Vertexes = [types.SimpleNamespace(Point=V(0, 0, 0)), types.SimpleNamespace(Point=V(0, 0, depth))]
+        class Face:
+            def __init__(s, area, took, depth, in_old=1.0): s.Area, s.took, s.depth, s.in_old = area, took, depth, in_old
+            def normalAt(s, u, v): return V(0, 0, 1)
+            def translated(s, v): return s
+            def extrude(s, v): return s
+            def common(s, other): return Hit(s.took, s.depth) if other is reg else Hit(s.in_old, 1.0)
+        old = Shp((0, 9, 0, 4, 0, 2)); old.BoundBox.Center = V(0, 0, 0)
+        reg = Shp((0, 1, 0, 1, 0, 2)); reg.BoundBox.Center = V(0, 0, 0)
+        feat = types.SimpleNamespace(TypeId="PartDesign::Pocket", Label="Pocket")
+        out = {}
+        def run(faces, cut=True):
+            got = [(f"the outline {i}", x) for i, x in enumerate(faces)]
+            pc.profile_faces = lambda f: got if len(got) > 1 else []
+            pc.one_profile = lambda f: got if len(got) == 1 else []
+            rec = {}
+            return [pc.profile_results(feat, reg, old, 0.01, cut=cut, rec=rec), rec, pc._profiles_line({"profiles": rec}, cut)]
+        out["onePart"] = run([Face(4.0, 5.0, 2.0)])                       # 5 of 8 mm³
+        out["oneFull"] = run([Face(4.0, 8.0, 2.0)])
+        out["two"] = run([Face(4.0, 6.0, 2.0), Face(4.0, 2.0, 2.0)])     # 75% and 25% of each one's 8 mm³
+        out["none"] = run([Face(4.0, 8.0, 2.0), Face(4.0, 0.0, 2.0)])
+        out["pad"] = run([Face(4.0, 4.0, 2.0)], cut=False)
+        print(json.dumps(out))
+        """)
+        field, rec, line = got["onePart"]
+        self.assertEqual(field, {})  # the profiles field stays for a sketch of several profiles
+        self.assertEqual((rec["n"], rec["part"], rec["none"]), (1, [62.5], 0))
+        self.assertEqual(line, "1 of 1 profile cut in part (62.5% of the volume that its area gives over the same depth).")
+        self.assertEqual(got["oneFull"][2], "")
+        field, rec, line = got["two"]
+        self.assertIn("2 profiles", field["profiles"])
+        self.assertEqual(line, "2 of 2 profiles cut in part (75% and 25% of the volume that each area gives over the same depth).")
+        self.assertEqual(got["none"][2], "1 of 2 profiles cut nothing.")
+        self.assertEqual(got["pad"][2], "1 of 1 profile added in part (50% of the volume that its area gives over the same depth).")
+
+
+# ---- F9: removal calls written from the state ------------------------------------------------
+
+class Removal(unittest.TestCase):
+    def test_no_state_gives_the_general_words(self):
+        # this process has no FreeCAD: the state is not read
+        self.assertEqual(protocol._remove_words([("document", "D", "D", "D", ())]), "doc_close")
+        self.assertEqual(protocol._remove_words([("object", "D", "Pad", "Pad", ())]), "feature_remove (a feature of a body) or object_delete")
+        self.assertEqual(protocol._remove_words([]), "history_undo")
+
+    def test_each_call_is_one_that_its_tool_takes_now(self):
+        got = child("""
+        import FreeCAD
+        from agentlink import protocol, store
+        class Obj:
+            def __init__(s, name, type_, label=None): s.Name, s.Label, s.TypeId, s.InList, s.PropertiesList, s.Group = name, label or name, type_, [], [], []
+            def getTypeIdOfProperty(s, p): return "App::PropertyLink"
+        class Doc:
+            def __init__(s, name, objs=(), file=""):
+                s.Name = s.Label = name; s.Objects = list(objs); s.FileName = file
+                for o in objs: o.Document = s
+            def getObject(s, n): return next((o for o in s.Objects if o.Name == n), None)
+        body = Obj("Body", "PartDesign::Body")
+        pad, pad2, fillet, box = Obj("Pad", "PartDesign::Pad"), Obj("Pad001", "PartDesign::Pad", "Pad 2"), Obj("Fillet", "PartDesign::Fillet"), Obj("Box", "Part::Box")
+        body.Group = [pad, pad2, fillet]
+        for o in (pad, pad2, fillet): o.InList = [body]
+        fillet.PropertiesList, fillet.Base = ["Base"], pad2
+        pad2.InList.append(fillet)                       # the fillet uses Pad 2
+        work = Doc("Work", [body, pad, pad2, fillet, box])
+        clean = Doc("Clean", [], "/tmp/clean.FCStd")
+        docs = {"Work": work, "Clean": clean}
+        FreeCAD.listDocuments = lambda: dict(docs)
+        changed = {"Work": True, "Clean": False}
+        store.is_changed = lambda d: changed[d.Name]
+        pc.body_of = lambda o: body if o in body.Group else None
+        pc.pd_bodies = lambda d: [body]
+        m = lambda kind, o, d="Work": (kind, d, getattr(o, "Name", o), getattr(o, "Label", o), ())
+        out = {"unsaved": protocol._remove_words([m("document", "Work")]), "saved": protocol._remove_words([m("document", "Clean", "Clean")]),
+               "gone": protocol._remove_words([m("document", "Nope", "Nope")]),
+               "feature": protocol._remove_words([m("object", pad)]), "used": protocol._remove_words([m("object", pad2)]),
+               "plain": protocol._remove_words([m("object", box)]),
+               "held": protocol._remove_words([m("object", body), m("object", pad)])}
+        other = Obj("Body001", "PartDesign::Body", "Body 2")
+        pc.pd_bodies = lambda d: [body, other]
+        out["twoBodies"] = protocol._remove_words([m("object", pad)])
+        print(json.dumps(out))
+        """)
+        self.assertEqual(got["unsaved"], 'doc_close { documents: ["Work"], discard: true } (Work has changes that are not saved, and discard loses them)')
+        self.assertEqual(got["saved"], 'doc_close { documents: ["Clean"] }')
+        self.assertEqual(got["gone"], "doc_close")
+        self.assertEqual(got["feature"], 'feature_remove { feature: "Pad" }')
+        self.assertEqual(got["used"], 'feature_remove { feature: "Pad 2" } after Fillet (which uses Pad 2) is removed')
+        self.assertEqual(got["plain"], 'object_delete { objects: ["Box"] }')
+        self.assertEqual(got["held"], 'object_delete { objects: ["Body"] }')  # the pad goes with the body that holds it
+        self.assertEqual(got["twoBodies"], 'feature_remove { body: "Body", feature: "Pad" }')
+
+    def test_the_named_inputs_are_the_tools_own(self):
+        for name, fields in (("doc_close", ("documents", "discard")), ("feature_remove", ("body", "feature")), ("object_delete", ("objects",))):
+            for f in fields:
+                self.assertIn(f, schema(name)["properties"], (name, f))
+
+
+# ---- the pd_body_new example -----------------------------------------------------------------
+
+class BodyExample(unittest.TestCase):
+    def test_the_example_marks_name_as_a_value_to_give(self):
+        from agentlink import examples
+
+        got = examples.for_tool("pd_body_new", {}, how="null")
+        self.assertEqual(got["plain"], {"tool": "pd_body_new", "name": None})
+        self.assertEqual(got["ready"], {"tool": "pd_body_new", "name": None})
+        self.assertEqual(got["fill"], ["name: the label of the body; without name, the label is Body."])
+        self.assertIn("'Body'", json.dumps(runners.entries()["pd_body_new"]["steps"]))  # the label without name, as the tool has it
+        self.assertIsNone(refused("pd_body_new", {}))
+        self.assertIn("input.name: give the value", refused("pd_body_new", {"name": None}))
 
 
 if __name__ == "__main__":

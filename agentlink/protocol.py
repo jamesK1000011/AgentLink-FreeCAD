@@ -797,6 +797,10 @@ SKETCH_GEOMETRY_TOOLS = frozenset(("sketch_add", "sketch_offset", "sketch_extern
                                    "sketch_extend", "sketch_join", "sketch_carbon", "sketch_project", "sketch_to_bspline",
                                    "sketch_bspline", "sketch_mirror"))
 
+# With the tools that change a used sketch through its constraints: their
+# answer gets the measured change of the body (no words when none is measured).
+SKETCH_CHANGE_TOOLS = SKETCH_GEOMETRY_TOOLS | frozenset(("sketch_constrain",))
+
 ORIENT_HEAD = "\n\nWhere you are, read at connect (session_state reads it again): "
 
 
@@ -1493,18 +1497,18 @@ class Server:
             # A sketch a tool took when none was named, said in filled; the
             # sketch the call works on, for the used-sketch note
             # (families/pd_common.py sketch_of; decision 4, 23 Nov).
-            held = (getattr(s, "filled_now", None), getattr(s, "sketch_now", None))
-            s.filled_now, s.sketch_now = [], None
+            held = (getattr(s, "filled_now", None), getattr(s, "sketch_now", None), getattr(s, "sketch_before", None))
+            s.filled_now, s.sketch_now, s.sketch_before = [], None, None
         try:
             result = self._call_core(params)
         finally:
             if s is not None:
-                got, sk = s.filled_now, s.sketch_now
-                s.filled_now, s.sketch_now = held
+                got, sk, before = s.filled_now, s.sketch_now, getattr(s, "sketch_before", None)
+                s.filled_now, s.sketch_now, s.sketch_before = held
                 self._acted = (list(got or ()), sk)  # what the call acted on, for again_after
         if s is not None:
             try:
-                self._sketch_words(params, result, got, sk)
+                self._sketch_words(params, result, got, sk, before)
             except Exception:  # noqa: BLE001 - words only
                 pass
         if isinstance(result, dict) and result.get("isError"):
@@ -1514,17 +1518,23 @@ class Server:
                 pass
         return result
 
-    def _sketch_words(self, params, result, filled, sk):
+    def _sketch_words(self, params, result, filled, sk, before=None):
         """filled: the sketch a tool took when none was named, as
         "pd_pad.sketch=Sketch 2 (open in edit in the window)". sketchNote: a
         change to the geometry of a sketch a feature uses while its body
-        has an unused sketch (decision 4, D-b)."""
+        has an unused sketch (decision 4, D-b), with the measured change of
+        the body (before: pd_common.used_mark's reading from before the
+        call; a constraint changes a used sketch too)."""
         name = plain_name(self, params.get("name")) or params.get("name")
         note = None
-        if sk is not None and name in SKETCH_GEOMETRY_TOOLS and isinstance(result, dict) and not result.get("isError"):
+        if sk is not None and name in SKETCH_CHANGE_TOOLS and isinstance(result, dict) and not result.get("isError"):
             from .families import pd_common
 
-            note = pd_common.used_sketch_note(sk, tool=name)
+            change = pd_common.used_change(sk, before)
+            if name in SKETCH_GEOMETRY_TOOLS:
+                note = pd_common.used_sketch_note(sk, tool=name, change=change)
+            elif change:
+                note = pd_common.used_sketch_note(sk, tool=name, change=change)
         if not filled and not note:
             return
         content = (result or {}).get("content") or []
@@ -1944,16 +1954,84 @@ def _made_words(made):
 
 
 def _remove_words(made):
-    """The tools that take back what a recorded call made."""
+    """The calls that take back what a recorded call made, written from the
+    state as it is now, so each one named is a call that its tool takes now
+    (27 Nov QA: "doc_close" for a document with changes not saved, which
+    doc_close refuses without discard). What is not read from the state
+    gets the general words."""
     out = []
     geo = [(label, sorted(ids)) for kind, _d, _n, label, ids in made if kind == "geometry"]
     if geo:
         out.append(f"sketch_edit {{ sketch: \"{geo[0][0]}\", delete: {geo[0][1]} }}")
-    if any(m[0] == "object" for m in made):
-        out.append("feature_remove (a feature of a body) or object_delete")
-    if any(m[0] == "document" for m in made):
-        out.append("doc_close")
+    objs = [m for m in made if m[0] == "object"]
+    if objs:
+        out += _object_removals(objs) or ["feature_remove (a feature of a body) or object_delete"]
+    for m in made:
+        if m[0] == "document":
+            out.append(_doc_removal(m[1]))
     return " or ".join(out) or "history_undo"
+
+
+def _doc_removal(name):
+    """doc_close for the document of that name as doc_close takes it now:
+    with discard: true when it has changes that are not saved (doc_close
+    refuses it without), and the words say that discard loses them."""
+    try:
+        import FreeCAD
+
+        from .store import is_changed
+
+        d = FreeCAD.listDocuments().get(name)
+        if d is None:
+            return "doc_close"
+        if is_changed(d) or (not d.FileName and len(d.Objects) > 0):
+            return f"doc_close {{ documents: [\"{name}\"], discard: true }} ({d.Label} has changes that are not saved, and discard loses them)"
+        return f"doc_close {{ documents: [\"{name}\"] }}"
+    except Exception:  # noqa: BLE001 - the state is not read: the tool's name only
+        return "doc_close"
+
+
+def _object_removals(objs):
+    """The removal call for each object that a recorded call made, as its
+    tool takes it now: feature_remove for a feature or a sketch of a
+    PartDesign body, object_delete for another object. An object that
+    another made object holds goes with its holder. An object that
+    something uses is refused by both tools: the words name what uses it,
+    to remove first. [] when the state is not read."""
+    try:
+        import FreeCAD
+
+        from .families import pd_common as pc
+
+        docs = FreeCAD.listDocuments()
+        found = []
+        for _kind, doc, name, _label, _ids in objs:
+            d = docs.get(doc)
+            o = d.getObject(name) if d is not None else None
+            if o is None:
+                return []
+            found.append(o)
+        made = {o.Name for o in found}
+        out = []
+        for o in found:
+            if any(getattr(p, "Name", None) in made for p in (getattr(o, "InList", None) or [])):
+                continue  # held or used by another object of the same call: it goes with that one
+            body = pc.body_of(o)
+            t = str(getattr(o, "TypeId", ""))
+            in_body = body is not None and t.startswith(("PartDesign::", "Sketcher::")) and t != "PartDesign::Body"
+            users = [p for p in (getattr(o, "InList", None) or []) if p is not body and getattr(p, "TypeId", "") != "PartDesign::Body"
+                     and (pc.uses(p, o) if in_body else o not in list(getattr(p, "Group", None) or []))]
+            users = list(dict.fromkeys(p.Label for p in users))
+            if in_body:
+                # body: may be left out only when the document has one body
+                whose = f'body: "{body.Label}", ' if len(pc.pd_bodies(o.Document)) > 1 else ""
+                call = "feature_remove { " + whose + f'feature: "{o.Label}"' + " }"
+            else:
+                call = f"object_delete {{ objects: [\"{o.Label}\"] }}"
+            out.append(f"{call} after {', '.join(users)} (which {'uses' if len(users) == 1 else 'use'} {o.Label}) {'is' if len(users) == 1 else 'are'} removed" if users else call)
+        return out[:4] + ([f"{len(out) - 4} more"] if len(out) > 4 else [])
+    except Exception:  # noqa: BLE001 - the state is not read
+        return []
 
 
 def _token(doc):

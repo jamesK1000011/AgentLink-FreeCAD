@@ -1122,6 +1122,57 @@ def _mid(g):
     return g.value((g.FirstParameter + g.LastParameter) / 2)
 
 
+def support_face(sk):
+    """The face that sketch sk is on, in the frame of its body's parent (the
+    frame of the body's own Shape), or None: a sketch on a plane, or a face
+    that is not read."""
+    try:
+        link = getattr(sk, pc.support_prop(sk), None)
+        obj, subs = link[0] if isinstance(link, (list, tuple)) and link and isinstance(link[0], (list, tuple)) else link
+        sub = subs[0] if isinstance(subs, (list, tuple)) else subs
+        if not isinstance(sub, str) or not sub.startswith("Face"):
+            return None
+        f = obj.Shape.getElement(sub)
+        b = pc.body_of(sk)
+        pl = getattr(b, "Placement", None)
+        if pl is not None and not pl.isIdentity():
+            f = f.transformed(pl.toMatrix())
+        return f
+    except Exception:  # noqa: BLE001 - not read: not said
+        return None
+
+
+def lies_words(sk, world):
+    """Where the world box of a call's new shapes lies against the face
+    the sketch is on and against its body's solid, one sentence each
+    (resultline.lies_text: the words of a feature's answer), from the
+    boxes as they are measured now. A sentence whose box is not read is
+    left out; a body with no solid has none. Nothing is said while a batch
+    holds the document's recompute (agentlink/hold.py): the body is then
+    the one from before the build. 27 Nov QA: the answers said where
+    material went only after a feature was made."""
+    out = []
+    try:
+        if getattr(getattr(sk, "Document", None), "RecomputesFrozen", False) is True:
+            return []
+    except Exception:  # noqa: BLE001
+        pass
+    f = support_face(sk)
+    if f is not None:
+        try:
+            out.append(rl.lies_text("the face", world, _box6(f.BoundBox), flat=True))
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        b = pc.body_of(sk)
+        shape = b.Shape if b is not None else None
+        if shape is not None and not shape.isNull() and shape.Solids:
+            out.append(rl.lies_text("the body", world, _box6(shape.BoundBox)))
+    except Exception:  # noqa: BLE001
+        pass
+    return [t for t in out if t]
+
+
 def add_result(sk, out, st):
     """sketch_add's result line: each shape of the call with its ids, its
     extent in the sketch's x/y and in the world, a circle's centre and
@@ -1138,7 +1189,7 @@ def _add_result(sk, out, st):
         frame = frame_of(sk)
     except Exception:  # noqa: BLE001
         frame = None
-    shapes = []
+    shapes, worlds = [], []
     for item in out or []:
         ids = list(item.get("ids") or [])
         kw = {}
@@ -1162,6 +1213,7 @@ def _add_result(sk, out, st):
             kw["xr"], kw["yr"] = (box[0], box[1]), (box[2], box[3])
             if frame is not None:
                 kw["world"] = rl.world_box(frame, kw["xr"], kw["yr"])
+                worlds.append(kw["world"])
         if isinstance(item.get("byDefault"), dict):
             kw["default"] = item["byDefault"]
         shapes.append(rl.shape_text(str(item.get("kind") or "shape"), ids, **kw))
@@ -1173,7 +1225,11 @@ def _add_result(sk, out, st):
             ends = len(open_ends_of(sk, ws)) if ws else 0
         except Exception:  # noqa: BLE001
             ends = None
-    return rl.sketch_add_result(shapes, wires, closed, ends)
+    lies = []
+    if worlds:
+        union = tuple(f(w[i] for w in worlds) for i, f in enumerate((min, max, min, max, min, max)))
+        lies = lies_words(sk, union)
+    return rl.sketch_add_result(shapes, wires, closed, ends, lies)
 
 
 def refs_read(sk, raw, refs):
@@ -1348,10 +1404,30 @@ def axes(pl):
 
 
 def on_words(what, pl):
-    """sketch_new's on for a face: the face's centre and, beside it, where the
-    sketch origin is (another point: the world origin's foot on the face)."""
+    """sketch_new's on for a face: which face (face_said) and where the
+    sketch origin is (the world origin's foot on the face)."""
     o = ", ".join(orient.num(c) for c in frame(pl)["origin"])
-    return f"{what} (its centre); sketch origin at [{o}]"
+    return f"{what}; sketch origin at [{o}]"
+
+
+def face_said(b, link, what):
+    """Which face a sketch is on, by its side: "the face +z at z 5" (the
+    words of a feature's answer, pd_common.side_word: the outward normal's
+    axis and where the face is along it; a slanted face: its normal and a
+    point on it), and whose it is when a feature before the tip made it.
+    27 Nov QA: "face at [30.0, 15.0, 5.0]" gave the face's centre, and a
+    model read it as the sketch origin. When the face is not read: what
+    (plane_ref's words), marked as the face's centre."""
+    try:
+        obj, subs = link
+        f = obj.Shape.getElement(subs[0])
+        u0, u1, v0, v1 = f.ParameterRange
+        n = f.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
+        c = f.CenterOfMass
+        words = "the face " + pc.side_word((n.x, n.y, n.z), (c.x, c.y, c.z))
+        return words + ("" if obj is getattr(b, "Tip", None) else f" ({obj.Label}'s)")
+    except Exception:  # noqa: BLE001 - not read: the words that plane_ref gave, which name the face's centre
+        return f"{what} (its centre)" if str(what).startswith("face at") else what
 
 
 def geo_of_edge(e):
@@ -1471,6 +1547,6 @@ def tools(session):
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "fresh": fresh, "join_points": join_points, "join_move_words": join_move_words, "dof_of": dof_of, "con_result": con_result, "add_result": add_result, "new_result": new_result, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
-               "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
+               "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "face_said": face_said, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent, "by_default": by_default}
     return runners.tools(GROUP, s, helpers)

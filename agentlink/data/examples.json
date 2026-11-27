@@ -5,11 +5,15 @@
  "about": "Two example calls for each tool's card (tool_find { card }): plain, every input with no context, and ready, the same call filled from the open document (=facts.… as in nexthint.json). Each is one flat step. A value to give is marked. fill: each value to give (keep: true, a worked value to change). Owner, 22 Nov, 26 Nov.",
  "entries": {
   "pd_body_new": {
-   "arguments": {
-    "name": "Part"
-   },
-   "source": "the tool's card and schema (tools.json); worked values written for this file",
-   "date": "2026-11-22"
+   "arguments": {},
+   "fill": [
+    {
+     "arg": "name",
+     "what": "the label of the body; without name, the label is Body"
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); name is a value to give, with no worked value (27 Nov QA)",
+   "date": "2026-11-27"
   },
   "sketch_new": {
    "arguments": {

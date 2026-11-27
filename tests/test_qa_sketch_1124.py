@@ -137,7 +137,8 @@ class TheSameCallAgain(unittest.TestCase):
         self.assertTrue(m.startswith("This call ran before with the same tool and arguments, and answered ok (made: Thing"), m)
         self.assertIn("; calls since then: 0)", m)
         self.assertIn("If it runs again, it adds the same again. Nothing was done.", m)
-        self.assertIn("feature_remove (a feature of a body) or object_delete", m)
+        # 27 Nov QA (F9): the removal call is written from the state, as its tool takes it now
+        self.assertRegex(m, r'remove what you do not want: object_delete \{ objects: \["Thing\d*"\] \}\.$')
         self.assertEqual((body["error"]["code"], body["error"]["status"]), ("invalid_state", "not_started"))
         self.assertIn("calls since then: 1)", got["third"])
         self.assertIn("This is the same refusal as before", got["third"])  # counted by the repeat stop
@@ -398,7 +399,7 @@ class BodyExtent(unittest.TestCase):
         e = entries()
         new = e["sketch_new"]
         self.assertEqual(new["answer"]["fields"]["bodyExtent"], {"when": "=ext", "value": "=ext"})
-        self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)"}})
+        self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)", "said": "=face_said(b, link, what) if 'face' in a else what"}})
         self.assertIn("bodyExtent: the box of the body's solid in the sketch's own frame", new["description"])
         add = e["sketch_add"]["description"]
         self.assertIn("rectangle {center|corner, size}. rounded_rectangle {…, radius}.", add)

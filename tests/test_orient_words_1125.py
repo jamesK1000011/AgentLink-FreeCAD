@@ -243,7 +243,7 @@ from agentlink.protocol import ToolError
 def world(P, AO):
     W = P.multiply(AO)
     f = sketch.frame(W)
-    return {"frame": f, "axes": sketch.axes(W), "on": sketch.on_words("face at [0.0, 15.0, 2.5]", W)}
+    return {"frame": f, "axes": sketch.axes(W), "on": sketch.on_words("the face +y at y 15", W)}
 
 out = {}
 # the +y face of a part: the attacher's own x is any axis in the face (here +Z), its origin the face centre
@@ -278,7 +278,8 @@ class Placements(unittest.TestCase):
         self.assertEqual(g["frame"], {"origin": [0.0, 15.0, 0.0], "xAxis": [-1.0, 0.0, 0.0], "yAxis": [0.0, 0.0, 1.0], "normal": [0.0, 1.0, 0.0]})
         self.assertEqual(g["axes"], "x runs -X; y runs +Z (up); the normal points +Y: a pad grows toward +Y, a pocket or hole cuts toward -Y. "
                                     "[0, 0] is at world (0, 15, 0).")
-        self.assertEqual(g["on"], "face at [0.0, 15.0, 2.5] (its centre); sketch origin at [0, 15, 0]")
+        # 27 Nov QA (F10): the face by its side (sketch.face_said), not by its centre
+        self.assertEqual(g["on"], "the face +y at y 15; sketch origin at [0, 15, 0]")
 
     def test_up_x_on_the_face(self):
         f = self.got["+y up x"]["frame"]

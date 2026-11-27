@@ -8246,10 +8246,10 @@
      ]
     },
     {"refuse": {"fmt": "The sketch would not attach to {what}. Nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset. FreeCAD said: {status_words(sk)}"}, "code": "failed", "when": "=not sk.isValid()"},
-    {"let": {"ext": "=body_extent(b, sk)"}},
+    {"let": {"ext": "=body_extent(b, sk)", "said": "=face_said(b, link, what) if 'face' in a else what"}},
     {"do": "=note_sketch(sk, a.get('name'))"}
    ],
-   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"result": "=new_result(sk, b, what, link)", "sketch": "=sk.Label", "body": "=b.Label", "on": "=on_words(what, sk.Placement) if 'face' in a else what", "face": {"when": "=pick", "value": "=pick"}, "picked": {"when": "=picked", "value": "=picked"}, "offset": {"when": "=off", "value": "=off"}, "axes": "=axes(sk.Placement)", "frame": "=frame(sk.Placement)", "bodyExtent": {"when": "=ext", "value": "=ext"}, "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
+   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"result": "=new_result(sk, b, said, link)", "sketch": "=sk.Label", "body": "=b.Label", "on": "=on_words(said, sk.Placement) if 'face' in a else what", "face": {"when": "=pick", "value": "=pick"}, "picked": {"when": "=picked", "value": "=picked"}, "offset": {"when": "=off", "value": "=off"}, "axes": "=axes(sk.Placement)", "frame": "=frame(sk.Placement)", "bodyExtent": {"when": "=ext", "value": "=ext"}, "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
   },
   "sketch_add": {
    "group": "sketch",

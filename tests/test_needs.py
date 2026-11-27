@@ -47,7 +47,7 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 24 Nov, blind QA: + item_error (sketch_add's failed item by its index), body_extent (sketch_new's bodyExtent), sketch readers.
 # 24 Nov QA, edges by direction: + edge_words (feature reader: each edge given, in a short line).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch readers), axes (sketch_more reader).
-PIN = "f686c670992d195fc2c2dfacbde273bc8d3bcaf02cf6bc966d4f8cb9d21d57c8"  # 27 Nov QA fixes: + by_default (scripts/tool_needs.py --why by_default: a reader)
+PIN = "b4dfefb9efe5c6d884b805c8d347c526c39fc503a3839dedcf10fe097b61f196"  # 27 Nov QA fixes: + by_default, face_said (scripts/tool_needs.py --why face_said: a reader)
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -59,7 +59,7 @@ PIN = "f686c670992d195fc2c2dfacbde273bc8d3bcaf02cf6bc966d4f8cb9d21d57c8"  # 27 N
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
 # 22 Nov, face selectors: + face_pick (a sketch reader).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch), axes (sketch_more); up_frame is not a reader (it makes a placement).
-COUNTS = {"readers": 942, "changers": 160, "families": 37}
+COUNTS = {"readers": 943, "changers": 160, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {

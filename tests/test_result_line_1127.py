@@ -35,7 +35,8 @@ class Pure(unittest.TestCase):
         self.assertEqual((rl.span(0, 60), rl.span(30, 30.0005)), ("0..60", "30"))
 
     def test_against_inside_and_past_on_each_axis(self):
-        self.assertEqual(rl.against((10, 20, 5, 6, 1, 2), OLD), "x inside; y inside; z inside")
+        # 27 Nov QA (F1): an axis that is inside says the distance to each side
+        self.assertEqual(rl.against((10, 20, 5, 6, 1, 2), OLD), "x inside (10 from -x, 40 from +x); y inside (5 from -y, 24 from +y); z inside (1 from -z, 3 from +z)")
         for i, ax in enumerate("xyz"):
             lo = list(OLD)
             lo[2 * i] -= 7
@@ -44,8 +45,8 @@ class Pure(unittest.TestCase):
             hi[2 * i + 1] += 3.5
             self.assertIn(f"{ax} past +{ax} by 3.5", rl.against(tuple(hi), OLD))
         both = rl.against((0, 60, 0, 30, -20, 20), OLD)
-        self.assertEqual(both, "x inside; y inside; z past -z by 20 and past +z by 15")
-        self.assertEqual(rl.against((0, 60.0004, 0, 30, 0, 5), OLD), "x inside; y inside; z inside")  # the equality tolerance
+        self.assertEqual(both, "x inside (0 from -x, 0 from +x); y inside (0 from -y, 0 from +y); z past -z by 20 and past +z by 15")
+        self.assertTrue(rl.against((0, 60.0004, 0, 30, 0, 5), OLD).startswith("x inside (0 from -x, 0 from +x); "))  # the equality tolerance
 
     def test_contact_words(self):
         self.assertEqual(rl.touch_text(["+z at z 5", "-x at x 0"], 0, None, True), "It touches the body on +z at z 5 and -x at x 0.")
@@ -72,7 +73,7 @@ class Pure(unittest.TestCase):
     def test_a_pad_on_top(self):
         got = rl.feature_result("Pad", "pd_pad", 9000, region=[(0, 60, 0, 30, 5, 10)], old_box=OLD, faces=["+z at z 5"], touching=True, solids=1, solids_was=1)
         self.assertIn("It touches the body on +z at z 5. The body is 1 solid (was 1).", got)
-        self.assertIn("x inside; y inside; z past +z by 5", got)
+        self.assertIn("x inside (0 from -x, 0 from +x); y inside (0 from -y, 0 from +y); z past +z by 5", got)
 
     def test_the_first_feature(self):
         got = rl.feature_result("Pad", "pd_pad", 9000, body_box=OLD, solids=1)
@@ -216,7 +217,8 @@ class OnStandIns(unittest.TestCase):
         print(json.dumps(pc.result_line(Feat(old), body, "pd_pad", 9000.0, keep)))
         ''')
         self.assertEqual(got, "Pad 2 added material, volume change +9000 mm³. The new material is x 0..60, y 0..30, z 5..10. The body before is x 0..60, y 0..30, z 0..5. "
-                              "Against the body before: x inside; y inside; z past +z by 5. It touches the body on +z at z 5. The body is 1 solid (was 1).")
+                              "Against the body before: x inside (0 from -x, 0 from +x); y inside (0 from -y, 0 from +y); z past +z by 5. "
+                              "It touches the body on +z at z 5. The body is 1 solid (was 1).")
 
     def test_an_add_apart_makes_two_solids_and_says_the_gap(self):
         got = child(FAKES + '''

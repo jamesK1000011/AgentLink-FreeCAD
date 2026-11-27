@@ -46,7 +46,9 @@ class Data(unittest.TestCase):
                 continue
             ex = examples.for_tool(name, facts, how="null")["ready"]
             self.assertEqual(ex.pop("tool"), name)
-            ex = {k: (1 if v is None else v) for k, v in ex.items()}
+            # a value to give: one of the input's own type (27 Nov: pd_body_new's name is text)
+            props = t["inputSchema"]["properties"]
+            ex = {k: (("x" if props[k].get("type") == "string" else 1) if v is None else v) for k, v in ex.items()}
             check_input(t["inputSchema"], ex, name)
 
 

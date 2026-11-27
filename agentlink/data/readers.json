@@ -1094,6 +1094,7 @@
     "ext_count",
     "face_pick",
     "face_pick_said",
+    "face_said",
     "frame",
     "geo_kind",
     "geo_of_edge",

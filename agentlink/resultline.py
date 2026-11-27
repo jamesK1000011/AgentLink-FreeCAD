@@ -13,6 +13,8 @@ The rules (owner, 27 Nov):
   - The only tolerance is the equality tolerance TOL that the answers
     already used (beyond_sides, added_sentence): 1e-3 mm.
   - A cap that hides items says how many are not shown.
+  - A box against another box uses one set of words everywhere (against):
+    "past -x by 5", "inside (10 from -x, 20 from +x)". World axes.
 
 This module has only small pure functions: they take measured numbers and
 return a sentence. The code that measures (families/pd_common.py,
@@ -80,19 +82,77 @@ def feature_head(label, tool, delta):
     return f"{label} {word} material, volume change {signed(delta)} mm³."
 
 
-def against(new, old, tol=TOL):
-    """The new box against the old box on each axis: "x inside; y past +y by
-    5; z past -z by 20 and past +z by 15". Boxes as (xmin, xmax, ymin, ymax,
-    zmin, zmax). Every axis is said."""
+def against(new, old, tol=TOL, axes=(0, 1, 2)):
+    """The new box against the old box on each axis: "x inside (10 from -x,
+    20 from +x); y past +y by 5; z past -z by 20 and past +z by 15". Boxes
+    as (xmin, xmax, ymin, ymax, zmin, zmax). Every axis of axes is said. An
+    axis that is inside says the measured distance to each side of the old
+    box (27 Nov QA: "x inside" did not say where along x)."""
     out = []
-    for i, ax in enumerate("xyz"):
+    for i in axes:
+        ax = "xyz"[i]
         parts = []
         if new[2 * i] < old[2 * i] - tol:
             parts.append(f"past -{ax} by {num(old[2 * i] - new[2 * i])}")
         if new[2 * i + 1] > old[2 * i + 1] + tol:
             parts.append(f"past +{ax} by {num(new[2 * i + 1] - old[2 * i + 1])}")
-        out.append(f"{ax} {' and '.join(parts) if parts else 'inside'}")
+        if parts:
+            out.append(f"{ax} {' and '.join(parts)}")
+        else:
+            lo, hi = max(new[2 * i] - old[2 * i], 0.0), max(old[2 * i + 1] - new[2 * i + 1], 0.0)
+            out.append(f"{ax} inside ({num(lo)} from -{ax}, {num(hi)} from +{ax})")
     return "; ".join(out)
+
+
+def lies_text(name, new, old, flat=False):
+    """Where a box lies against a named box: "Against the body (x 0..60, y
+    0..30, z 0..5): x past -x by 2.5; y inside (5 from -y, 10 from +y); z
+    inside (5 from -z, 0 from +z)." The old box is said, so the reader has
+    what was compared. flat: the old box is a flat face's; an axis along
+    which it has no size (within TOL) is left out."""
+    axes = [i for i in range(3) if not (flat and abs(old[2 * i + 1] - old[2 * i]) <= TOL)]
+    if not axes:
+        return ""
+    return f"Against {name} ({box_text(old)}): {against(new, old, axes=axes)}."
+
+
+def profiles_text(n, looked, part, none, cut=True):
+    """The profiles of a feature's sketch that did not do all that their
+    area gives: "2 of 2 profiles cut in part (75% and 25% of the volume that
+    each area gives over the same depth)." "1 of 2 profiles cut nothing."
+    part: the measured shares (percent) of those that did a part; none: how
+    many did nothing; looked: how many of the n profiles were measured. ""
+    when every measured profile did all of it."""
+    verb, zero = ("cut", "cut nothing") if cut else ("added", "added nothing")
+    of = f"of {n} profile{'' if n == 1 else 's'}"
+    out = []
+    if part:
+        shares = and_([f"{float(p):.4g}%" for p in part])
+        each = "its area gives" if len(part) == 1 else "each area gives"
+        out.append(f"{len(part)} {of} {verb} in part ({shares} of the volume that {each} over the same depth).")
+    if none:
+        out.append(f"{none} {of} {zero}.")
+    if out and looked < n:
+        out.append(f"{looked} {of} were measured.")
+    return " ".join(out)
+
+
+def body_change_text(body, vol0, vol1, box0=None, box1=None, solids0=None, solids1=None):
+    """What one call changed of a body, from its volume, box and solids
+    before and after: "This call changed Body: volume change -196.35 mm³,
+    now 14053.65 mm³." or "This call left the volume of Body as it was
+    (14250 mm³)." Then the two boxes when they differ, and the solids when
+    their count differs."""
+    delta = vol1 - vol0
+    if abs(delta) <= 1e-2:  # FreeCAD's volume noise, as feature_head reads it
+        out = [f"This call left the volume of {body} as it was ({num(vol1)} mm³)."]
+    else:
+        out = [f"This call changed {body}: volume change {signed(delta)} mm³, now {num(vol1)} mm³."]
+    if box0 is not None and box1 is not None and any(abs(a - b) > TOL for a, b in zip(box0, box1)):
+        out.append(f"The body before is {box_text(box0)}. The body now is {box_text(box1)}.")
+    if solids0 is not None and solids1 is not None and solids0 != solids1:
+        out.append(solids_text(solids1, solids0))
+    return " ".join(out)
 
 
 def region_text(boxes, more, cut):
@@ -140,14 +200,15 @@ def solids_text(now, was=None):
 
 
 def feature_result(label, tool, delta, region=None, region_more=0, old_box=None, body_box=None, cut=False,
-                   faces=None, faces_more=0, gap=None, touching=None, looked=True, solids=None, solids_was=None, note=""):
+                   faces=None, faces_more=0, gap=None, touching=None, looked=True, solids=None, solids_was=None, note="", profiles=""):
     """The result line of a solid feature, in the fixed order:
     1 verb and volume change; 2 the box of the new or removed material (for
     the first feature, the body's box); 3 the body's box before; 4 the
     region against it on x, y, z; 5 contact (a cut: where it opens);
     6 solids now and before. region: a list of boxes (one for each piece);
     old_box None: there was no body before. note: a fact that was not
-    measured and why, said as it came."""
+    measured and why, said as it came. profiles: profiles_text's words
+    (a profile that did a part, or nothing), said after 5."""
     out = [feature_head(label, tool, delta)]
     if region and old_box is not None:
         out.append(region_text(region, region_more, cut))
@@ -164,6 +225,8 @@ def feature_result(label, tool, delta, region=None, region_more=0, old_box=None,
         out.append(f"The body before is {box_text(old_box)}.")
         if body_box is not None:
             out.append(f"The body now is {box_text(body_box)}.")
+    if profiles:
+        out.append(profiles)
     if note:
         out.append(note)
     out.append(solids_text(solids, solids_was))
@@ -304,9 +367,11 @@ def wires_text(wires, closed, open_ends):
     return "The sketch has " + ", ".join(parts) + "." if parts else ""
 
 
-def sketch_add_result(shapes, wires=None, closed=None, open_ends=None):
-    """The result line of sketch_add: its shapes (shape_text), then the wires."""
-    return " ".join(t for t in [*shapes, wires_text(wires, closed, open_ends)] if t)
+def sketch_add_result(shapes, wires=None, closed=None, open_ends=None, lies=()):
+    """The result line of sketch_add: its shapes (shape_text), where the
+    call's shapes lie against the sketch's face and the body (lies_text's
+    sentences), then the wires."""
+    return " ".join(t for t in [*shapes, *lies, wires_text(wires, closed, open_ends)] if t)
 
 
 # ---- RL-SC: sketch_constrain -----------------------------------------------------------------

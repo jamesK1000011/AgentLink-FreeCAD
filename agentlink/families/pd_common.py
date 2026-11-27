@@ -206,6 +206,9 @@ def note_named(session, sk):
     try:
         if getattr(session, "sketch_now", None) is None and isinstance(getattr(session, "filled_now", None), list):
             session.sketch_now = sk
+            # The body before the call, for the measured change of a used
+            # sketch (used_change): read here, before the tool's own steps.
+            session.sketch_before = used_mark(sk)
     except Exception:
         pass
 
@@ -260,11 +263,14 @@ def profile_users(sk):
     return out
 
 
-def used_sketch_note(sk, body=None, tool=None):
+def used_sketch_note(sk, body=None, tool=None, change=None):
     """For a change to the geometry of a sketch that a feature uses (decision
     4, D-b): words that name the feature, and the body's unused sketch when
     it has one; else None. Blind QA, 24 Nov: holes were added to the sketch
-    of a Pad, then that sketch was pocketed, and the pocket cut nothing."""
+    of a Pad, then that sketch was pocketed, and the pocket cut nothing.
+    change: the measured change of the body (used_change), said in place
+    of the words that the call changes the feature (27 Nov QA: the body
+    lost volume and no answer gave the number)."""
     users = sketch_users(sk)
     if not users:
         return None
@@ -276,13 +282,56 @@ def used_sketch_note(sk, body=None, tool=None):
     if not free:
         prof = profile_users(sk)
         doing = "adding to it" if tool == "sketch_add" else "this change"
-        if prof:
-            return f"Note: {sk.Label} is the profile of {', '.join(prof)}; {doing} changes {', '.join(prof)}."
-        return f"Note: {sk.Label} is used by {', '.join(users)}; {doing} changes {', '.join(users)}."
+        whose = f"{sk.Label} is the profile of {', '.join(prof)}" if prof else f"{sk.Label} is used by {', '.join(users)}"
+        if change:
+            return f"Note: {whose}. {change}"
+        return f"Note: {whose}; {doing} changes {', '.join(prof or users)}."
     names = ", ".join(o.Label for o in free[:3])
-    return (f"{sk.Label} is used by {', '.join(users)}, so this change also changes {', '.join(users)}. "
+    first = f"{sk.Label} is used by {', '.join(users)}. {change}" if change else f"{sk.Label} is used by {', '.join(users)}, so this change also changes {', '.join(users)}."
+    return (f"{first} "
             f"{body.Label} also has a sketch that is not used: {names}. "
             f"If you meant {free[0].Label}, use history_undo, then give sketch: \"{free[0].Label}\".")
+
+
+def used_mark(sk):
+    """Before a call changes sketch sk: its body's volume, box and solids,
+    when a feature uses the sketch and the body has a solid; else None.
+    used_change compares it with the body after the call."""
+    try:
+        if not sketch_users(sk):
+            return None
+        body = body_of(sk)
+        shape = body.Shape if body is not None else None
+        if shape is None or shape.isNull() or not shape.Solids:
+            return None
+        return {"sketch": sk.Name, "body": body.Name, "volume": float(shape.Volume), "box": _bbt(shape.BoundBox), "solids": len(shape.Solids)}
+    except Exception:  # noqa: BLE001 - not measured: nothing is said
+        return None
+
+
+def used_change(sk, mark):
+    """After a call that changed sketch sk: what the call changed of the
+    body, measured against mark (used_mark's, read before the call), in
+    resultline.body_change_text's words. None when it was not measured: no
+    mark, another sketch, the document's recompute is held (a batch with
+    build: "end"), or an object of the body waits for a recompute."""
+    try:
+        if not mark or mark.get("sketch") != sk.Name:
+            return None
+        body = body_of(sk)
+        if body is None or body.Name != mark.get("body"):
+            return None
+        if getattr(getattr(sk, "Document", None), "RecomputesFrozen", False) is True:
+            return None
+        for o in [body, *list(getattr(body, "Group", None) or [])]:
+            if "Touched" in (getattr(o, "State", None) or ()):
+                return None
+        shape = body.Shape
+        if shape is None or shape.isNull():
+            return None
+        return rl.body_change_text(body.Label, mark["volume"], float(shape.Volume), mark["box"], _bbt(shape.BoundBox), mark["solids"], len(shape.Solids))
+    except Exception:  # noqa: BLE001 - not measured: nothing is said
+        return None
 
 
 def tip_shape(body, need=True):
@@ -1339,7 +1388,7 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
                 keep["reg"], keep["cut"] = reg, False
             nb, ob = _bbt(reg.BoundBox), _bbt(old.BoundBox)
             out = {"added": span_text(reg.BoundBox), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
-            out.update(profile_results(feat, reg, old, tol, cut=False))
+            out.update(profile_results(feat, reg, old, tol, cut=False, rec=_profile_rec(keep)))
             return out
         reg = old.cut(new)
         if reg.isNull() or reg.Volume <= tol:
@@ -1361,10 +1410,26 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
             # 26 Nov QA: two notches in one pocket came back as one box that
             # "goes all the way through along x". Each piece apart.
             out["where"] = pieces_sentence(pieces, skin, diag)
-        out.update(profile_results(feat, reg, old, tol, cut=True))
+        out.update(profile_results(feat, reg, old, tol, cut=True, rec=_profile_rec(keep)))
         return out
     except Exception as e:  # noqa: BLE001 - a reading only
         return {"where": f"not worked out ({type(e).__name__})"}
+
+
+def _profile_rec(keep):
+    """The dict of keep that profile_results fills for the result line, or None."""
+    if keep is None:
+        return None
+    return keep.setdefault("profiles", {})
+
+
+def _profiles_line(keep, cut):
+    """The result line's words for the profiles that did a part or nothing
+    (resultline.profiles_text), from what profile_results measured; ""."""
+    rec = keep.get("profiles") if isinstance(keep, dict) else None
+    if not rec or "n" not in rec:
+        return ""
+    return rl.profiles_text(rec["n"], rec["looked"], rec["part"], rec["none"], cut)
 
 
 PIECES_SHOWN = 4  # separate pieces of one cut said one by one
@@ -1463,7 +1528,8 @@ def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
             except Exception:  # noqa: BLE001 - not measured: nothing is said
                 gap = touching = None
     return rl.feature_result(label, tool, delta, region=boxes, region_more=more, old_box=old_box, cut=cut, faces=faces,
-                             faces_more=unlooked, gap=gap, touching=touching, looked=looked, solids=solids, solids_was=was, note=note)
+                             faces_more=unlooked, gap=gap, touching=touching, looked=looked, solids=solids, solids_was=was, note=note,
+                             profiles=_profiles_line(keep, cut))
 
 
 def _lids(reg, skin, diag, flip=False):
@@ -1588,19 +1654,30 @@ PROFILE_FEATURES = ("PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Hole")
 def profile_faces(feat):
     """[(words, face)] for each profile (outline with its holes) of a pad's,
     pocket's or hole's sketch, when it has more than one; else []."""
+    return _profile_faces(feat, 2)
+
+
+def one_profile(feat):
+    """profile_faces' list for a sketch of one profile; else []. The
+    result line gives a partial cut of one profile too (27 Nov QA)."""
+    got = _profile_faces(feat, 1)
+    return got if len(got) == 1 else []
+
+
+def _profile_faces(feat, least):
     if getattr(feat, "TypeId", "") not in PROFILE_FEATURES:
         return []
     sk = _profile_of(feat)
     if sk is None or "Sketch" not in getattr(sk, "TypeId", ""):
         return []
     wires = [w for w in sk.Shape.Wires if w.isClosed()]
-    if len(wires) < 2:
+    if len(wires) < least:
         return []
     try:
         faces = list(Part.makeFace(wires, "Part::FaceMakerBullseye").Faces)
     except Exception:  # noqa: BLE001 - older FreeCAD
         faces = list(Part.Face(wires, "Part::FaceMakerBullseye").Faces)
-    if len(faces) < 2:
+    if len(faces) < least:
         return []
     inv = sk.Placement.inverse()
     out = []
@@ -1615,20 +1692,24 @@ def profile_faces(feat):
     return out
 
 
-def profile_results(feat, reg, old, tol, cut=True):
+def profile_results(feat, reg, old, tol, cut=True, rec=None):
     """{profiles: "2 profiles: the circle r 2.5 at (45, 0) is off the body;
     1 cut in full."} for a sketch of several profiles (26 Nov QA: one hole
     of two was off the part, and nothing said so); {} for one profile, or on
     any error. A profile did something when its prism along the sketch's
     normal meets the region the feature added or removed. One that did only
     part says the share: the volume it took against its area times the depth
-    it took (27 Nov QA: "both cut" for two half holes)."""
+    it took (27 Nov QA: "both cut" for two half holes). rec: a dict that
+    gets the measured numbers for the result line, for one profile too
+    (n, looked, part: the shares in percent of those that did a part,
+    none: how many did nothing)."""
     try:
-        got = profile_faces(feat)
+        got = profile_faces(feat) or one_profile(feat)
         if not got:
             return {}
         n_all = len(got)
         got = got[:PROFILES_SHOWN]
+        part, none = [], 0
         bb = old.BoundBox
         span = 2 * max(bb.DiagonalLength, reg.BoundBox.DiagonalLength, 1.0) + bb.Center.Length + reg.BoundBox.Center.Length
         verb = "cut" if cut else "added"
@@ -1652,15 +1733,21 @@ def profile_results(feat, reg, old, tol, cut=True):
                 if hit.Volume >= whole - tol:
                     full_n += 1
                 else:
+                    part.append(100 * hit.Volume / whole)
                     idle.append(f"{words} {verb} {100 * hit.Volume / whole:.4g}% of the volume its area gives over the same depth ({hit.Volume:.4g} of {whole:.4g} mm³)")
                 continue
             idle_circles += words.startswith("the circle")
+            none += 1
             if not cut:
                 idle.append(f"{words} adds nothing (inside the body already)")
             elif prism.common(old).Volume > tol:
                 idle.append(f"{words} cut nothing")
             else:
                 idle.append(f"{words} is off the body")
+        if rec is not None:
+            rec.update(n=n_all, looked=len(got), part=part, none=none)
+        if n_all < 2:
+            return {}  # the profiles field is for a sketch of several profiles
         head = f"{n_all} profiles" + (f" ({len(got)} looked at)" if n_all > len(got) else "")
         if not idle:
             return {"profiles": f"{head}: {'both' if full_n == 2 else 'all ' + str(full_n)} {verb} in full."}
