@@ -16,8 +16,7 @@ GROUP = "fast"
 INFO = "The fast path: run runs one step; fast runs many steps and gives one short answer; get reads one value with its unit."
 
 STEP = '{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }'
-STEP_SCHEMA = {"type": "object", "properties": {"tool": {"type": "string", "description": "The tool's plain name (pd_pad). Its inputs stand beside it."}},
-               "required": ["tool"], "additionalProperties": True}
+STEP_SCHEMA = copy.deepcopy(staticbase._STEP_ITEM)
 
 
 # run takes the same calls list as batch and fast, with one step in use (27 Nov).

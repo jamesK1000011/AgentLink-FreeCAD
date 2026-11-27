@@ -106,9 +106,14 @@ def base(tools=None):
 # said in full: a server that makes the model write to the schema (llama.cpp
 # with tools) lets a key through only when the schema says so (live, 27 Nov:
 # with no word on it, every step came as { "tool": name } with no inputs).
+# The step declares no key (27 Nov). llama.cpp b12800 writes the rule for the
+# other keys of an object as "not a declared key", and its rule also refuses
+# each key that is the start of a declared key: with "tool" declared, the keys
+# "t", "to" and "too" could not be written (replay of s1127a, gpt-oss crank).
+# The hub refuses a step with no tool.
 _STEP_ITEM = {"type": "object",
-              "properties": {"tool": {"type": "string", "description": "The tool's plain name, as tool_find gives it (pd_pad). Its inputs stand beside it."}},
-              "required": ["tool"], "additionalProperties": True}
+              "description": "One step. \"tool\" is necessary: the tool's plain name, as tool_find gives it (pd_pad). The tool's inputs stand beside it.",
+              "additionalProperties": True}
 LISTED_SCHEMAS = {
     "run": {"type": "object",
             "properties": {"calls": {"type": "array", "minItems": 1, "description": "One call: [step]. Only the first step runs.", "items": copy.deepcopy(_STEP_ITEM)}},
