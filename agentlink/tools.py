@@ -1171,10 +1171,11 @@ class Session:
         sh = o.Shape
         intended = self.allows_compound(o) and len(sh.Solids) > 1
         s = geo.soundness(sh, solids_intended=intended)
+        touch = self.solids_said(sh) if len(sh.Solids) > 1 else None
         if intended:
             # A deliberate split (Body.AllowCompound): counted, each solid
             # checked on its own.
-            s["intended"] = f"{self.solids_said(sh)} in one Body (AllowCompound is true, FreeCAD's default): each checked on its own below."
+            s["intended"] = f"{touch} in one Body (AllowCompound is true, FreeCAD's default): each checked on its own below."
             s["each"] = geo.each_solid(sh)
             bad = [e for e in s["each"] if not e["ok"]]
             for e in bad:
@@ -1224,7 +1225,29 @@ class Session:
             pr = []
         if pr:
             s["practice"] = pr
-        return {"body": o.Label, **s, **self.stats_of(o)}
+        line = self.check_line(o, sh, s, touch)
+        return {**({"result": line} if line else {}), "body": o.Label, **s, **self.stats_of(o)}
+
+    @staticmethod
+    def check_line(o, sh, s, said):
+        """body_check's result line (agentlink/resultline.py): the solids
+        (whether they touch, when there are several), valid, closed, the box
+        in the world, the volume. A reading that fails is left out."""
+        from . import resultline
+
+        try:
+            bb = sh.BoundBox
+            box = (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax)
+        except Exception:  # noqa: BLE001
+            box = None
+        try:
+            volume = float(sh.Volume)
+        except Exception:  # noqa: BLE001
+            volume = None
+        try:
+            return resultline.body_check_result(o.Label, len(sh.Solids), said, s.get("valid"), s.get("closed"), box, volume)
+        except Exception:  # noqa: BLE001
+            return ""
 
     def _mesh_named(self, ref):
         """A mesh object (Mesh::Feature) by name or label, or None."""
@@ -1910,7 +1933,7 @@ def make_tools(session):
         Tool("body_check", "Check if a body is sound: FreeCAD's own Check Geometry, then closed, one solid, no very short edges. Also no sliver faces (less than 0.01 mm wide). It "
                            "tells where each problem is. A Body with AllowCompound true (FreeCAD's default) can hold several solids. They are counted and each is checked (each); no "
                            "problem. A BOP-only finding on a shape that BRepCheck calls valid and closed is a warning with where, not a failure. Example: InvalidCurveOnSurface, "
-                           "where a counterbore breaks a chamfer.", obj({"body": body}), s.body_check),
+                           "where a counterbore breaks a chamfer. Answer: result (a one-line summary first), body, valid, closed, solids, volume.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
             "Write a body as STEP or STL, and read it back. tolerance: the chord error, mm, 0.01 by default. verify: gives the volume read and, for STEP, the "

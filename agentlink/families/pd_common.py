@@ -13,6 +13,7 @@ import FreeCAD
 import Part
 
 from .. import geometry as geo
+from .. import resultline as rl
 from ..protocol import ToolError, describe
 from . import picks
 from .. import facesel
@@ -1086,9 +1087,11 @@ def drop_phrase(text, phrase):
     return " ".join(out)
 
 
-def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
+def settle(session, body, feat, tool, before=None, must_change=None, hint="", seen=None):
     """Recompute; refuse (the call's transaction is rolled back) if the
-    feature or anything after it failed; else the body's reading."""
+    feature or anything after it failed; else the body's reading, with
+    result first (agentlink/resultline.py). seen: the edge words of a fillet
+    or chamfer, when the tool has them."""
     from ..protocol import NAMES_NOTHING
 
     doc = session.doc
@@ -1142,6 +1145,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             out["bounds"] = span_text(body.Shape.BoundBox)
         except Exception:  # noqa: BLE001 - a reading only
             pass
+    keep = {}
     if before is not None and "volume" in out:
         delta = out["volume"] - before
         out["volumeChange"] = round(delta, 2)
@@ -1167,7 +1171,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             # or take it away (an outside one): only no change at all is wrong.
             raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
         if feat is not None:
-            out.update(where_went(feat, body, delta, tol))
+            out.update(where_went(feat, body, delta, tol, keep))
             if "where" in out:
                 # The one plain sentence first (owner, 25 Nov: a small model reads
                 # the top of an ok answer and moves on; the numbers follow it).
@@ -1176,6 +1180,9 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
     out = with_changed(session, body, out, before)
     if out.get("volume") is not None:
         note_answered(session, body)
+    line = result_line(feat, body, tool, out.get("volumeChange"), keep, seen, out.get("where"))
+    if line:
+        out = {"result": line, **out}
     return picks.finish(session, tool, out, recompute=False)
 
 
@@ -1301,18 +1308,21 @@ def _bbt(bb):
     return (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax)
 
 
-def where_went(feat, body, delta, tol=0.01):
+def where_went(feat, body, delta, tol=0.01, keep=None):
     """{added: "x .., y .., z ..", beyond: [sides]} or {removed: …, opens:
     [faces of the body it breaks through]}, from the body before the
     feature (its BaseFeature) and after, and where: the same in one
     sentence, against the body before (26 Nov QA: no model read the terse
     fields). A sketch of several profiles adds profiles: what each one did.
     {} when there was no body before (the first feature: bounds says it
-    all). Large bodies: {where: why not}."""
+    all). Large bodies: {where: why not}. keep: a dict that gets what was
+    measured (old, new, reg, cut, lids), for result_line."""
     try:
         base = getattr(feat, "BaseFeature", None)
         old = getattr(base, "Shape", None) if base is not None else None
         new = body.Shape
+        if keep is not None:
+            keep["old"], keep["new"], keep["tol"] = old, new, tol
         if old is None or old.isNull() or not old.Solids or new is None or new.isNull():
             return {}
         if getattr(feat, "TypeId", "") in ("PartDesign::Fillet", "PartDesign::Chamfer"):
@@ -1325,6 +1335,8 @@ def where_went(feat, body, delta, tol=0.01):
             reg = new.cut(old)
             if reg.isNull() or reg.Volume <= tol:
                 return {}
+            if keep is not None:
+                keep["reg"], keep["cut"] = reg, False
             nb, ob = _bbt(reg.BoundBox), _bbt(old.BoundBox)
             out = {"added": span_text(reg.BoundBox), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
             out.update(profile_results(feat, reg, old, tol, cut=False))
@@ -1332,12 +1344,16 @@ def where_went(feat, body, delta, tol=0.01):
         reg = old.cut(new)
         if reg.isNull() or reg.Volume <= tol:
             return {}
+        if keep is not None:
+            keep["reg"], keep["cut"] = reg, True
         out = {"removed": span_text(reg.BoundBox)}
         diag = max(old.BoundBox.DiagonalLength, 1.0)
         # The old body's surface, not its solid: a point inside a solid is at
         # distance 0 from it (live, 25 Nov: a hollow's inner walls were listed).
         skin = Part.Compound(list(old.Faces))
         lids, sides = _lids(reg, skin, diag)
+        if keep is not None:
+            keep["lids"] = lids
         out["opens"] = lids or ["nothing: the cut is closed inside the body"]
         out["where"] = removed_sentence(sides, _bbt(reg.BoundBox))
         pieces = [x for x in reg.Solids if x.Volume > tol]
@@ -1352,11 +1368,109 @@ def where_went(feat, body, delta, tol=0.01):
 
 
 PIECES_SHOWN = 4  # separate pieces of one cut said one by one
+TOUCH = 1e-7  # mm: FreeCAD's own confusion tolerance; a distance this small is a touch
 
 
-def _lids(reg, skin, diag):
+def _dim(q):
+    return float(getattr(q, "Value", q))
+
+
+def _size_words(feat):
+    """A fillet's radius or a chamfer's size, read from the feature."""
+    t = getattr(feat, "TypeId", "")
+    try:
+        if t == "PartDesign::Fillet":
+            return f"radius {rl.num(_dim(feat.Radius))} mm"
+        if t == "PartDesign::Chamfer":
+            kind, size = str(getattr(feat, "ChamferType", "")), rl.num(_dim(feat.Size))
+            if kind == "Two distances":
+                return f"sizes {size} and {rl.num(_dim(feat.Size2))} mm"
+            if kind == "Distance and Angle":
+                return f"size {size} mm and angle {rl.num(_dim(feat.Angle))} deg"
+            return f"size {size} mm"
+    except Exception:  # noqa: BLE001 - not read: not said
+        return ""
+    return ""
+
+
+def result_line(feat, body, tool, delta, keep, seen=None, where_text=None):
+    """The result line of a feature (agentlink/resultline.py feature_result),
+    from the shapes before and after and what where_went measured (keep).
+    "" when there is no feature. A fact that cannot be measured is left out;
+    never raises."""
+    if feat is None:
+        return ""
+    label = getattr(feat, "Label", "") or tool
+    try:
+        return _result_line(feat, body, tool, label, delta, keep, seen, where_text)
+    except Exception:  # noqa: BLE001 - a reading only
+        try:
+            return rl.feature_head(label, tool, delta)
+        except Exception:  # noqa: BLE001
+            return ""
+
+
+def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
+    new = body.Shape
+    new_ok = new is not None and not new.isNull()
+    old = keep.get("old") if "old" in keep else None
+    if "old" not in keep:
+        base = getattr(feat, "BaseFeature", None)
+        old = getattr(base, "Shape", None) if base is not None else None
+    have_old = old is not None and not old.isNull() and bool(old.Solids)
+    solids = len(new.Solids) if new_ok else None
+    was = len(old.Solids) if have_old else None
+    if getattr(feat, "TypeId", "") in ("PartDesign::Fillet", "PartDesign::Chamfer"):
+        try:
+            names = list(feat.Base[1])
+        except Exception:  # noqa: BLE001
+            names = []
+        lines = seen
+        if lines is None and have_old and names:
+            lines = edge_words(old, names)
+        return rl.dressup_result(label, tool, delta, len(names), _size_words(feat), list(lines or []), solids, was)
+    new_box = _bbt(new.BoundBox) if new_ok else None
+    if not have_old:
+        return rl.feature_result(label, tool, delta, body_box=new_box, solids=solids)
+    old_box = _bbt(old.BoundBox)
+    reg = keep.get("reg")
+    note = where_text if isinstance(where_text, str) and where_text.startswith("not worked out") else ""
+    note = (note[0].upper() + note[1:] + ".") if note and not note.endswith(".") else note
+    if reg is None:
+        return rl.feature_result(label, tool, delta, old_box=old_box, body_box=new_box, solids=solids, solids_was=was, note=note)
+    cut = bool(keep.get("cut"))
+    tol = keep.get("tol", 0.01)
+    pieces = [x for x in reg.Solids if x.Volume > tol] or [reg]
+    boxes = [_bbt(x.BoundBox) for x in pieces[:PIECES_SHOWN]]
+    more = max(0, len(pieces) - PIECES_SHOWN)
+    unlooked = max(0, len(reg.Faces) - WHERE_LIDS)
+    faces, gap, touching, looked = [], None, None, True
+    if cut:
+        faces = list(keep.get("lids") or [])
+        looked = "lids" in keep
+    else:
+        diag = max(old.BoundBox.DiagonalLength, 1.0)
+        try:
+            faces, _sides = _lids(reg, Part.Compound(list(old.Faces)), diag, True)
+        except Exception:  # noqa: BLE001 - not measured
+            faces = []
+        if faces:
+            touching = True
+        else:
+            try:
+                gap = float(reg.distToShape(old)[0])
+                touching = gap <= TOUCH
+            except Exception:  # noqa: BLE001 - not measured: nothing is said
+                gap = touching = None
+    return rl.feature_result(label, tool, delta, region=boxes, region_more=more, old_box=old_box, cut=cut, faces=faces,
+                             faces_more=unlooked, gap=gap, touching=touching, looked=looked, solids=solids, solids_was=was, note=note)
+
+
+def _lids(reg, skin, diag, flip=False):
     """(the side words, side_key's) of the faces of the removed region reg
-    that lie on the old body's surface skin: where the cut opens the body."""
+    that lie on the old body's surface skin: where the cut opens the body.
+    flip: the words are of the old body's outward side where the region is
+    outside it (added material that lies on the old body)."""
     lids, sides = [], []
     for f in list(reg.Faces)[:WHERE_LIDS]:
         # A face of the removed region that lies on the body's old
@@ -1374,6 +1488,8 @@ def _lids(reg, skin, diag):
             # whatever the face's orientation: a step along it is outside.
             step = 1e-3 * diag
             if reg.isInside(p + n * step, 1e-7, False):
+                n = -n
+            if flip:
                 n = -n
             w = side_word((n.x, n.y, n.z), (p.x, p.y, p.z))
         except Exception:  # noqa: BLE001 - one face not read

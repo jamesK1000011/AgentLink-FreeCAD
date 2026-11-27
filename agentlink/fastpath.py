@@ -20,7 +20,7 @@ A step is the same flat step as batch's (agentlink/callshape.py):
 The tool's inputs stand beside tool. each runs the step once for each
 value, in order ("$x" is the value). $from takes a value from the answer of
 an earlier call (calls count from 0, each pass is one call). The only
-difference to batch is the answer: one short answer here, a full answer
+difference to batch is the answer: one short answer here (its first key, result, lists the result line of each call that has one, in order), a full answer
 for each call there. There are no other kinds of step: no variables, no
 conditions, no expressions. Old forms ({ tool, arguments }, do, as, when,
 let, try, choose) are refused with the new form in the words.
@@ -45,6 +45,7 @@ import re
 import time
 
 from . import callshape, chain
+from . import resultline as _resultline
 from .protocol import ToolError, check_input, compact, kinded, strip_kind
 
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
@@ -965,7 +966,9 @@ def _run(server, session, steps, a):
         v1 = _volume(s, vol_doc) if _open(vol_doc) else None
         if v1 is not None and s.doc is vol_doc and hasattr(s, "note_measure"):
             s.note_measure()  # the block's own end reading measures its document
-        out = {"fast": _summary(run, True, secs, v0, v1)}
+        # The result lines of the calls, in order, first: the short answer's body.
+        lines = _resultline.fast_lines([(r["step"], r["tool"], r.get("result")) for r in run.rows if r.get("ok")])
+        out = {**({"result": lines} if lines else {}), "fast": _summary(run, True, secs, v0, v1)}
         if run.made_rows:
             out["made"] = run.made_rows[:40]
         if run.checks:

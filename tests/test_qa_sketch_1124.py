@@ -383,22 +383,23 @@ class BodyExtent(unittest.TestCase):
             self.x, self.y, self.z = x, y, z
     sketch.V = P
     # An XZ sketch: its x is the world x, its y the world z, its normal -y. The inverse takes world (x, y, z) to (x, z, -y).
-    inv = types.SimpleNamespace(multVec=lambda v: P(v.x, v.z, -v.y))
-    pl = types.SimpleNamespace(inverse=lambda: inv)
+    # sketch x = world x, sketch y = world z, normal = -world y
+    rot = types.SimpleNamespace(multVec=lambda v: {(1, 0, 0): P(1, 0, 0), (0, 1, 0): P(0, 0, 1), (0, 0, 1): P(0, -1, 0)}[(v.x, v.y, v.z)])
+    pl = types.SimpleNamespace(Base=P(0, 0, 0), Rotation=rot)
     bb = types.SimpleNamespace(XMin=-20.04, XMax=20.04, YMin=0, YMax=15, ZMin=0, ZMax=8.26)
     body = types.SimpleNamespace(Shape=types.SimpleNamespace(isNull=lambda: False, Solids=[1], BoundBox=bb))
     sk = types.SimpleNamespace(getGlobalPlacement=lambda: pl)
     empty = types.SimpleNamespace(Shape=types.SimpleNamespace(isNull=lambda: False, Solids=[], BoundBox=bb))
     print(json.dumps([sketch.body_extent(body, sk), sketch.body_extent(empty, sk)]))
 ''')
-        self.assertEqual(got, [{"x": [-20.0, 20.0], "y": [0.0, 8.3]}, None])
+        self.assertEqual(got, [{"x": [-20.0, 20.0], "y": [0.0, 8.3], "normal": [-15.0, 0.0]}, None])
 
     def test_the_answer_and_the_cards(self):
         e = entries()
         new = e["sketch_new"]
         self.assertEqual(new["answer"]["fields"]["bodyExtent"], {"when": "=ext", "value": "=ext"})
         self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)"}})
-        self.assertIn("bodyExtent: the box of the body's solid in the sketch's own x/y", new["description"])
+        self.assertIn("bodyExtent: the box of the body's solid in the sketch's own frame", new["description"])
         add = e["sketch_add"]["description"]
         self.assertIn("rectangle {center|corner, size}. rounded_rectangle {…, radius}.", add)
         # 27 Nov: the facts about each input are in the schema's own descriptions

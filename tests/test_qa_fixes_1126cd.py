@@ -68,7 +68,8 @@ class StateIsFresh(unittest.TestCase):
 
 
 class FarJoins(unittest.TestCase):
-    def test_a_far_coincident_that_moved_the_shape_is_said(self):
+    def test_a_join_that_moved_the_shape_is_said_whatever_its_size(self):
+        # 27 Nov: no FAR_JOIN limit: a join says what it moved, 40 mm or 0.02 mm.
         got = in_a_process(GEO + '''
     pts = {(0, 2): P(0.9, 20), (3, 1): P(170.7, -12.5)}
     sk = types.SimpleNamespace(Geometry=[types.SimpleNamespace(), None, None, LineSegment((170.7, -12.5), (0, -20))],
@@ -76,21 +77,22 @@ class FarJoins(unittest.TestCase):
     class ArcOfCircle:
         pass
     sk.Geometry[0] = ArcOfCircle()
-    far = sketch.far_joins(sk, [("Coincident", 0, 2, 3, 1), ("Distance", 0, 30.0)])
+    joins = sketch.join_points(sk, [("Coincident", 0, 2, 3, 1), ("Distance", 0, 30.0)])
     pts[(0, 2)] = pts[(3, 1)] = P(85, 4)   # the solve joined them half way
-    st = sketch.far_join_words({"todo": "close the open wires"}, sk, far)
-    near = sketch.far_joins(sk, [("Coincident", 0, 2, 3, 1)])   # now together: nothing to say
-    print(json.dumps([len(far), st["todo"], near]))
+    st = sketch.join_move_words({"todo": "close the open wires"}, sk, joins)
+    near = sketch.join_points(sk, [("Coincident", 0, 2, 3, 1)])   # now together
+    same = sketch.join_move_words({"todo": "x"}, sk, near)       # nothing moved: nothing said
+    print(json.dumps([len(joins), st["todo"], same["todo"]]))
 ''')
         self.assertEqual(got[0], 1)
         self.assertEqual(got[1], "coincident joined the end of arc 0 (0.9, 20) and the start of line 3 (170.7, -12.5), 172.882 mm apart: "
                                  "the shape moved; check it; close the open wires")
-        self.assertEqual(got[2], [])
+        self.assertEqual(got[2], "x")
 
     def test_the_card_reads_them_before_the_constraints_go_in(self):
         steps = json.dumps(entries()["sketch_constrain"]["steps"])
-        self.assertLess(steps.index("far_joins(sk, ts)"), steps.index("sk.addConstraint(constraint(t))"))
-        self.assertIn("far_join_words(st, sk, far)", steps)
+        self.assertLess(steps.index("join_points(sk, ts)"), steps.index("sk.addConstraint(constraint(t))"))
+        self.assertIn("join_move_words(st, sk, joins)", steps)
 
 
 class HolesCut(unittest.TestCase):

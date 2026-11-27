@@ -467,10 +467,11 @@ def tools(session):
             b.Tip = f
         return f
 
-    def settle(b, f, tool, before=None, must_change=None, hint=""):
+    def settle(b, f, tool, before=None, must_change=None, hint="", seen=None):
         """Recompute, refuse a feature (or a later one) that failed or changed
-        nothing where it must, else the body's reading (pd_common.settle)."""
-        return pc.settle(s, b, f, tool, before, must_change, hint=hint)
+        nothing where it must, else the body's reading (pd_common.settle).
+        seen: a fillet's or chamfer's edge words, for the result line."""
+        return pc.settle(s, b, f, tool, before, must_change, hint=hint, **({} if seen is None else {"seen": seen}))
 
     # What the tools' entries (agentlink/data/tools.json) call by name.
     helpers = {"doc": doc, "settle": settle, "new": new, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),

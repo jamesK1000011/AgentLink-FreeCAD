@@ -195,6 +195,7 @@ agentlink/refusal.py
 agentlink/render.py
 agentlink/report_watch.py
 agentlink/restart_mark.py
+agentlink/resultline.py
 agentlink/runners.py
 agentlink/selftest.py
 agentlink/server.py
@@ -530,6 +531,7 @@ tests/test_renames_4_7_9.py
 tests/test_render_sizing.py
 tests/test_report_watch.py
 tests/test_restart_temp_copy.py
+tests/test_result_line_1127.py
 tests/test_rider_calldone.py
 tests/test_round7_misc.py
 tests/test_runners.py

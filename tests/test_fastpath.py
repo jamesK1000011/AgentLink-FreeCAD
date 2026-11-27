@@ -344,6 +344,17 @@ def _child(case):
         from agentlink import staticbase as _sb, tools as _tools
         out["props"] = {n: sorted(srv.tools[n].schema["properties"]) for n in ("tool_find", "tool_groups", "job_start")}
         out["texts"] = {"STATIC_NOTE": _tools.STATIC_NOTE, "WORKING": _tools.WORKING, "TG_CARDS_NOTE": _tools.TG_CARDS_NOTE, "BASIC_FORM": _sb.BASIC_FORM}
+    elif case == "result1127":
+        # 27 Nov: each call's answer starts with result, in run, in batch and in fast (the stand-in tools answer as the real ones: result first).
+        def probe_result(a):
+            doc.add(f"R{a.get('n')}", "Part::Feature")
+            return {"result": f"Probe {a.get('n')} made one object.", "n": a.get("n")}
+
+        srv.add(Tool("probe_result", "A change that says its result.", num, probe_result, changes=True))
+        out["run"] = one("run", {"tool": "probe_result", "n": 1})
+        out["batch"] = one("batch", {"calls": [{"tool": "probe_result", "n": 2}, {"tool": "probe_change", "n": 3}, {"tool": "probe_result", "n": 4}]})
+        out["fast"] = fast({"calls": [{"tool": "probe_result", "n": 5}, {"tool": "probe_change", "n": 6}, {"tool": "probe_result", "n": 7}]})
+        out["fastNone"] = fast({"calls": [{"tool": "probe_change", "n": 8}]})
     elif case == "flat":
         # One flat step everywhere (26 Nov): run, batch and fast take the same steps.
         calls = [{"tool": "probe_change", "n": 1}, {"tool": "probe_change", "n": 2}]

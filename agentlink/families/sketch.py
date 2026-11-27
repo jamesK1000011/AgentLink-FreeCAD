@@ -16,6 +16,7 @@ import Sketcher
 
 from .. import geometry as geo
 from .. import orient
+from .. import resultline as rl
 from .. import runners
 from ..once import DOF_NOTE
 from ..protocol import ToolError
@@ -42,23 +43,70 @@ def frame(pl):
     return {"origin": geo.vec(pl.Base), "xAxis": geo.vec(r.multVec(V(1, 0, 0))), "yAxis": geo.vec(r.multVec(V(0, 1, 0))), "normal": geo.vec(r.multVec(V(0, 0, 1)))}
 
 
-def body_extent(b, sk):
-    """Where body b's solid is in sketch sk's own x/y: {"x": [min, max],
-    "y": [min, max]} (mm, to 0.1), from the corners of the solid's box
-    taken through the inverse of the sketch's place in the world. None
-    when the body has no solid yet."""
+def frame_of(sk):
+    """The sketch's frame in the world as four tuples (origin, x axis, y
+    axis, normal), from its global placement (resultline.frame_ranges)."""
+    pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+    r = pl.Rotation
+
+    def t(v):
+        return (float(v.x), float(v.y), float(v.z))
+
+    return (t(pl.Base), t(r.multVec(V(1, 0, 0))), t(r.multVec(V(0, 1, 0))), t(r.multVec(V(0, 0, 1))))
+
+
+def _box6(bb):
+    return (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax)
+
+
+def body_ranges(b, sk):
+    """Where body b's solid is in sketch sk's own frame: ((xmin, xmax),
+    (ymin, ymax), (nmin, nmax)), n along the sketch's normal from its plane
+    (mm, not rounded), from the corners of the solid's box. None when the
+    body has no solid yet or the frame is not read."""
     try:
         shape = b.Shape
         if shape is None or shape.isNull() or not shape.Solids:
             return None
-        bb = shape.BoundBox
-        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
-        inv = pl.inverse()
+        return rl.frame_ranges(frame_of(sk), _box6(shape.BoundBox))
     except Exception:  # noqa: BLE001 - no reading: nothing said
         return None
-    pts = [inv.multVec(V(x, y, z)) for x in (bb.XMin, bb.XMax) for y in (bb.YMin, bb.YMax) for z in (bb.ZMin, bb.ZMax)]
+
+
+def body_extent(b, sk):
+    """Where body b's solid is in sketch sk's own frame: {"x": [min, max],
+    "y": [min, max], "normal": [min, max]} (mm, to 0.1). normal is along the
+    sketch's normal, 0 at the sketch plane: it says which side of the sketch
+    the body lies on. None when the body has no solid yet."""
+    got = body_ranges(b, sk)
+    if got is None:
+        return None
     r = lambda v: round(float(v), 1) + 0.0  # noqa: E731
-    return {"x": [r(min(p.x for p in pts)), r(max(p.x for p in pts))], "y": [r(min(p.y for p in pts)), r(max(p.y for p in pts))]}
+    return {k: [r(lo), r(hi)] for k, (lo, hi) in zip(("x", "y", "normal"), got)}
+
+
+def face_ranges(link, sk):
+    """The face a sketch sits on, in the sketch's own frame (as
+    body_ranges): from the face's box. None when the sketch is not on a
+    face or the face is not read."""
+    try:
+        obj, subs = link
+        sub = subs[0] if subs else ""
+        if not isinstance(sub, str) or not sub.startswith("Face"):
+            return None
+        return rl.frame_ranges(frame_of(sk), _box6(obj.Shape.getElement(sub).BoundBox))
+    except Exception:  # noqa: BLE001 - no reading: nothing said
+        return None
+
+
+def new_result(sk, b, what, link):
+    """sketch_new's result line: the sketch and its support, the axes in
+    words, the body's range in the sketch's x, y and normal, and for a face
+    sketch the face's own x and y range."""
+    try:
+        return rl.sketch_new_result(sk.Label, what, axes(sk.Placement), body_ranges(b, sk), face_ranges(link, sk))
+    except Exception:  # noqa: BLE001 - a reading only
+        return f"Sketch {getattr(sk, 'Label', '')} is on {what}."
 
 
 def _geo_kind(g):
@@ -517,6 +565,19 @@ def fresh(sk):
             pass
 
 
+def open_ends_of(sk, wires):
+    """The ends of the open wires, in the sketch's own x/y. (Not the
+    sketch's OpenVertices: it lists every vertex that does not join
+    exactly two edges, a lone circle's too.)"""
+    openv = []
+    inv = sk.Placement.inverse()
+    for w in wires:
+        if not w.isClosed():
+            vs = [v for v in w.Vertexes if sum(1 for e in w.Edges for ev in e.Vertexes if ev.isSame(v)) == 1]
+            openv += [_pt(inv.multVec(v.Point)) for v in vs]
+    return openv
+
+
 def state_of(sk):
     # Every sketch tool's state comes from here: the Shape is built again
     # first, so the wires and open ends are those of the sketch as it is now.
@@ -531,16 +592,7 @@ def state_of(sk):
     dof = getattr(sk, "DoF", None)
     wires = sk.Shape.Wires if not sk.Shape.isNull() else []
     closed = sum(1 for w in wires if w.isClosed())
-    openv = []
-    if wires and closed < len(wires):
-        # The ends of the open wires, in the sketch's own x/y. (Not the
-        # sketch's OpenVertices: it lists every vertex that does not join
-        # exactly two edges, a lone circle's too.)
-        inv = sk.Placement.inverse()
-        for w in wires:
-            if not w.isClosed():
-                vs = [v for v in w.Vertexes if sum(1 for e in w.Edges for ev in e.Vertexes if ev.isSame(v)) == 1]
-                openv += [_pt(inv.multVec(v.Point)) for v in vs]
+    openv = open_ends_of(sk, wires) if wires and closed < len(wires) else []
     out = {
         "sketch": sk.Label,
         "solver": SOLVE.get(code, f"code {code}"),
@@ -918,60 +970,180 @@ def vertex_words(sk, g, p):
     return f"{name} has no {VERTEX_WORDS[p]} (vertex {p}); its points are {pts}"
 
 
-# Heuristic (blind QA, 26 Nov: coincident pairs that joined points about 170
-# mm apart in a 200 mm crank, and the outline folded over): a coincident
-# whose two points were farther apart than this share of the sketch's size
-# (NEAR_GAP's share: nearer is a gap to close) and whose solve moved a point
-# that far is named in the todo, so the shape is checked.
-FAR_JOIN = NEAR_GAP
+# A join (a coincident, or two end points made tangent) pulls two points
+# together. The answer says how far each of its points moved: any distance
+# over MOVE_TOL, the tolerance for two equal numbers (27 Nov: no other limit).
+MOVE_TOL = rl.TOL
+JOINS = ("Coincident", "Tangent")
 
 
-def far_joins(sk, ts):
-    """[(words of the two points, (x1, y1), (x2, y2), gap mm, limit mm)] for
-    each Coincident in constraint tuples ts whose points are now farther
-    apart than FAR_JOIN of the sketch's size; [] on any error."""
+def join_points(sk, ts):
+    """[(kind, (g1, p1, g2, p2), (x1, y1), (x2, y2), gap mm)] for each join
+    in constraint tuples ts, read before the constraints go in: where its
+    two points are now. [] on any error."""
     out = []
     try:
-        try:
-            size = sk.Shape.BoundBox.DiagonalLength
-        except Exception:  # noqa: BLE001
-            size = 0.0
-        limit = max(FAR_JOIN * size, 1e-3)
         for t in ts:
-            if t[0] != "Coincident" or len(t) < 5:
+            if t[0] not in JOINS or len(t) < 5:
                 continue
             a, b = sk.getPoint(t[1], t[2]), sk.getPoint(t[3], t[4])
-            d = math.dist((a.x, a.y), (b.x, b.y))
-            if d > limit:
-                out.append(((t[1], t[2], t[3], t[4]), (a.x, a.y), (b.x, b.y), d, limit))
+            out.append((t[0].lower(), (t[1], t[2], t[3], t[4]), (a.x, a.y), (b.x, b.y), math.dist((a.x, a.y), (b.x, b.y))))
     except Exception:  # noqa: BLE001 - a reading only
         return []
     return out
 
 
-def far_join_words(st, sk, far):
-    """st (state_of's) with the todo words first for each far join whose
-    solve moved one of its points more than the limit: "coincident joined
-    the end of arc 0 (0.9, 20) and the start of line 3 (170.7, -12.5), 172
-    mm apart: the shape moved; check it". Never raises."""
-    words = []
+def join_moves(sk, joins):
+    """The joins (join_points, read before) whose points moved in the solve:
+    [(kind, ids, a, b, gap, [(words of a point, mm it moved)])], the points
+    that moved over MOVE_TOL only. Never raises."""
+    out = []
+    for kind, ids, a, b, d in joins:
+        try:
+            g1, p1, g2, p2 = ids
+            pts = []
+            for g, p, was in ((g1, p1, a), (g2, p2, b)):
+                now = sk.getPoint(g, p)
+                m = math.dist(was, (now.x, now.y))
+                if m > MOVE_TOL:
+                    pts.append((ref_words(sk, g, p), m))
+            if pts:
+                out.append((kind, ids, a, b, d, pts))
+        except Exception:  # noqa: BLE001 - not read: not said
+            continue
+    return out
+
+
+def join_move_words(st, sk, joins):
+    """st (state_of's) with the todo words first for each join that moved:
+    "coincident joined the end of arc 0 (0.9, 20) and the start of line 3
+    (170.7, -12.5), 172 mm apart: the shape moved; check it". Never raises."""
     try:
-        for (g1, p1, g2, p2), a, b, d, limit in far:
-            try:
-                na, nb = sk.getPoint(g1, p1), sk.getPoint(g2, p2)
-                moved = max(math.dist(a, (na.x, na.y)), math.dist(b, (nb.x, nb.y)))
-            except Exception:  # noqa: BLE001 - not read: said, as the join was far
-                moved = d
-            if moved <= limit:
-                continue
-            words.append(f"coincident joined {ref_words(sk, g1, p1)} {_at(a)} and {ref_words(sk, g2, p2)} {_at(b)}, "
-                         f"{geo.r3(d):g} mm apart: the shape moved; check it")
+        words = [f"{kind} joined {ref_words(sk, g1, p1)} {_at(a)} and {ref_words(sk, g2, p2)} {_at(b)}, {geo.r3(d):g} mm apart: the shape moved; check it"
+                 for kind, (g1, p1, g2, p2), a, b, d, _pts in join_moves(sk, joins)]
     except Exception:  # noqa: BLE001
         return st
     if words:
         st = dict(st)
         st["todo"] = "; ".join(words + ([st["todo"]] if st.get("todo") else []))
     return st
+
+
+def dof_of(sk):
+    """FreeCAD's degrees of freedom of a sketch as it stands, or None."""
+    v = getattr(sk, "DoF", None)
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+JOINS_SHOWN = 6  # joins one constraint answer says one by one
+
+
+def _shapes_box(sk, ids):
+    """(xmin, xmax, ymin, ymax) of the geometry ids in the sketch's own x/y;
+    construction geometry is left out unless all of it is construction. None
+    when not read."""
+    try:
+        use = [i for i in ids if 0 <= i < len(sk.Geometry)]
+        solid = [i for i in use if not sk.getConstruction(i)]
+        bbs = []
+        for i in solid or use:
+            sh = sk.Geometry[i].toShape()
+            try:
+                bb = sh.optimalBoundingBox(True, False)
+            except Exception:  # noqa: BLE001 - the plain box then
+                bb = sh.BoundBox
+            bbs.append(bb)
+        if not bbs:
+            return None
+        return (min(b.XMin for b in bbs), max(b.XMax for b in bbs), min(b.YMin for b in bbs), max(b.YMax for b in bbs))
+    except Exception:  # noqa: BLE001 - not read: not said
+        return None
+
+
+def con_result(sk, added, dof_before, joins, st):
+    """sketch_constrain's result line: the constraints added (in words), the
+    degrees of freedom before and after, each join that moved geometry with
+    the distance each point moved (no lower limit but MOVE_TOL), and the
+    extent of the sketch's shapes after the solve. Never raises."""
+    try:
+        return _con_result(sk, added, dof_before, joins, st)
+    except Exception:  # noqa: BLE001 - a reading only
+        return f"Added constraint {', '.join(str(i) for i in added)}." if added else "Added no constraint."
+
+
+def _con_result(sk, added, dof_before, joins, st):
+    try:
+        words = [con_words(sk, i) for i in added]
+    except Exception:  # noqa: BLE001
+        words = []
+    moves = []
+    more = 0
+    try:
+        got = join_moves(sk, joins)
+        moves = [(f"{ref_words(sk, g1, p1)} and {ref_words(sk, g2, p2)}", [(w, m) for w, m in pts])
+                 for _k, (g1, p1, g2, p2), _a, _b, _d, pts in got[:JOINS_SHOWN]]
+        more = max(0, len(got) - JOINS_SHOWN)
+    except Exception:  # noqa: BLE001
+        pass
+    box = _shapes_box(sk, range(len(sk.Geometry))) if hasattr(sk, "Geometry") else None
+    spans = ((box[0], box[1]), (box[2], box[3])) if box else None
+    return rl.constraint_result(words, dof_before, st.get("dof") if isinstance(st, dict) else None, moves, spans, more)
+
+
+def _mid(g):
+    return g.value((g.FirstParameter + g.LastParameter) / 2)
+
+
+def add_result(sk, out, st):
+    """sketch_add's result line: each shape of the call with its ids, its
+    extent in the sketch's x/y and in the world, a circle's centre and
+    radius, an arc's start, middle and end point; then the sketch's wires,
+    closed wires and open ends. Never raises."""
+    try:
+        return _add_result(sk, out, st)
+    except Exception:  # noqa: BLE001 - a reading only
+        return "Added " + ", ".join(f"{i.get('kind', 'shape')} {rl.id_text(i.get('ids') or [])}" for i in out or []) + "."
+
+
+def _add_result(sk, out, st):
+    try:
+        frame = frame_of(sk)
+    except Exception:  # noqa: BLE001
+        frame = None
+    shapes = []
+    for item in out or []:
+        ids = list(item.get("ids") or [])
+        kw = {}
+        try:
+            use = [i for i in ids if 0 <= i < len(sk.Geometry)]
+            solid = [i for i in use if not sk.getConstruction(i)] or use
+            if len(solid) == 1:
+                g = sk.Geometry[solid[0]]
+                k = _geo_kind(g)
+                if k == "Circle":
+                    kw["circle"] = ((g.Center.x, g.Center.y), g.Radius)
+                elif k == "Arc":
+                    m = _mid(g)
+                    kw["arc"] = ((g.StartPoint.x, g.StartPoint.y), (m.x, m.y), (g.EndPoint.x, g.EndPoint.y))
+                elif k == "Line":
+                    kw["line"] = ((g.StartPoint.x, g.StartPoint.y), (g.EndPoint.x, g.EndPoint.y))
+        except Exception:  # noqa: BLE001 - not read: not said
+            kw = {}
+        box = _shapes_box(sk, ids)
+        if box:
+            kw["xr"], kw["yr"] = (box[0], box[1]), (box[2], box[3])
+            if frame is not None:
+                kw["world"] = rl.world_box(frame, kw["xr"], kw["yr"])
+        shapes.append(rl.shape_text(str(item.get("kind") or "shape"), ids, **kw))
+    wires = closed = ends = None
+    if isinstance(st, dict):
+        wires, closed = st.get("wires"), st.get("closedWires")
+        try:
+            ws = sk.Shape.Wires if not sk.Shape.isNull() else []
+            ends = len(open_ends_of(sk, ws)) if ws else 0
+        except Exception:  # noqa: BLE001
+            ends = None
+    return rl.sketch_add_result(shapes, wires, closed, ends)
 
 
 def make_constraint(sk, c):
@@ -1236,7 +1408,7 @@ def tools(session):
                "line": lambda a, b: Part.LineSegment(a, b), "wire": lambda edges: Part.Wire(edges), "sort_edges": lambda edges: Part.sortEdges(edges),
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
-               "frame": frame, "state_of": state_of, "fresh": fresh, "far_joins": far_joins, "far_join_words": far_join_words, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
+               "frame": frame, "state_of": state_of, "fresh": fresh, "join_points": join_points, "join_move_words": join_move_words, "dof_of": dof_of, "con_result": con_result, "add_result": add_result, "new_result": new_result, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent}
