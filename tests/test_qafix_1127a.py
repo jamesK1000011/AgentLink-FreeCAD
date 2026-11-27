@@ -10,6 +10,8 @@
 #            a partial cut in the result line (F7), removal calls written from
 #            the state (F9), which face a sketch is on (F10), and a true
 #            pd_body_new example.
+#   Group C: the sketch todo gives each open end and the measured distance to
+#            the nearest other open end. No threshold decides the words.
 # The FreeCAD-facing code runs on the stand-in (tests/_datapd_standin.py) in
 # a child process. Real shapes need a real FreeCAD.
 import json
@@ -341,13 +343,19 @@ class Lies(unittest.TestCase):
         pc.body_of = lambda o: body
         on_face.Document = types.SimpleNamespace(RecomputesFrozen=True)
         out["held"] = sketch.lies_words(on_face, world)
+        on_face.Document = types.SimpleNamespace(RecomputesFrozen=False)
+        body.getGlobalPlacement = lambda: types.SimpleNamespace(isSame=lambda other, tol: False)   # a moved Part holds the body
+        out["twoFrames"] = sketch.lies_words(on_face, world)
+        body.getGlobalPlacement = lambda: types.SimpleNamespace(isSame=lambda other, tol: True)
+        out["oneFrame"] = len(sketch.lies_words(on_face, world))
         print(json.dumps(out))
         """)
         self.assertEqual(got["face"], ["Against the face (x -4..8, y -3..3, z 2): x past -x by 2; y inside (4 from -y, 1 from +y).",
                                        "Against the body (x -4..8, y -3..3, z 0..2): x past -x by 2; y inside (4 from -y, 1 from +y); z inside (2 from -z, 0 from +z)."])
         self.assertEqual(len(got["plane"]), 1)
         self.assertTrue(got["plane"][0].startswith("Against the body"))
-        self.assertEqual((got["noSolid"], got["noBody"], got["held"]), ([], [], []))  # nothing measured: nothing said
+        self.assertEqual((got["noSolid"], got["noBody"], got["held"], got["twoFrames"]), ([], [], [], []))  # nothing measured: nothing said
+        self.assertEqual(got["oneFrame"], 2)
 
     def test_the_result_line_has_it_after_the_shape_and_before_the_wires(self):
         line = rl.sketch_add_result(["circle, id 0: centre (1, 1), radius 2."], 1, 1, 0, ["Against the body (x 0..1, y 0..1, z 0..1): x inside (0 from -x, 0 from +x)."])
@@ -446,6 +454,10 @@ class UsedSketch(unittest.TestCase):
         out["otherSketch"] = pc.used_change(free, mark)
         body.Shape = Shp((0, 9, 0, 4, 0, 2), vol=72.0)
         out["same"] = pc.used_change(sk, mark)
+        out["sameOnlyChanged"] = pc.used_change(sk, mark, only_changed=True)
+        body.Shape = Shp((0, 9.5, 0, 4, 0, 2), vol=72.0)
+        out["boxOnlyChanged"] = pc.used_change(sk, mark, only_changed=True)
+        body.Shape = Shp((0, 9, 0, 4, 0, 2), vol=72.0)
         # the session keeps the reading of the first sketch a call works on
         s = types.SimpleNamespace(sketch_now=None, filled_now=[], sketch_before=None)
         pc.note_named(s, sk)
@@ -462,6 +474,8 @@ class UsedSketch(unittest.TestCase):
             self.assertIsNone(got[k], k)
         self.assertEqual(got["same"], "This call left the volume of Body as it was (72 mm³).")
         self.assertEqual(got["kept"], 72.0)
+        self.assertIsNone(got["sameOnlyChanged"])  # a constraint that changed nothing of the body: no note
+        self.assertEqual(got["boxOnlyChanged"], "This call left the volume of Body as it was (72 mm³). The body before is x 0..9, y 0..4, z 0..2. The body now is x 0..9.5, y 0..4, z 0..2.")
 
     def test_a_constraint_is_a_change_to_a_used_sketch_too(self):
         self.assertIn("sketch_constrain", protocol.SKETCH_CHANGE_TOOLS)
@@ -599,6 +613,68 @@ class BodyExample(unittest.TestCase):
         self.assertIn("'Body'", json.dumps(runners.entries()["pd_body_new"]["steps"]))  # the label without name, as the tool has it
         self.assertIsNone(refused("pd_body_new", {}))
         self.assertIn("input.name: give the value", refused("pd_body_new", {"name": None}))
+
+
+# ---- Group C: open ends are facts ------------------------------------------------------------
+
+class OpenEndFacts(unittest.TestCase):
+    TAIL = ". A closed outline has no open end"
+
+    def words(self, ends, curves=(0, 1), size=100.0, on=()):
+        """open_end_words for ends; on: the (gid, pos) of the ends that lie on another curve."""
+        return child("""
+        ends = [tuple(e[:3]) + (tuple(e[3]),) for e in %r]
+        on = {tuple(p) for g, k, s, p in ends if [g, s] in %r}
+        dist = lambda i, p: 0.0 if tuple(p) in on else 50.0
+        print(json.dumps(sketch.open_end_words(ends, %r, %r, dist)))
+        """ % ([list(e) for e in ends], [list(x) for x in on], list(curves), size))
+
+    def test_one_form_of_words_at_every_distance(self):
+        # the same two ends, a little apart and far apart: the same words, with the measured number
+        for gap in (0.0004, 0.02, 0.75, 6.0, 240.0):
+            got = self.words([(0, "line", 2, (10, 0)), (1, "arc", 1, (10, gap))])
+            self.assertEqual(len(got), 1, gap)
+            m = re.fullmatch(r"the end of line 0 \[0, 2\] \(10, 0\) and the start of arc 1 \[1, 1\] \(10, ([\d.e-]+)\) are open ends, ([\d.e-]+) mm apart" + re.escape(self.TAIL), got[0])
+            self.assertTrue(m, got[0])
+            self.assertAlmostEqual(float(m.group(2)), gap, places=6)  # a distance that is not zero is never said as 0
+
+    def test_the_size_of_the_outline_decides_nothing(self):
+        ends = [(0, "line", 2, (10, 0)), (1, "line", 1, (10, 3)), (1, "line", 2, (90, 3))]
+        self.assertEqual(len({json.dumps(self.words(ends, size=sz)) for sz in (0.5, 30.0, 400.0, 90000.0)}), 1)
+
+    def test_each_open_end_has_the_distance_to_its_nearest_other_end(self):
+        ends = [(0, "line", 1, (0, 0)), (0, "line", 2, (10, 0)), (1, "line", 1, (10, 3)), (1, "line", 2, (90, 3))]
+        got = self.words(ends)
+        self.assertEqual(got, ["the start of line 0 [0, 1] (0, 0) is an open end; the nearest other open end is the end of line 0 [0, 2] (10, 0), 10 mm away",
+                               "the end of line 0 [0, 2] (10, 0) and the start of line 1 [1, 1] (10, 3) are open ends, 3 mm apart",
+                               "the end of line 1 [1, 2] (90, 3) is an open end; the nearest other open end is the start of line 1 [1, 1] (10, 3), 80 mm away" + self.TAIL])
+
+    def test_the_only_open_end_and_an_end_on_another_curve(self):
+        self.assertEqual(self.words([(0, "line", 2, (10, 0))]), ["the end of line 0 [0, 2] (10, 0) is an open end, the only one" + self.TAIL])
+        # an end on another curve is a branch (branch_words says it): no phrase of its own, still a nearest end of others
+        got = self.words([(0, "line", 2, (10, 0)), (1, "line", 1, (10, 3))], on=[(1, 1)])
+        self.assertEqual(got, ["the end of line 0 [0, 2] (10, 0) is an open end; the nearest other open end is the start of line 1 [1, 1] (10, 3), 3 mm away" + self.TAIL])
+        self.assertEqual(self.words([(0, "line", 2, (10, 0))], on=[(0, 2)]), [])
+
+    def test_the_words_say_nothing_of_what_was_meant(self):
+        ends = [(g, "line", s, (g * 7.0, s * 0.01)) for g in range(4) for s in (1, 2)]
+        got = self.words(ends, curves=(0, 1, 2, 3))
+        text = " ".join(got)
+        for banned in ("probably", "meant", "should", "remove it", "joins them", "sketch_constrain", "near ", "close to", "not a full circle"):
+            self.assertNotIn(banned, text)
+        self.assertEqual(text.count("A closed outline has no open end"), 1)
+
+    def test_a_cap_says_how_many_are_not_shown(self):
+        ends = [(g, "line", 1, (g * 100.0, 0)) for g in range(7)]  # no two are each other's nearest but the first two
+        got = self.words(ends, curves=tuple(range(7)))
+        self.assertEqual(len(got), 5)
+        self.assertEqual(got[-1], "and 2 more open ends (openVertices)" + self.TAIL)
+
+    def test_the_one_tolerance_is_freecads(self):
+        got = child("""
+        print(json.dumps([sketch.SAME_POINT, pc.TOUCH, [n for n in ("NEAR_GAP", "ROUND_NEAR", "ROUND_NEAR_MM", "TINY_GAP_MM", "TINY_GAP") if hasattr(sketch, n)]]))
+        """)
+        self.assertEqual(got, [1e-7, 1e-7, []])
 
 
 if __name__ == "__main__":

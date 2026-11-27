@@ -309,12 +309,14 @@ def used_mark(sk):
         return None
 
 
-def used_change(sk, mark):
+def used_change(sk, mark, only_changed=False):
     """After a call that changed sketch sk: what the call changed of the
     body, measured against mark (used_mark's, read before the call), in
     resultline.body_change_text's words. None when it was not measured: no
     mark, another sketch, the document's recompute is held (a batch with
-    build: "end"), or an object of the body waits for a recompute."""
+    build: "end"), or an object of the body waits for a recompute.
+    only_changed: None too when the volume, the box and the solids are as
+    they were (a constraint that moves nothing of the body)."""
     try:
         if not mark or mark.get("sketch") != sk.Name:
             return None
@@ -329,7 +331,11 @@ def used_change(sk, mark):
         shape = body.Shape
         if shape is None or shape.isNull():
             return None
-        return rl.body_change_text(body.Label, mark["volume"], float(shape.Volume), mark["box"], _bbt(shape.BoundBox), mark["solids"], len(shape.Solids))
+        vol, box, solids = float(shape.Volume), _bbt(shape.BoundBox), len(shape.Solids)
+        same = abs(vol - mark["volume"]) <= 1e-2 and solids == mark["solids"] and all(abs(a - b) <= rl.TOL for a, b in zip(box, mark["box"]))
+        if only_changed and same:
+            return None
+        return rl.body_change_text(body.Label, mark["volume"], vol, mark["box"], box, mark["solids"], solids)
     except Exception:  # noqa: BLE001 - not measured: nothing is said
         return None
 

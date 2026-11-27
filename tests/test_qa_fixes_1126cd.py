@@ -247,9 +247,15 @@ class OnePointOneMessage(unittest.TestCase):
                       sketch.branch_words(ends, {0: "line", 3: "line"}, 15.0, dist_of(geo), ())]))
 ''')
         gaps, branches, before = got
-        self.assertIn("the end of line 0 (10, 0) is 0.003 mm from the end of line 3 (10, -0.003): sketch_constrain coincident joins them", gaps)
-        self.assertEqual(branches, [])
-        self.assertTrue(before and "meets line 3" in before[0], before)  # what it said before: a second message for the point
+        # 27 Nov (owner): facts only. The end of line 0 is on line 3: a branch, said once, by branch_words. The end of
+        # line 3 is an open end, said once, with the measured distance to the nearest other open end. No words of one
+        # are held back for the other, and no constraint is named.
+        self.assertIn("the end of line 3 [3, 2] (10, -0.003) is an open end; the nearest other open end is the end of line 0 [0, 2] (10, 0), 0.003 mm away"
+                      ". A closed outline has no open end", gaps)
+        self.assertFalse([w for w in gaps if w.startswith("the end of line 0")], gaps)
+        self.assertEqual(branches, before)
+        self.assertTrue(before and "meets line 3" in before[0], before)
+        self.assertNotIn("sketch_constrain", " ".join(gaps + branches))
 
 
 class CutSentence(unittest.TestCase):
@@ -307,7 +313,9 @@ class RoundEndsAndGaps(unittest.TestCase):
     ends = [(1, "line", 2, (170.707, 12.48)), (2, "line", 1, (170.708, 12.48))]
     print(json.dumps(sketch.open_end_words(ends, [1, 2, 8], 205.0, dist_of(geo), [8])))
 ''')
-        self.assertEqual(got, ["the end of line 1 (170.707, 12.48) is 0.001 mm from the start of line 2 (170.708, 12.48): sketch_constrain coincident joins them"])
+        # 27 Nov (owner): the measured distance, by the same words as any two open ends; the hole decides nothing
+        self.assertEqual(got, ["the end of line 1 [1, 2] (170.707, 12.48) and the start of line 2 [2, 1] (170.708, 12.48) are open ends, 0.001 mm apart"
+                               ". A closed outline has no open end"])
 
     def test_one_end_near_a_hole_is_not_a_round_end(self):
         got = in_a_process(GEO + '''
@@ -315,9 +323,9 @@ class RoundEndsAndGaps(unittest.TestCase):
     ends = [(1, "line", 1, (0, 0)), (1, "line", 2, (100, 8))]
     print(json.dumps(sketch.open_end_words(ends, [1, 8], 110.0, dist_of(geo), [8])))
 ''')
-        self.assertEqual(len(got), 1)
+        self.assertEqual(got, ["the start of line 1 [1, 1] (0, 0) and the end of line 1 [1, 2] (100, 8) are open ends, 100.319 mm apart"
+                               ". A closed outline has no open end"])
         self.assertNotIn("an outline uses an arc there", got[0])
-        self.assertIn("touches nothing", got[0])
 
 
 class TakenName(unittest.TestCase):

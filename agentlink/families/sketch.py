@@ -242,116 +242,79 @@ def clashing(sk, cap=150):
     return out
 
 
-# An open end within this part of the outline's size of another open end is
-# a gap to close (a coincident constraint); farther from every other end,
-# and on no other curve, it is a loose end (a stray line, or a side left out).
-NEAR_GAP = 0.1
-# Heuristic (blind QA, 26 Nov: round ends drawn as full circles plus lines):
-# an open end this near a full circle's edge (a share of the outline's size,
-# at least ROUND_NEAR_MM, never past the NEAR_GAP distance) is a line meant to
-# meet a round end there. Such ends are not paired to each other: joining
-# them collapses the outline. The words say to use an arc in its place.
-ROUND_NEAR = 0.05
-ROUND_NEAR_MM = 3.0
-# Two open ends closer than this (mm, or this share of the outline's size)
-# are one joint: said as a gap to close before any other words of them.
-TINY_GAP_MM = 0.01
-TINY_GAP = 1e-4
-
-
-# The constraint sketch_add's card says joins a line to an arc, "tangent on
-# their two end points [[line, v], [arc, v]]" (tools.json): the todo gives
-# the same one for such a pair.
-JOIN_LINE_ARC = "tangent"
+# Two points this near are one point (mm): OpenCASCADE's Precision::Confusion,
+# the tolerance FreeCAD itself uses to tell whether two points coincide (a
+# sketch's edges join into one wire at it; pd_common.TOUCH is the same
+# number). It only decides float equality: whether an end is on another
+# curve. No other number decides anything in the todo words (27 Nov, owner:
+# NEAR_GAP, ROUND_NEAR, ROUND_NEAR_MM, TINY_GAP_MM and TINY_GAP went; the
+# words give each open end and the measured distance to the nearest other
+# one, and say nothing of what was meant).
+SAME_POINT = pc.TOUCH
 
 
 def _at(p):
     return f"({geo.r3(p[0]):g}, {geo.r3(p[1]):g})"
 
 
+def _end_words(gid, kind, pos, p):
+    """An open end in words, with its ref for sketch_constrain: "the end of
+    line 3 [3, 2] (10, 0)"."""
+    return f"{POS[pos]} {kind} {gid} [{gid}, {pos}] {_at(p)}"
+
+
+def _mm(d):
+    """A measured distance in mm: 3 places, and 3 significant digits under
+    0.001 (a distance that is not zero is never said as 0)."""
+    return f"{geo.r3(d):g}" if d >= 0.0005 or d == 0 else f"{d:.3g}"
+
+
+OPEN_ENDS_SHOWN = 4  # phrases of open ends one todo says
+
+
 def open_end_words(ends, curves, size, dist, rounds=(), joined=None):
-    """The todo words for the open ends of a sketch's outline, one phrase
-    each (a curve with both ends loose: one phrase). ends: [(gid, kind,
-    pos, (x, y))], pos 1 start / 2 end; curves: the ids of the outline's
-    curves; size: the outline's size (its box's diagonal, mm); dist(gid,
-    (x, y)): mm from that curve to the point; rounds: the ids of its full
-    circles. [] when an end is on another curve (a branch: branch_words
-    says it). joined: a list that gets ((gid, (x, y)), (gid2, (x2, y2)))
-    for each two ends the words say to join (branch_words then says
-    nothing more of that point)."""
-    tol = 1e-6 * max(size, 1.0)
-    gap = max(NEAR_GAP * size, tol)
-    rgap = min(max(ROUND_NEAR * size, ROUND_NEAR_MM), gap)
-    at = _at
-
-    def round_of(gid, p):
-        near_ = [(dist(c, p), c) for c in rounds if c != gid]
-        return min(near_) if near_ else (math.inf, None)
-
-    near, rnd, loose, pairs = [], [], {}, set()
-
-    def pair(gid, kind, pos, p, d, g2, k2, s2, q):
-        key = tuple(sorted(((gid, pos), (g2, s2))))
-        if key not in pairs:
-            pairs.add(key)
-            if joined is not None:
-                joined.append(((gid, p), (g2, q)))
-            if {kind, k2} == {"line", "arc"}:
-                # As the card says: tangent on the two end points, line first.
-                refs = [[gid, pos], [g2, s2]] if kind == "line" else [[g2, s2], [gid, pos]]
-                join = f"sketch_constrain {JOIN_LINE_ARC} on the two end points {json.dumps(refs)} joins them (coincident and smooth)"
-            else:
-                join = "sketch_constrain coincident joins them"
-            near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: {join}")
-
-    # Two ends a hair apart are one joint left open: the coincident words
-    # first, always (26 Nov QA: an end 0.001 mm from the next one got the
-    # round-end words of a hole circle nearby, and the real fix was hidden).
-    tiny = max(TINY_GAP_MM, TINY_GAP * size, tol)
-    paired = set()
+    """The todo words for the open ends of a sketch's outline: each open end
+    with its ref and the measured distance (mm) to the nearest other open
+    end. Two ends that are each the other's nearest are one phrase. An
+    end that lies on another curve (within SAME_POINT) is a branch:
+    branch_words says it, and here it is only a nearest end of others.
+    ends: [(gid, kind, pos, (x, y))], pos 1 start / 2 end; curves: the ids
+    of the outline's curves; dist(gid, (x, y)): mm from that curve to the
+    point. size, rounds and joined are not used (27 Nov): no share of the
+    outline's size and no kind of curve decides the words, no words are
+    held back for other words, and no constraint is named for two ends."""
+    by_key = {(gid, pos): (gid, kind, pos, p) for gid, kind, pos, p in ends}
+    nearest = {}
+    for gid, _kind, pos, p in ends:
+        others = [(math.dist(p, q), g2, s2) for g2, _k2, s2, q in ends if (g2, s2) != (gid, pos)]
+        if others:
+            d, g2, s2 = min(others)
+            nearest[(gid, pos)] = (d, (g2, s2))
+    branch = {(gid, pos) for gid, _k, pos, p in ends if any(dist(g, p) <= SAME_POINT for g in curves if g != gid)}
+    words, said = [], set()
     for gid, kind, pos, p in ends:
-        others = [(math.dist(p, q), g2, k2, s2, q) for g2, k2, s2, q in ends if (g2, s2) != (gid, pos) and g2 != gid]
-        d, g2, k2, s2, q = min(others) if others else (math.inf, None, None, None, None)
-        if tol < d <= tiny:
-            pair(gid, kind, pos, p, d, g2, k2, s2, q)
-            paired |= {(gid, pos), (g2, s2)}
-    ends = [e for e in ends if (e[0], e[2]) not in paired]
-    by_round = {(gid, pos): round_of(gid, p) for gid, _k, pos, p in ends}
-    # Heuristic: a circle is a round end drawn as a full circle only when the
-    # ends of two or more other curves come near it. One end near a circle
-    # is near a hole (a pin hole inside a round end, 26 Nov QA), not a
-    # round end: its own words below say what is open there.
-    came = {}
-    for gid, _k, pos, _p in ends:
-        rd, rc = by_round[(gid, pos)]
-        if rc is not None and rd <= rgap:
-            came.setdefault(rc, set()).add(gid)
-    for key, (rd, rc) in list(by_round.items()):
-        if rc is not None and rd <= rgap and rd > tol and len(came.get(rc, ())) < 2:
-            by_round[key] = (math.inf, None)
-    for gid, kind, pos, p in ends:
-        rd, rc = by_round[(gid, pos)]
-        if rd <= rgap:
-            if rd > tol:
-                rnd.append(f"{kind} {gid} ends at {at(p)}, {geo.r3(rd):g} mm from circle {rc}: an outline uses an arc there, not a full circle")
-            continue  # on the circle: a branch, which branch_words says
-        others = [(math.dist(p, q), g2, k2, s2, q) for g2, k2, s2, q in ends if g2 != gid and by_round[(g2, s2)][0] > rgap]
-        d, g2, k2, s2, q = min(others) if others else (math.inf, None, None, None, None)
-        if d <= gap:
-            pair(gid, kind, pos, p, d, g2, k2, s2, q)
+        key = (gid, pos)
+        if key in said or key in branch:
             continue
-        if any(dist(g, p) <= tol for g in curves if g != gid):
-            continue  # on another curve: a branch, which branch_words says
-        loose.setdefault((gid, kind), []).append(p)
-    words = rnd
-    for (gid, kind), ps in loose.items():
-        if len(ps) > 1:
-            words.append(f"{kind} {gid} touches nothing at {' or '.join(at(p) for p in ps)}: remove it (sketch_edit {{ delete: [{gid}] }}) or join its ends")
+        said.add(key)
+        me = _end_words(gid, kind, pos, p)
+        if key not in nearest:
+            words.append(f"{me} is an open end, the only one")
+            continue
+        d, other = nearest[key]
+        g2, k2, s2, q = by_key[other]
+        if nearest[other][1] == key and other not in said and other not in branch:
+            # each is the other's nearest: one phrase for the two
+            said.add(other)
+            words.append(f"{me} and {_end_words(g2, k2, s2, q)} are open ends, {_mm(d)} mm apart")
         else:
-            words.append(f"{kind} {gid} ends at {at(ps[0])} on nothing: remove it (sketch_edit {{ delete: [{gid}] }}) or join that end to another end")
-    words = near + words
-    if len(words) > 4:
-        words = words[:4] + [f"and {len(words) - 4} more open ends (openVertices)"]
+            words.append(f"{me} is an open end; the nearest other open end is {_end_words(g2, k2, s2, q)}, {_mm(d)} mm away")
+    if len(words) > OPEN_ENDS_SHOWN:
+        words = words[:OPEN_ENDS_SHOWN] + [f"and {len(words) - OPEN_ENDS_SHOWN} more open ends (openVertices)"]
+    if words:
+        # Why an open end is in the todo, once. No constraint is named: which
+        # ends go together is not measured (the cards say what joins two points).
+        words[-1] += ". A closed outline has no open end"
     return words
 
 
@@ -373,16 +336,16 @@ def branch_words(ends, curves, size, dist, rounds=(), joins=()):
     edges meet there (an outline has two at each joint), as the ends of
     curves and the curves that pass through it. ends: [(gid, kind, pos,
     (x, y))], every end of the open curves; curves: {gid: kind}; size and
-    dist as open_end_words; rounds: the ids of the full circles; joins:
-    open_end_words' joined, the ends it says to join."""
-    tol = 1e-6 * max(size, 1.0)
+    dist as open_end_words; rounds: the ids of the full circles. size is
+    not used: two points are one point within SAME_POINT, whatever the
+    size. joins: pairs of ends whose own words say the joint (none are
+    given since 27 Nov: each fact is said where it is measured)."""
+    tol = SAME_POINT
 
     def joined(g, p, other):
-        # An end at p that the gap words join to an end of curve other: that
-        # curve passes through p only because its own end is a hair away
-        # (blind QA, 26 Nov: "a wire branches there" and "0.003 mm from the
-        # end of line 3: coincident joins them" for one joint). One point,
-        # one message: the gap words, whose fix is right.
+        # An end at p that a caller's own words pair with an end of curve
+        # other (joins): not said here too. state_of gives no pairs since
+        # 27 Nov: a branch and an open end are two measured facts, each said.
         for (a, pa), (b, pb) in joins:
             if (a in g and b == other and math.dist(pa, p) <= tol) or (b in g and a == other and math.dist(pb, p) <= tol):
                 return True
@@ -1149,7 +1112,8 @@ def lies_words(sk, world):
     boxes as they are measured now. A sentence whose box is not read is
     left out; a body with no solid has none. Nothing is said while a batch
     holds the document's recompute (agentlink/hold.py): the body is then
-    the one from before the build. 27 Nov QA: the answers said where
+    the one from before the build. Nothing is said for a body inside a
+    moved Part (_one_frame): the boxes are then in two frames. 27 Nov QA: the answers said where
     material went only after a feature was made."""
     out = []
     try:
@@ -1157,6 +1121,8 @@ def lies_words(sk, world):
             return []
     except Exception:  # noqa: BLE001
         pass
+    if not _one_frame(sk):
+        return []
     f = support_face(sk)
     if f is not None:
         try:
@@ -1171,6 +1137,20 @@ def lies_words(sk, world):
     except Exception:  # noqa: BLE001
         pass
     return [t for t in out if t]
+
+
+def _one_frame(sk):
+    """Whether the world box of the sketch's shapes (frame_of: the sketch's
+    global placement) and its body's Shape are in one frame: the body's own
+    Placement is its global one (no moved Part holds the body). False: the
+    boxes are not compared. A body that does not say (a stand-in): True."""
+    try:
+        b = pc.body_of(sk)
+        if b is None or not hasattr(b, "getGlobalPlacement"):
+            return True
+        return bool(b.getGlobalPlacement().isSame(b.Placement, 1e-9))
+    except Exception:  # noqa: BLE001 - not read: not compared
+        return False
 
 
 def add_result(sk, out, st):

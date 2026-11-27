@@ -103,25 +103,28 @@ class Crossing(unittest.TestCase):
 
 
 class RoundEnds(unittest.TestCase):
-    def test_ends_near_a_circle_are_not_paired(self):
+    def test_ends_near_a_circle_get_their_measured_distances(self):
         # crank, gpt-oss: full circles plus lines that stop 2.4 mm short of circle 0.
-        # Before: "the start of line 1 (0, 7.4) is 14.8 mm from the start of line 2 (0, -7.4): ... coincident joins them"
+        # 26 Nov: "… 2.4 mm from circle 0: an outline uses an arc there" (a share of the outline's size decided it).
+        # 27 Nov (owner): facts only. Each open end and the measured distance to the nearest other open end; no
+        # constraint is named, so the words do not say to join these ends.
         got = in_a_process(GEO + '''
     geo = {0: Circle((0, 0), 5), 3: Circle((150, 0), 6), 1: LineSegment((0, 7.4), (150, 6)), 2: LineSegment((0, -7.4), (150, -6))}
     ends = [(1, "line", 1, (0, 7.4)), (1, "line", 2, (150, 6)), (2, "line", 1, (0, -7.4)), (2, "line", 2, (150, -6))]
     print(json.dumps(sketch.open_end_words(ends, [0, 1, 2, 3], 161.6, dist_of(geo), [0, 3])))
 ''')
-        self.assertEqual(got, ["line 1 ends at (0, 7.4), 2.4 mm from circle 0: an outline uses an arc there, not a full circle",
-                               "line 2 ends at (0, -7.4), 2.4 mm from circle 0: an outline uses an arc there, not a full circle"])
+        # the other two ends are on circle 3 (radius 6): branches, which branch_words says
+        self.assertEqual(got, ["the start of line 1 [1, 1] (0, 7.4) and the start of line 2 [2, 1] (0, -7.4) are open ends, 14.8 mm apart. A closed outline has no open end"])
+        self.assertNotIn("joins", " ".join(got))
 
-    def test_ends_far_from_a_circle_still_pair(self):
+    def test_a_circle_far_away_changes_nothing(self):
         got = in_a_process(GEO + '''
     geo = {0: Circle((-60, 0), 5), 1: LineSegment((0, 0), (100, 0)), 2: LineSegment((100, 0), (100, 50)),
            3: LineSegment((100, 50), (0, 50)), 4: LineSegment((0, 50), (0, 0.4))}
     ends = [(4, "line", 2, (0, 0.4)), (1, "line", 1, (0, 0))]
     print(json.dumps(sketch.open_end_words(ends, [0, 1, 2, 3, 4], 170.0, dist_of(geo), [0])))
 ''')
-        self.assertEqual(got, ["the end of line 4 (0, 0.4) is 0.4 mm from the start of line 1 (0, 0): sketch_constrain coincident joins them"])
+        self.assertEqual(got, ["the end of line 4 [4, 2] (0, 0.4) and the start of line 1 [1, 1] (0, 0) are open ends, 0.4 mm apart. A closed outline has no open end"])
 
 
 # state_of on a stand-in sketch: its geometry, and its Shape's wires as FreeCAD builds them.

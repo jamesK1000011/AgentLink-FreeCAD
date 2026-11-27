@@ -57,34 +57,33 @@ class SolidsSaidAsMeasured(unittest.TestCase):
         self.assertTrue(out.startswith("2 separate solids in one Body"), out)
 
 
-class JoinWordsAgreeWithTheCard(unittest.TestCase):
+class OpenEndsNameNoConstraint(unittest.TestCase):
+    """27 Nov (owner): the todo words of open ends are facts only (each end, its ref and the measured distance). They name
+    no constraint, so they cannot disagree with the card (26 Nov QA: coincident in the todo, tangent on the card)."""
+
     def words(self, ends):
         return in_a_process(SETUP + '''
     from agentlink.families import sketch
     print(json.dumps(sketch.open_end_words(%r, [0, 1, 2], 100.0, lambda i, p: 50.0)))
 ''' % (ends,))
 
-    def test_a_line_and_an_arc_join_with_tangent_on_the_two_end_points(self):
+    def test_a_line_and_an_arc(self):
         got = self.words([[2, "line", 1, [10, 20]], [0, "arc", 2, [10, 20.009]]])
-        self.assertEqual(len(got), 1)
-        self.assertIn("sketch_constrain tangent on the two end points [[2, 1], [0, 2]] joins them", got[0])
-        self.assertNotIn("coincident joins", got[0])
-        # The arc found first: the line still comes first, as the card gives it.
+        self.assertEqual(got, ["the start of line 2 [2, 1] (10, 20) and the end of arc 0 [0, 2] (10, 20.009) are open ends, 0.009 mm apart. A closed outline has no open end"])
+        # The arc found first: the same two ends, in the order found.
         got = self.words([[0, "arc", 2, [10, 20]], [2, "line", 1, [10, 20.009]]])
-        self.assertIn("[[2, 1], [0, 2]]", got[0])
+        self.assertIn("the end of arc 0 [0, 2] (10, 20) and the start of line 2 [2, 1] (10, 20.009) are open ends, 0.009 mm apart", got[0])
 
-    def test_two_lines_stay_coincident(self):
+    def test_two_lines(self):
         got = self.words([[2, "line", 1, [10, 20]], [1, "line", 2, [10, 20.009]]])
-        self.assertIn("sketch_constrain coincident joins them", got[0])
+        self.assertIn("are open ends, 0.009 mm apart", got[0])
+        for w in ("sketch_constrain", "coincident", "tangent", "joins"):
+            self.assertNotIn(w, got[0])
 
-    def test_the_card_gives_the_same_constraint(self):
-        word = in_a_process(SETUP + '''
-    from agentlink.families import sketch
-    print(json.dumps(sketch.JOIN_LINE_ARC))
-''')
+    def test_the_card_says_what_joins_a_line_to_an_arc(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             card = json.load(f)["entries"]["sketch_add"]["description"]
-        self.assertIn(f"Join each line to an arc with sketch_constrain {word} on their two end points", card)
+        self.assertIn("Join each line to an arc with sketch_constrain tangent on their two end points", card)
 
 
 class PartialProfiles(unittest.TestCase):

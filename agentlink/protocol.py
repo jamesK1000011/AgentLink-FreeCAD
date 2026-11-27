@@ -1530,10 +1530,10 @@ class Server:
         if sk is not None and name in SKETCH_CHANGE_TOOLS and isinstance(result, dict) and not result.get("isError"):
             from .families import pd_common
 
-            change = pd_common.used_change(sk, before)
-            if name in SKETCH_GEOMETRY_TOOLS:
-                note = pd_common.used_sketch_note(sk, tool=name, change=change)
-            elif change:
+            geometry = name in SKETCH_GEOMETRY_TOOLS
+            # A constraint: only a change of the body is said (it had no note before).
+            change = pd_common.used_change(sk, before, only_changed=not geometry)
+            if geometry or change:
                 note = pd_common.used_sketch_note(sk, tool=name, change=change)
         if not filled and not note:
             return

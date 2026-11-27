@@ -267,34 +267,54 @@ class OpenEnds(unittest.TestCase):
 ''' % (lines, ends, curves, size))
         return got
 
-    def test_a_stray_line_is_remove_or_join(self):
+    # 27 Nov (owner): the words are facts only. Each open end has its ref and
+    # the measured distance to the nearest other open end. No share of the
+    # outline's size decides anything, and nothing says what was meant.
+    TAIL = ". A closed outline has no open end"
+
+    def test_a_stray_line_says_its_open_end_and_the_distance(self):
         # A closed rectangle (0-3, the last side ending at (0, 0)) and line 4 from its corner out to (150, 0).
         lines = {**LINES, 3: ((0, 50), (0, 0))}
         got = self.words([(4, "line", 1, (100, 0)), (4, "line", 2, (150, 0))], [0, 1, 2, 3, 4], lines=lines)
-        self.assertEqual(got, ["line 4 ends at (150, 0) on nothing: remove it (sketch_edit { delete: [4] }) or join that end to another end"])
+        # line 4's start is on the rectangle (a branch: branch_words says it); its end is the open end
+        self.assertEqual(got, ["the end of line 4 [4, 2] (150, 0) is an open end; the nearest other open end is the start of line 4 [4, 1] (100, 0), 50 mm away" + self.TAIL])
 
-    def test_a_small_gap_is_coincident(self):
+    def test_two_ends_that_are_each_others_nearest_are_one_phrase(self):
         got = self.words([(3, "line", 2, (0, 0.4)), (0, "line", 1, (0, 0))], [0, 1, 2, 3])
-        self.assertEqual(got, ["the end of line 3 (0, 0.4) is 0.4 mm from the start of line 0 (0, 0): sketch_constrain coincident joins them"])
+        self.assertEqual(got, ["the end of line 3 [3, 2] (0, 0.4) and the start of line 0 [0, 1] (0, 0) are open ends, 0.4 mm apart" + self.TAIL])
 
-    def test_a_lone_line_and_a_side_left_out(self):
+    def test_the_same_words_at_any_distance_and_any_size(self):
         lone = {0: ((0, 0), (50, 0))}
         got = self.words([(0, "line", 1, (0, 0)), (0, "line", 2, (50, 0))], [0], size=50.0, lines=lone)
-        self.assertEqual(got, ["line 0 touches nothing at (0, 0) or (50, 0): remove it (sketch_edit { delete: [0] }) or join its ends"])
-        # three sides of a rectangle: the two ends are far apart (100 of 112 mm), so not a gap
+        self.assertEqual(got, ["the start of line 0 [0, 1] (0, 0) and the end of line 0 [0, 2] (50, 0) are open ends, 50 mm apart" + self.TAIL])
+        # three sides of a rectangle: the same form as a small gap, with the measured distance
         u = {0: ((0, 0), (100, 0)), 1: ((100, 0), (100, 50)), 2: ((100, 50), (0, 50))}
-        got = self.words([(0, "line", 1, (0, 0)), (2, "line", 2, (0, 50))], [0, 1, 2], lines=u)
-        self.assertEqual(len(got), 2)
-        self.assertTrue(all("on nothing" in w for w in got), got)
+        ends = [(0, "line", 1, (0, 0)), (2, "line", 2, (0, 50))]
+        want = ["the start of line 0 [0, 1] (0, 0) and the end of line 2 [2, 2] (0, 50) are open ends, 50 mm apart" + self.TAIL]
+        for size in (1.0, 112.0, 5000.0):  # the outline's size decides nothing
+            self.assertEqual(self.words(ends, [0, 1, 2], size=size, lines=u), want)
+        for w in got + want:
+            for banned in ("remove it", "joins them", "on nothing", "touches nothing", "sketch_constrain", "not a full circle"):
+                self.assertNotIn(banned, w)
 
     def test_an_end_on_another_curve_gets_no_words_of_its_own(self):
-        # line 1 from the middle of line 0 (a T): no words fit, so the general todo stays
+        # line 1 from the middle of line 0 (a T): its start is a branch, which branch_words says
         t = {0: ((0, 0), (100, 0)), 1: ((50, 0), (50, 40))}
         got = self.words([(1, "line", 1, (50, 0)), (0, "line", 1, (0, 0)), (0, "line", 2, (100, 0))], [0, 1], size=108.0, lines=t)
-        # line 1's start is on line 0: only line 0's own ends are said
-        self.assertEqual(got, ["line 0 touches nothing at (0, 0) or (100, 0): remove it (sketch_edit { delete: [0] }) or join its ends"])
+        # only line 0's own ends are said; line 1's start is the nearest open end of each
+        self.assertEqual(got, ["the start of line 0 [0, 1] (0, 0) is an open end; the nearest other open end is the start of line 1 [1, 1] (50, 0), 50 mm away",
+                               "the end of line 0 [0, 2] (100, 0) is an open end; the nearest other open end is the start of line 1 [1, 1] (50, 0), 50 mm away" + self.TAIL])
         got = self.words([(1, "line", 1, (50, 0))], [0, 1], size=108.0, lines=t)
         self.assertEqual(got, [])
+
+    def test_no_threshold_is_left_in_the_code(self):
+        with open(os.path.join(ROOT, "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
+            src = f.read()
+        for name in ("NEAR_GAP", "ROUND_NEAR", "ROUND_NEAR_MM", "TINY_GAP_MM", "TINY_GAP"):
+            self.assertNotRegex(src, r"(?m)^%s\s*=" % name)
+            self.assertNotRegex(src, r"[^A-Z_,]%s[^A-Z_,]\s*\*" % name)
+        self.assertIn("SAME_POINT = pc.TOUCH", src)  # the one tolerance: float equality, FreeCAD's own
+        self.assertIn("Precision::Confusion", src)
 
     def test_state_of_uses_the_words(self):
         with open(os.path.join(ROOT, "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
@@ -327,7 +347,7 @@ class OpenEnds(unittest.TestCase):
                                Shape=types.SimpleNamespace(BoundBox=types.SimpleNamespace(DiagonalLength=158.1)))
     print(json.dumps(sketch._open_end_words(sk, [[150.0, 0.0]])))
 ''')
-        self.assertEqual(got, ["line 4 ends at (150, 0) on nothing: remove it (sketch_edit { delete: [4] }) or join that end to another end"])
+        self.assertEqual(got, ["the end of line 4 [4, 2] (150, 0) is an open end, the only one. A closed outline has no open end"])
 
 
 class ItemIndex(unittest.TestCase):
