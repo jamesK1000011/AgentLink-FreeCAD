@@ -280,14 +280,16 @@ class Options(unittest.TestCase):
     def test_a_row_is_a_flat_step(self):
         opts = {"step": 3, "list": [{"n": 1, "tool": "pd_pad", "arguments": {"sketch": "Sk", "body": "Body"}, "ask": [{"arg": "length", "unit": "mm"}]}]}
         row = options.public(opts)["list"][0]
-        self.assertEqual(row["run"], {"tool": "pd_pad", "sketch": "Sk", "body": "Body"})
+        self.assertEqual(row["step"], {"tool": "pd_pad", "sketch": "Sk", "body": "Body"})
         self.assertNotIn("arguments", row)
         self.assertNotIn("tool", row)
+        self.assertNotIn("run", row)  # 27 Nov: the key run is the name of a tool, so a row says step
 
     def test_the_pick_how_to_is_a_run_step(self):
         opts = {"step": 3, "list": [{"n": 1, "tool": "pd_pad", "arguments": {}, "ask": [{"arg": "length", "unit": "mm", "sample": 4}]}]}
-        self.assertEqual(options.pick_how(opts, static=True), 'run { "tool": "pick", "option": 1, "fill": { "length": 4 } } runs option 1; option: "1, 4mm" also works')
-        self.assertTrue(options.pick_how(None, static=True).startswith('run { "tool": "pick", "option": 1'))
+        self.assertEqual(options.pick_how(opts, static=True),
+                         'run { "calls": [ { "tool": "pick", "option": 1, "fill": { "length": 4 } } ] } runs option 1; option: "1, 4mm" also works')
+        self.assertTrue(options.pick_how(None, static=True).startswith('run { "calls": [ { "tool": "pick", "option": 1'))
 
     def test_pick_runs_through_run(self):
         import test_options as t
@@ -299,7 +301,7 @@ class Options(unittest.TestCase):
         t.facts_reader(self, s)
         os.environ.pop("AGENTLINK_OPTIONS", None)
         t.call(server, "session_state", {})
-        r = callshape.run_call(server, {"name": "run", "arguments": {"tool": "pick", "option": 1, "fill": {"length": 4}}})
+        r = callshape.run_call(server, {"name": "run", "arguments": {"calls": [{"tool": "pick", "option": 1, "fill": {"length": 4}}]}})
         self.assertFalse(r.get("isError"), r)
         self.assertEqual(s.calls, [("pd_pad", {"sketch": "Sketch", "body": "Body", "length": 4})])
 

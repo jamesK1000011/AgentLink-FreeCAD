@@ -221,6 +221,10 @@ def _child(case):
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
         return {"isError": bool(r.get("isError")), "body": json.loads(r["content"][0]["text"]), "chars": len(r["content"][0]["text"])}
 
+    def run1(step):
+        # run takes { calls: [step] } (27 Nov), the same list as batch and fast.
+        return one("run", {"calls": [step]})
+
     def labels():
         return [o.Label for o in doc.Objects]
 
@@ -318,13 +322,13 @@ def _child(case):
         out["labels"] = labels()
     elif case == "flat1127":
         # 27 Nov: the renamed inputs (card, job) and the flat sketch inputs, through run, batch and fast.
-        out["findRun"] = one("run", {"tool": "tool_find", "card": "sketch_add"})
+        out["findRun"] = run1({"tool": "tool_find", "card": "sketch_add"})
         out["findBatch"] = one("batch", {"calls": [{"tool": "tool_find", "card": "pd_pad"}]})
         out["findFast"] = fast({"calls": [{"tool": "tool_find", "card": "pd_pad"}]})
-        out["groupsRun"] = one("run", {"tool": "tool_groups", "card": "pd_pad"})
+        out["groupsRun"] = run1({"tool": "tool_groups", "card": "pd_pad"})
         out["groupsBatch"] = one("batch", {"calls": [{"tool": "tool_groups", "card": "pd_pad"}]})
         out["groupsFast"] = fast({"calls": [{"tool": "tool_groups", "card": "pd_pad"}]})
-        out["jobRun"] = one("run", {"tool": "job_start", "job": "measure_mass", "arguments": {}})
+        out["jobRun"] = run1({"tool": "job_start", "job": "measure_mass", "arguments": {}})
         out["jobBatch"] = one("batch", {"calls": [{"tool": "job_start", "job": "measure_mass", "arguments": {}}]})
         out["jobFast"] = fast({"calls": [{"tool": "job_start", "job": "measure_mass", "arguments": {}}]})
         out["oldFind"] = one("tool_find", {"tool": "pd_pad"})
@@ -332,14 +336,14 @@ def _child(case):
         out["oldJob"] = one("job_start", {"tool": "probe_change"})
         one("sketch_new", {"plane": "XY"})
         del seen[:]
-        out["addRun"] = one("run", {"tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
-        out["itemsRun"] = one("run", {"tool": "sketch_add", "items": [{"kind": "circle", "center": [0, 0], "radius": 3}]})
-        out["badKind"] = one("run", {"tool": "sketch_add", "kind": "squiggle"})
+        out["addRun"] = run1({"tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20]})
+        out["itemsRun"] = run1({"tool": "sketch_add", "items": [{"kind": "circle", "center": [0, 0], "radius": 3}]})
+        out["badKind"] = run1({"tool": "sketch_add", "kind": "squiggle"})
         out["eachBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "each": {"x": [15, 45]}, "kind": "circle", "center": ["$x", 15], "radius": 5}]})
         out["twoBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [40, 20]},
                                                   {"tool": "sketch_add", "kind": "circle", "center": [5, 5], "radius": 2}]})
-        out["conRun"] = one("run", {"tool": "sketch_constrain", "type": "horizontal", "refs": [0]})
-        out["consRun"] = one("run", {"tool": "sketch_constrain", "constraints": [{"type": "horizontal", "refs": [0]}]})
+        out["conRun"] = run1({"tool": "sketch_constrain", "type": "horizontal", "refs": [0]})
+        out["consRun"] = run1({"tool": "sketch_constrain", "constraints": [{"type": "horizontal", "refs": [0]}]})
         out["seenSketch"] = [[t, a] for t, a in seen if t == "sketch_add"]
         from agentlink import staticbase as _sb, tools as _tools
         out["props"] = {n: sorted(srv.tools[n].schema["properties"]) for n in ("tool_find", "tool_groups", "job_start")}
@@ -351,24 +355,25 @@ def _child(case):
             return {"result": f"Probe {a.get('n')} made one object.", "n": a.get("n")}
 
         srv.add(Tool("probe_result", "A change that says its result.", num, probe_result, changes=True))
-        out["run"] = one("run", {"tool": "probe_result", "n": 1})
+        out["run"] = run1({"tool": "probe_result", "n": 1})
+        out["runMany"] = one("run", {"calls": [{"tool": "probe_result", "n": 9}, {"tool": "pd_pad", "sketch": "S", "length": 6}, {"tool": "probe_change", "n": 10}]})
         out["batch"] = one("batch", {"calls": [{"tool": "probe_result", "n": 2}, {"tool": "probe_change", "n": 3}, {"tool": "probe_result", "n": 4}]})
         out["fast"] = fast({"calls": [{"tool": "probe_result", "n": 5}, {"tool": "probe_change", "n": 6}, {"tool": "probe_result", "n": 7}]})
         out["fastNone"] = fast({"calls": [{"tool": "probe_change", "n": 8}]})
     elif case == "flat":
         # One flat step everywhere (26 Nov): run, batch and fast take the same steps.
         calls = [{"tool": "probe_change", "n": 1}, {"tool": "probe_change", "n": 2}]
-        out["run"] = one("run", {"tool": "probe_change", "n": 7})
+        out["run"] = run1({"tool": "probe_change", "n": 7})
         out["direct"] = one("probe_change", {"n": 8})
-        out["approve"] = [one("run", {"tool": t, "path": "x"}) for t in ("approve_file", "approve_code")]
-        out["runInRun"] = one("run", {"tool": "run", "x": 1})
+        out["approve"] = [run1({"tool": t, "path": "x"}) for t in ("approve_file", "approve_code")]
+        out["runInRun"] = run1({"tool": "run", "x": 1})
         out["batchSame"] = one("batch", {"calls": calls})
         out["labelsBatch"] = labels()
         out["fastSame"] = fast({"calls": calls})
         out["do"] = fast({"do": calls})
         out["batchDo"] = one("batch", {"do": calls})
         del seen[:]
-        out["eachRun"] = one("run", {"tool": "probe_change", "each": {"x": [15, 45]}, "n": "$x"})
+        out["eachRun"] = run1({"tool": "probe_change", "each": {"x": [15, 45]}, "n": "$x"})
         one("sketch_new", {"plane": "XY"})
         out["eachBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "each": {"x": [15, 45]}, "sketch": "Sketch", "kind": "circle", "center": ["$x", 15], "radius": 5}]})
         out["eachFast"] = fast({"calls": [{"tool": "sketch_add", "each": {"x": [3, 4, 5]}, "sketch": "Sketch", "kind": "circle", "center": ["$x", 0], "radius": 1}]})
@@ -384,7 +389,28 @@ def _child(case):
         out["writeFile"] = os.path.exists(os.path.join(s.out_dir, "w.json"))
         out["oldBatch"] = {k: one("batch", {"calls": [v]}) for k, v in {"arguments": {"tool": "probe_change", "arguments": {"n": 1}}, "as": {"tool": "probe_change", "n": 1, "as": "r"},
                                                                          "when": {"tool": "probe_change", "n": 1, "when": "=True"}, "let": {"let": {"x": 1}}}.items()}
-        out["oldRun"] = [one("run", v) for v in ({"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "n": 1, "try": []})]
+        out["oldRun"] = [run1(v) for v in ({"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "n": 1, "try": []})]
+        # 27 Nov: run takes { calls: [step] }, the same list as batch and fast; it runs the first step only.
+        out["runOne"] = one("run", {"calls": [{"tool": "probe_change", "n": 31}]})
+        out["directOne"] = one("probe_change", {"n": 32})
+        before = labels()
+        out["runThree"] = one("run", {"calls": [{"tool": "probe_change", "n": 41}, {"tool": "sketch_new", "plane": "XY"}, {"tool": "probe_change", "n": 43}]})
+        out["runThreeNew"] = [x for x in labels() if x not in before]
+        before = labels()
+        out["runBadLater"] = one("run", {"calls": [{"tool": "probe_change", "n": 51}, {"nope": 1}, "text"]})
+        out["runBadLaterNew"] = [x for x in labels() if x not in before]
+        out["oldFlat"] = one("run", {"tool": "probe_change", "n": 61})
+        out["oldFlatNew"] = [x for x in labels() if x == "P61"]
+        out["emptyCalls"] = one("run", {"calls": []})
+        out["noCalls"] = one("run", {})
+        out["notList"] = one("run", {"calls": {"tool": "probe_change", "n": 62}})
+        out["extraKey"] = one("run", {"calls": [{"tool": "probe_change", "n": 63}], "rollback": True})
+        out["batchInRun"] = one("run", {"calls": [{"tool": "batch", "calls": [{"tool": "probe_change", "n": 64}]}]})
+        out["fastInRun"] = one("run", {"calls": [{"tool": "fast", "calls": [{"tool": "probe_change", "n": 65}]}]})
+        out["approveInRun"] = one("run", {"calls": [{"tool": "approve_code", "path": "x"}]})
+        out["eachCalls"] = one("run", {"calls": [{"tool": "probe_change", "each": {"x": [71, 72]}, "n": "$x"}]})
+        out["eachExtra"] = one("run", {"calls": [{"tool": "probe_change", "each": {"x": [73]}, "n": "$x"}, {"tool": "probe_change", "n": 74}]})
+        out["wrongFirst"] = one("run", {"calls": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "n": 75}]})
         out["labelsEnd"] = labels()
         from agentlink import callshape as _cs
         out["collide"] = sorted(f"{n}.{k}" for n, t in srv.tools.items() for k in (t.schema or {}).get("properties", {}) if k in _cs.RESERVED)

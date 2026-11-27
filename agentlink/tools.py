@@ -997,7 +997,7 @@ class Session:
         got["note"] = (("The agent's document is one an agent made. " if mine else
                         f"{self.doc.Label} is an empty start document that Agent Link made, not the person's. " if is_start_doc(self.doc) else
                         f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
-                       + "For new work, make a document of its own: run { \"tool\": \"doc_new\", \"name\": \"Part\" }. "
+                       + "For new work, make a document of its own: run { \"calls\": [ { \"tool\": \"doc_new\", \"name\": \"Part\" } ] }. "
                        "session_state reads all of this again.")
         return got
 
@@ -1533,7 +1533,7 @@ WORKING = (
     "is (shape_query: normal, radius, near a point) rather than by FreeCAD's Face12, which changes with the model. "
     "Every tool that changes the document is one undo step: history_undo and history_redo (and checkpoints "
     "where an add-on offers them); history_diff says what changed. A call is a step: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }, with the inputs beside tool. "
-    "run makes one call. batch { calls: [step, step] } makes several calls, one at a time, in order, with a full answer for each; "
+    "run { calls: [step] } makes one call. batch { calls: [step, step] } makes several calls, one at a time, in order, with a full answer for each; "
     "fast { calls } does the same with one short answer. "
     "At a refusal in a batch the calls before it stay, and the answer says which ran (done), which was refused (refused) and which did not run (notRun). "
     "Give only calls at first: batch's other fields are in guide_read { topic: \"batch\" }. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
@@ -1581,7 +1581,7 @@ STATIC_NOTE = (
     "Only a few tools are listed: session_state, run, batch, guide_read, tool_find and the approval tools (and fast and get with the "
     "fast path). Every other tool is found and called by name: tool_find { words: \"what it does\" } searches every tool, "
     "tool_find { card: name } (or a list of names) gives each card, and the tool runs by name. Where the client sends only listed tools, "
-    "use run { \"tool\": name, <its inputs> } for one call, batch { calls } for several calls, or fast { calls } for several calls with one short answer."
+    "use run { \"calls\": [ { \"tool\": name, <its inputs> } ] } for one call, batch { calls } for several calls, or fast { calls } for several calls with one short answer."
 )
 
 
@@ -3575,7 +3575,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         res = out[0] if len(out) == 1 else {"results": out}
         if names:
             res["cards"] = tool_groups({"card": names})["tools"]
-        res["note"] = ("Every tool found here can be called by name, or as a step { \"tool\": name, <its inputs> } of run (one call), batch (several calls) "
+        res["note"] = ("Every tool found here can be called by name, or as a step { \"tool\": name, <its inputs> } in the calls of run (one call), batch (several calls) "
                        "or fast (several calls, one short answer). tool_find { card: name } gives its whole description, its inputs and two example calls: plain and ready.")
         if read_as:
             res["readAs"] = read_as

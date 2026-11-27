@@ -7,7 +7,7 @@ ToolListMode (preference, Mod/AgentLink, text) or AGENTLINK_TOOLLIST:
     static (default)   only BASE is listed: session_state, batch, guide_read,
                        tool_find, approve_file and approve_code (the person sets
                        the two approval tools in the client's permissions, so
-                       the client must list them), then run (one step, a full
+                       the client must list them), then run (calls: [one step], a full
                        answer: a client that sends only listed tools reaches
                        every tool with it). With the fast path on, fast and get
                        come before run. Every other tool is found with
@@ -98,7 +98,8 @@ def base(tools=None):
 
 # The schema a client sees for run, batch and fast with the short descriptions
 # (owner decision 9, 26 Nov): only what a first call needs. A step is one flat
-# object: tool, and the tool's inputs beside it. The server checks each step
+# object: tool, and the tool's inputs beside it. run, batch and fast take the same calls list
+# (27 Nov: a client can force additionalProperties: false on the top level of a tool, so no step stands there). The server checks each step
 # against the named tool's own schema, as it checks a direct call. No
 # additionalProperties: false here: a client that checks a call against the
 # listed schema must let the inputs through. additionalProperties: true is
@@ -109,7 +110,9 @@ _STEP_ITEM = {"type": "object",
               "properties": {"tool": {"type": "string", "description": "The tool's plain name, as tool_find gives it (pd_pad). Its inputs stand beside it."}},
               "required": ["tool"], "additionalProperties": True}
 LISTED_SCHEMAS = {
-    "run": copy.deepcopy(_STEP_ITEM),
+    "run": {"type": "object",
+            "properties": {"calls": {"type": "array", "minItems": 1, "description": "One call: [step]. Only the first step runs.", "items": copy.deepcopy(_STEP_ITEM)}},
+            "required": ["calls"]},
     "batch": {"type": "object",
               "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _STEP_ITEM},
                              "rollback": {"type": "boolean", "description": "true: at a refusal, take back the whole batch."},

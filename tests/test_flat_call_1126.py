@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # One flat step shape everywhere (26 Nov): { tool, <inputs beside it> }, with no
-# arguments wrapper. run takes one step; batch and fast take calls of steps.
+# arguments wrapper. run, batch and fast take calls of steps (run: calls: [step], 27 Nov).
 # A loop is an each key on the step; the old forms are refused with the new
 # form in the words. The server runs on stand-ins in a child process (the
 # "flat" case of test_fastpath.py).
@@ -179,8 +179,8 @@ class Collisions(unittest.TestCase):
         g = flat()
         self.assertEqual(g["reserved"], ["each", "tool", "writeTo"])
         # Two hub inputs keep a step key, each for its own reason (27 Nov: tool_find, tool_groups and job_start now say card and job):
-        # run.tool is the step's own tool, and batch.writeTo is the batch's own top-level key (the file of the whole record).
-        self.assertEqual(g["collide"], ["batch.writeTo", "run.tool"])
+        # batch.writeTo is the batch's own top-level key (the file of the whole record). run has only calls (27 Nov).
+        self.assertEqual(g["collide"], ["batch.writeTo"])
 
     def test_the_five_renamed_inputs(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
@@ -218,7 +218,6 @@ class StepSchemaLetsInputsThrough(unittest.TestCase):
         from agentlink import staticbase
         from agentlink.families import fast as fast_family
 
-        self.assertIs(staticbase.LISTED_SCHEMAS["run"].get("additionalProperties"), True)
-        for name in ("batch", "fast"):
+        for name in ("run", "batch", "fast"):
             self.assertIs(staticbase.LISTED_SCHEMAS[name]["properties"]["calls"]["items"].get("additionalProperties"), True)
         self.assertIs(fast_family.STEP_SCHEMA.get("additionalProperties"), True)

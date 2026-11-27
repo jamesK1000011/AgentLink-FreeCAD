@@ -150,7 +150,7 @@ Only these two cards are loaded. The other tools of their groups are not.
 ## 3. Action: `run`, `batch` or `fast`
 
 A call is one flat step: `{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }`. The tool's inputs stand beside `tool`.
-For one call, the agent uses `run { ... }`. For several calls, it uses `batch { calls }`, which gives a full answer for each call.
+For one call, the agent uses `run { calls: [step] }` (the first step only; a notice names the steps not run). For several calls, it uses `batch { calls }`, which gives a full answer for each call.
 For several calls with one short answer, it uses `fast { calls }`. `run`, `batch` and `fast` are in the base, so they also send tools that the app does not list.
 In a call's inputs, `{ "$from": i, "$at": "path" }` takes a part of the answer of call `i` of the same batch (`agentlink/chain.py`).
 `{ "$file": "x.json", "$at": "path" }` reads a file that an earlier call wrote with `to`.

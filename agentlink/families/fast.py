@@ -6,9 +6,10 @@
 # lean or static base list: tool_find finds them. run is the exception:
 # it is listed with the base (agentlink/staticbase.py).
 
+import copy
 import json
 
-from .. import callshape, fastpath
+from .. import callshape, fastpath, staticbase
 from ..protocol import Tool, ToolError
 
 GROUP = "fast"
@@ -17,6 +18,10 @@ INFO = "The fast path: run runs one step; fast runs many steps and gives one sho
 STEP = '{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }'
 STEP_SCHEMA = {"type": "object", "properties": {"tool": {"type": "string", "description": "The tool's plain name (pd_pad). Its inputs stand beside it."}},
                "required": ["tool"], "additionalProperties": True}
+
+
+# run takes the same calls list as batch and fast, with one step in use (27 Nov).
+RUN_SCHEMA = copy.deepcopy(staticbase.LISTED_SCHEMAS["run"])
 
 
 def tools(session):
@@ -37,13 +42,15 @@ def tools(session):
         return body
 
     return [
-        Tool("run", ("Run one call, and get its full answer. The input is one step: the tool's name in tool, and its inputs beside it. "
-                     "Example: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }. "
+        Tool("run", ("Run one call, and get its full answer. run, batch and fast take the same calls list: calls: [step]. "
+                     "A step is the tool's name in tool, and its inputs beside it. "
+                     "Example: run { \"calls\": [ { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 } ] }. "
                      "The answer is the answer of a direct call of that tool, with the same checks, approvals and undo step. "
-                     "each: { x: [15, 45] } runs the step once for each value, as a batch does; \"$x\" in the inputs is the value. "
-                     "run does not run approve_file or approve_code: call them by their own names. "
+                     "run runs the first step only. A step after it is not run and not checked. The answer has a notice that says so. "
+                     "each: { x: [15, 45] } on the step runs it once for each value, as a batch does. The answer is then the batch's. \"$x\" in the inputs is the value. "
+                     "run does not run approve_file, approve_code, batch or fast: call them by their own names. "
                      "For many calls in one request, use batch (a full answer for each call) or fast (one short answer)."),
-             dict(STEP_SCHEMA), run),
+             copy.deepcopy(RUN_SCHEMA), run),
         Tool("fast", ("Run many calls in one request, and get one short answer. Use it when you know the work. For one call, use run. For a full answer for each call, use batch. "
                       "calls: [steps]. A step is the same as a batch step: the tool's name in tool, and its inputs beside it. Example: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }. "
                       "each: { x: [15, 45] } runs the step once for each value, in order; \"$x\" in the inputs is the value, also inside a list. "

@@ -191,8 +191,12 @@ class ListedSchema(unittest.TestCase):
         self.assertNotIn("additionalProperties", b)
         self.assertEqual(sorted(got["fast"]["properties"]), ["calls", "check", "rollback"])
         self.assertEqual(got["fast"]["properties"]["calls"]["items"]["required"], ["tool"])
-        self.assertEqual(got["run"]["required"], ["tool"])
-        self.assertIs(got["run"].get("additionalProperties"), True)
+        # 27 Nov: run takes the same calls list as batch and fast, and no other key.
+        self.assertEqual(sorted(got["run"]["properties"]), ["calls"])
+        self.assertEqual(got["run"]["required"], ["calls"])
+        self.assertEqual(got["run"]["properties"]["calls"]["items"], b["properties"]["calls"]["items"])
+        self.assertIs(got["run"]["properties"]["calls"]["items"].get("additionalProperties"), True)
+        self.assertNotIn("additionalProperties", got["run"])
 
     def test_hidden_fields_still_work_and_unknown_is_refused(self):
         got = run('''

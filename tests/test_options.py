@@ -289,8 +289,8 @@ class Pick(Base):
         facts_reader(self, self.s)
         got, _ = call(self.server, "session_state", {})
         self.opts = got["options"]
-        self.assertEqual(self.opts["list"][0]["run"]["tool"], "pd_pad")
-        self.assertEqual(self.opts["list"][1]["run"]["tool"], "pd_pocket")
+        self.assertEqual(self.opts["list"][0]["step"]["tool"], "pd_pad")
+        self.assertEqual(self.opts["list"][1]["step"]["tool"], "pd_pocket")
 
     def test_pick_fills_and_runs_the_call_through_the_normal_path(self):
         got, err = call(self.server, "pick", {"option": 1, "fill": {"length": 4}})
@@ -351,7 +351,7 @@ class Pick(Base):
         self.assertEqual(got["error"]["code"], "invalid_state")
         self.assertIn("step 0 are old", got["error"]["message"])
         self.assertEqual(got["error"]["options"]["step"], 1)
-        self.assertEqual(got["error"]["options"]["list"][0]["run"]["tool"], "pd_pad")
+        self.assertEqual(got["error"]["options"]["list"][0]["step"]["tool"], "pd_pad")
         self.assertEqual(self.s.calls, [])
         # The new options are kept: a pick from them runs.
         got, err = call(self.server, "pick", {"option": "1, 3mm"})

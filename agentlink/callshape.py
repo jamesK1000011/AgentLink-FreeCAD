@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""One flat step for run, batch and fast (owner decisions, 26 Nov):
+"""One flat step for run, batch and fast (owner decisions, 26 and 27 Nov):
 
   { "tool": "pd_pad", "sketch": "Sketch", "length": 6 }
+
+All three tools take the same list: { "calls": [ step, … ] } (27 Nov: a
+client can force additionalProperties: false on the top level of a tool, so
+the steps stand one level down). run runs the first step only.
 
 The tool's name is tool. Its inputs stand beside it, by the names on its
 card. There is no arguments wrapper.
@@ -13,6 +17,8 @@ tool, each and writeTo (RESERVED).
     "$x" in the inputs (also inside a list) is that value. One variable.
     Each pass is one call. A writeTo does not go with each.
   * writeTo: a .json file for the call's whole answer. A batch step only.
+  * In run, each runs the step as a batch of its passes (the answer is
+    batch's), as before 27 Nov.
 
 The old forms are refused with the new form in the words (rule R5: no
 alias, nothing is read silently): { tool, arguments }, { call, … }, do,
@@ -32,6 +38,7 @@ OLD_KEYS = ("arguments", "as", "when", "then", "else", "let", "try", "choose")
 MAX_EACH = 200  # the values of one each (a block takes at most 200 calls)
 EXAMPLE = '{ "tool": "sketch_new", "plane": "XY" }'
 RUN_EXAMPLE = '{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }'
+RUN_FORM = 'run { "calls": [ ' + RUN_EXAMPLE + ' ] }'
 LOOP_EXAMPLE = '{ "tool": "sketch_add", "each": { "x": [15, 45] }, "kind": "circle", "center": ["$x", 15], "radius": 5 }'
 _NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _VAR = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*$")
@@ -198,19 +205,69 @@ def steps_of(server, c, where, runner="batch"):
     return [{"tool": name, "inputs": put_in(copy.deepcopy(base), var, v), "writeTo": None, "pass": i, "of": len(vals)} for i, v in enumerate(vals)]
 
 
-NOT_IN_RUN = ("approve_file", "approve_code", "run")
+NOT_IN_RUN = ("approve_file", "approve_code", "run", "batch", "fast")
+
+
+def _step_name(c):
+    t = c.get("tool") if isinstance(c, dict) else None
+    return t if isinstance(t, str) and t.strip() else "no tool"
+
+
+def extra_notice(calls):
+    """The fact about the steps after the first: run takes one call."""
+    rest = [f"{i} ({_step_name(c)})" for i, c in enumerate(calls) if i > 0]
+    n = len(rest)
+    return (f"run takes one call. It ran calls.0 only. {n} step{'s were' if n != 1 else ' was'} not run and not checked: {', '.join(rest)}. "
+            "batch runs several calls.")
+
+
+def with_notice(r, notice):
+    """The answer r (an MCP result) with notice put after result, near the top."""
+    import json
+
+    from .protocol import compact
+
+    try:
+        body = json.loads(r["content"][0]["text"])
+    except Exception:  # noqa: BLE001 - an answer that is not one JSON object stays as it is
+        return r
+    if not isinstance(body, dict):
+        return r
+    out = {}
+    for k in ("result", "error"):
+        if k in body:
+            out[k] = body[k]
+    out["notice"] = notice
+    out.update({k: v for k, v in body.items() if k not in out})
+    r = dict(r)
+    r["content"] = [dict(r["content"][0], text=compact(out))] + list(r["content"][1:])
+    return r
 
 
 def run_call(server, params):
-    """A call of run: its whole input is one step. The step runs as a call
-    of the named tool, through the normal path, so the answer is the one a
-    direct call gives. A step with each runs as a batch of its passes.
-    Refused: the two approvals (a direct call of the client only) and run."""
+    """A call of run: { calls: [step, …] }, the same list as batch and fast.
+    The first step runs as a call of the named tool, through the normal
+    path, so the answer is the one a direct call gives. The steps after the
+    first are not run and not checked: the answer says so (notice, after
+    result). A step with each runs as a batch of its passes. Refused: the
+    old flat form, an empty list, the approvals, run, batch and fast."""
     a = params.get("arguments")
     if not isinstance(a, dict):
-        return server.refusal("invalid_input", f"run: one step as the input, {RUN_EXAMPLE}.")
+        return server.refusal("invalid_input", f"run: the input is {RUN_FORM}.")
+    if "calls" not in a:
+        if "tool" in a:
+            return server.refusal("invalid_input", f"run: the call goes in calls now. Send {RUN_FORM}. The inputs stand beside tool, inside the step. Nothing was run.")
+        return server.refusal("invalid_input", f"run: calls is the list of calls. Send {RUN_FORM}. Nothing was run.")
+    others = [k for k in a if k != "calls"]
+    if others:
+        return server.refusal("invalid_input", f"run takes only calls, not {', '.join(str(k) for k in others[:4])}. "
+                                               f"Send {RUN_FORM}. batch has rollback and stopOnError. Nothing was run.")
+    calls = a["calls"]
+    if not isinstance(calls, list) or not calls:
+        return server.refusal("invalid_input", f"run: calls is a list of one step at least. Send {RUN_FORM}. Nothing was run.")
+    step = calls[0]
     try:
-        parts = steps_of(server, a, "run", runner="run")
+        parts = steps_of(server, step, "calls.0", runner="run")
     except Refused as e:
         return server.refusal("invalid_input", e.words)
     from .protocol import plain_name
@@ -219,8 +276,12 @@ def run_call(server, params):
     if name in NOT_IN_RUN:
         if name == "run":
             return server.refusal("invalid_input", "run: tool is the tool to run, not run.")
+        if name in ("batch", "fast"):
+            return server.refusal("invalid_input", f"run: {name} is not a step of run. A step of run is one tool's call. Call {name} by its own name. Nothing was run.")
         return server.refusal("not_allowed", f"run: {name} takes only a direct call from the client, which asks the person first. "
                                               f"A step of run, batch or fast cannot call it. Call {name} by its own name. Nothing was approved.")
     if parts[0]["pass"] is not None:
-        return server.call({"name": "batch", "arguments": {"calls": [a]}})
-    return server.call({"name": parts[0]["tool"], "arguments": parts[0]["inputs"]})
+        r = server.call({"name": "batch", "arguments": {"calls": [step]}})
+    else:
+        r = server.call({"name": parts[0]["tool"], "arguments": parts[0]["inputs"]})
+    return with_notice(r, extra_notice(calls)) if len(calls) > 1 else r

@@ -215,7 +215,7 @@ class Set11Arguments(Base):
         self.assertEqual(got["ready"]["body"], "Body")
         self.assertEqual(nexthint._expr_problems({"suggest": [{"tool": "x", "arguments": {"a": "=__import__('os')"}}]})[0][:14], "x.arguments.a:")
         pub = options.public({"step": 1, "list": [{"n": 1, "tool": "doc_new", "arguments": {}}]})
-        self.assertEqual(pub["list"][0], {"n": 1, "run": {"tool": "doc_new"}})  # 27 Nov: an option row is a flat step
+        self.assertEqual(pub["list"][0], {"n": 1, "step": {"tool": "doc_new"}})  # 27 Nov: an option row is a flat step
 
 
 

@@ -1,11 +1,11 @@
 # batch: run many calls in one request
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
-The whole text of batch's description, kept here for ToolListMode static with ToolDescStyle ste (its listed description is short). Nothing is left out. run and fast take the same step; their section is at the end.
+The whole text of batch's description, kept here for ToolListMode static with ToolDescStyle ste (its listed description is short). Nothing is left out. run and fast take the same calls list; their section is at the end.
 
 ## Start here
 - The basic form: `batch { calls: [ { tool: "sketch_new", plane: "XY" }, { tool: "sketch_add", kind: "rectangle", center: [0, 0], size: [40, 20] } ] }`. A call is one flat step: the tool's name in `tool`, and its inputs beside it. There is no arguments wrapper. Give only calls for a first batch; the other fields are for later.
-- One call: `run { tool: "pd_pad", sketch: "Sketch", length: 6 }`. Several calls: `batch`; with one short answer: `fast`. All three take the same step.
+- One call: `run { calls: [{ tool: "pd_pad", sketch: "Sketch", length: 6 }] }`. Several calls: `batch`; with one short answer: `fast`. All three take the same `calls` list of steps.
 - `sketch_add` takes one shape (`kind` and its inputs) and `sketch_constrain` one constraint (`type`, `refs`, `value`) in each call. Several are several calls: in a batch, or one step with `each`.
 - A step has three keys of its own: `tool`, `each` and `writeTo`. A tool input never has one of these names.
 - A loop: `{ tool: "sketch_add", each: { x: [15, 45] }, kind: "circle", center: ["$x", 15], radius: 5 }` runs the step once for each value, in order. `"$x"` is the value, in a scalar or inside a list. One variable. Each pass is one call: done, refused, notRun and `$from` count it.
@@ -47,8 +47,8 @@ record_read { path, at }: path is a .json file (a batch's record or a writeTo fi
 
 ## run and fast
 <!-- later: when one call, or a short answer, is enough -->
-All three take the same flat step, for example `{ tool: "pd_pad", sketch: "Sketch", length: 6 }`. They differ in the answer only.
-- `run { tool: "pd_pad", sketch: "Sketch", length: 6 }`: one call, and its full answer: the answer of a direct call of that tool. It is listed with the base tools. With `each` it runs the passes as a batch. `approve_file` and `approve_code` are never run through it: call them by their own names.
+All three take the same `calls` list of flat steps, for example `{ tool: "pd_pad", sketch: "Sketch", length: 6 }`. They differ in the answer only. (The steps stand one level down because a client can force `additionalProperties: false` on the top level of a tool.)
+- `run { calls: [{ tool: "pd_pad", sketch: "Sketch", length: 6 }] }`: one call, and its full answer: the answer of a direct call of that tool, with `result` first. It is listed with the base tools. It runs the first step only: a step after it is not run and not checked, and `notice` (after `result`) says so and names them. The old form, with `tool` at the top level of the input, is refused. With `each` it runs the passes as a batch, and the answer is the batch's. `approve_file`, `approve_code`, `batch` and `fast` are never run through it: call them by their own names.
 - `batch { calls: [step, step] }`: many calls, and a full answer for each call.
 - `fast { calls: [step, step] }`: many calls, and one short answer: calls, time, what was made, the volume change, the health. `values` has the value of each `get`. A body or sketch input that you leave out comes from what the block made, and `filled` says so. `check: true` only checks every step. `rollback: true` takes the block back whole. `{ "$from": i, "$at": "path" }` works as in batch, with the calls of the block counted from 0; `$file` is batch only. A block does not run batch, run, jobs, gui_input, dialog_answer, the history tools, approvals or a restart. It has no variables, conditions or expressions: a read is the tool `get`, `{ tool: "get", what: "Body.volume" }`.
 - A refused call keeps the calls before it, in batch and in fast (rollback: true undoes them).

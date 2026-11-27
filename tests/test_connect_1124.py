@@ -151,10 +151,10 @@ class PickAsBatch(unittest.TestCase):
 
     def test_static_shows_a_run_call(self):
         self.assertEqual(options.pick_how(self.DOC_NEW, static=True),
-                         'run { "tool": "pick", "option": 1, "fill": { "name": "Part" } } runs option 1; option: "1, Part" also works')
+                         'run { "calls": [ { "tool": "pick", "option": 1, "fill": { "name": "Part" } } ] } runs option 1; option: "1, Part" also works')
         self.assertEqual(options.pick_how({"step": 1, "list": [{"n": 2, "tool": "body_check", "arguments": {}}]}, static=True),
-                         'run { "tool": "pick", "option": 2 } runs option 2')
-        self.assertTrue(options.pick_how(None, static=True).startswith('run { "tool": "pick", "option": 1, "fill": { "length": 4 } }'))
+                         'run { "calls": [ { "tool": "pick", "option": 2 } ] } runs option 2')
+        self.assertTrue(options.pick_how(None, static=True).startswith('run { "calls": [ { "tool": "pick", "option": 1, "fill": { "length": 4 } } ] }'))
 
     def test_classic_keeps_the_short_form(self):
         self.assertEqual(options.pick_how(self.DOC_NEW, static=False), 'pick { option: 1, fill: { name: "Part" } } runs option 1; the text "1, Part" also works')
@@ -162,7 +162,7 @@ class PickAsBatch(unittest.TestCase):
 
     def test_the_mode_decides(self):
         with mock.patch.dict(os.environ, {"AGENTLINK_TOOLLIST": "static"}):
-            self.assertTrue(options.public(self.DOC_NEW)["pick"].startswith('run { "tool": "pick"'))
+            self.assertTrue(options.public(self.DOC_NEW)["pick"].startswith('run { "calls": [ { "tool": "pick"'))
         with mock.patch.dict(os.environ, {"AGENTLINK_TOOLLIST": "classic"}):
             self.assertTrue(options.public(self.DOC_NEW)["pick"].startswith("pick {"))
 

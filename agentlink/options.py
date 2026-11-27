@@ -337,7 +337,7 @@ def public(opts):
         return None
     rows = []
     for o in opts["list"]:
-        r = {"n": o["n"], "run": {"tool": o["tool"], **o["arguments"]}}
+        r = {"n": o["n"], "step": {"tool": o["tool"], **o["arguments"]}}
         if o.get("ask"):
             r["ask"] = [ask_words(a) for a in o["ask"]]
         if o.get("choices"):
@@ -384,8 +384,8 @@ def pick_how(opts, static=None):
 
 
 def as_run(flat, n, tail=""):
-    """The pick call as a run step: run { "tool": "pick", "option": 1, … }."""
-    return f'run {{ "tool": "pick", {flat} }} runs option {n}{tail}'
+    """The pick call as a run call: run { "calls": [ { "tool": "pick", "option": 1, … } ] }."""
+    return f'run {{ "calls": [ {{ "tool": "pick", {flat} }} ] }} runs option {n}{tail}'
 
 
 def pick_unlisted():
