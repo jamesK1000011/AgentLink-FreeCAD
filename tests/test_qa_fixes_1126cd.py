@@ -97,7 +97,7 @@ class HolesCut(unittest.TestCase):
     def test_holes_counts_only_the_circles_that_cut(self):
         got = in_a_process(SETUP + '''
     from agentlink.families import pd_common as pc
-    out = {"profiles": "2 profiles: the circle r 2.5 at (45, 0) is off the body; 1 cut.", pc.NOT_CUT: 1}
+    out = {"profiles": "2 profiles: the circle r 2.5 at (45, 0) is off the body; 1 cut in full.", pc.NOT_CUT: 1}
     one = pc.holes_cut(2, out)
     print(json.dumps([one, sorted(out), pc.holes_cut(3, {})]))
 ''')

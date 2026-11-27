@@ -19,7 +19,7 @@
 1. Make it with the modelling tools: `pd_body_new`, `sketch_new`, `pd_pad` …, or `part_primitive`. Add-ons may add generators of their own; `tool_groups` lists them.
 2. Ask how it will be made. Don't assume a part is printed.
 3. Ask what it is made of and record it: `material_set`.
-4. `body_check` after every change (a Body with AllowCompound true may hold several solids on purpose: each is checked). Look too: `view_render { views: "all" }`, and `{ map: "wall" }` or `{ zoom: { at } }` on a spot.
+4. `body_check` after every change (a Body with AllowCompound true, FreeCAD's default, may hold several solids: each is checked). Look too: `view_render { views: "all" }`, and `{ map: "wall" }` or `{ zoom: { at } }` on a spot.
 5. Write `export` for STEP or STL (or any format it lists). Starting a print or a cut is the person's call.
 
 ## What is here, by task
