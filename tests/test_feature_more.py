@@ -33,7 +33,7 @@ class FeatureMore(Base):
 
     def test_4_binder_boolean(self):
         self.ok("pd_body_new", {"name": "Cap"})
-        self.ok("pd_binder", {"body": "Cap", "from": "Block", "faces": [{"at": [20, 2, 10], "normal": [0, 0, 1]}]})
+        self.ok("pd_binder", {"body": "Cap", "from": "Block", "faces": {"at": [20, 2, 10], "normal": [0, 0, 1]}})
         self.ok("pd_body_new", {"name": "Cutter"})
         self.ok("pd_primitive", {"body": "Cutter", "kind": "cylinder", "size": {"radius": 6, "height": 20}, "at": [20, 15, 5]})
         self.ok("pd_body_new", {"name": "Sheet"})

@@ -61,7 +61,7 @@ class CamMore(unittest.TestCase):
         self.assertGreater(ar.get("commands", 0), 10)
 
     def test_2_bag_and_template(self):
-        b = self.ok("cam_property_bag", {"properties": [{"name": "Clearance", "type": "Length", "value": 2.5}]})
+        b = self.ok("cam_property_bag", {"property": "Clearance", "type": "Length", "value": 2.5})
         self.assertEqual(b["properties"], ["Clearance"])
         t = self.ok("cam_template_export", {"description": "plate setup"})
         with open(t["template"]) as f:

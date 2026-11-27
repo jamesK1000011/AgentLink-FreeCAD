@@ -174,7 +174,7 @@ class ShapeQueryOfWires(unittest.TestCase):
 class SheetTableNamedSheet(unittest.TestCase):
     def test_make_with_a_sheet_that_is_not_there(self):
         got = child("_datasheet_standin", "sheet", "", '''
-            out = run("sheet_table", {"action": "make", "sheet": "Sizes", "params": ["tt_od"], "configs": [{"name": "M", "values": [28.6]}]})
+            out = run("sheet_table", {"action": "make", "sheet": "Sizes", "params": ["tt_od"], "config": "M", "values": [28.6]})
             print(json.dumps([out, [o.Label for o in s.doc.Objects if o.TypeId == "Spreadsheet::Sheet"]]))
         ''')
         out, sheets = got

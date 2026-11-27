@@ -221,13 +221,19 @@ def _meant_only(name, old):
 
 
 def _flat():
-    """The six tools whose inputs were made flat on 27 Nov (tests/_flat_1127.py:
-    description and inputSchema as made then; the new tests check what they say)."""
+    """The tools whose inputs were made flat on 27 Nov (tests/_flat_1127.py and
+    tests/_flat_1127b.py: description and inputSchema as made then; the new
+    tests check what they say)."""
     import _flat_1127
-    return _flat_1127.FLAT
+    import _flat_1127b
+    return {**_flat_1127.FLAT, **_flat_1127b.FLAT}
 
 
-FLAT_1127 = ("sketch_add", "sketch_constrain", "pd_fillet", "pd_chamfer", "sketch_project", "sketch_external")
+# The six of the first line (tests/test_flat_inputs_1127.py), and the five that
+# took a list of objects and now take one item for each call
+# (tests/test_flat_lists_1127.py).
+FLAT_1127 = ("sketch_add", "sketch_constrain", "pd_fillet", "pd_chamfer", "sketch_project", "sketch_external",
+             "td_cosmetic", "asm_fits", "cam_property_bag", "sheet_table", "pd_binder")
 
 
 def description(name, old):

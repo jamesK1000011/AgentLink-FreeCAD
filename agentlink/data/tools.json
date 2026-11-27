@@ -14242,7 +14242,7 @@
   },
   "asm_fits": {
    "group": "assembly",
-   "description": "Read the fits: the hole and the shaft that each joint puts together. Give joint for one joint. For parts with no joint, give pairs [{ a: { part, element }, b }]. The tool finds them as cylindrical faces of about one size on the axis of the joint. Answer: fits [{ hole, shaft: { part, diameter }, clearance, engagement mm, axisOffset }]. A minus clearance is interference. fit: \"H7/g6\" holds each fit to ISO 286. size: the nominal; else the tool reads it from the parts to 0.05 mm. With fit, the answer adds the type of fit, clearanceRange, the limits of each part and ok. verdict: pass | fix. For flat faces: their gap and angle. The tool skips a joint with nothing round, and gives the reason. Parts drawn at nominal size fail a shaft band such as g6. Tell the person; do not hide it. Changes nothing.",
+   "description": "Read the fits: the hole and the shaft that each joint puts together. Give joint for one joint. For parts with no joint, give a { part, element } and b. One call reads one pair. Several pairs are several calls: in a batch, or with each. The tool finds them as cylindrical faces of about one size on the axis of the joint. Answer: fits [{ hole, shaft: { part, diameter }, clearance, engagement mm, axisOffset }]. A minus clearance is interference. fit: \"H7/g6\" holds each fit to ISO 286. size: the nominal; else the tool reads it from the parts to 0.05 mm. With fit, the answer adds the type of fit, clearanceRange, the limits of each part and ok. verdict: pass | fix. For flat faces: their gap and angle. The tool skips a joint with nothing round, and gives the reason. Parts drawn at nominal size fail a shaft band such as g6. Tell the person; do not hide it. Changes nothing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -14253,25 +14253,13 @@
      "joint": {
       "type": "string"
      },
-     "pairs": {
-      "type": "array",
-      "items": {
-       "type": "object",
-       "properties": {
-        "a": {
-         "type": "object"
-        },
-        "b": {
-         "type": "object"
-        },
-        "fit": {
-         "type": "string"
-        },
-        "size": {
-         "type": "number"
-        }
-       }
-      }
+     "a": {
+      "type": "object",
+      "description": "{ part, element }: one end of the pair, for parts with no joint. element is a face of the part, as asm_joint takes it."
+     },
+     "b": {
+      "type": "object",
+      "description": "{ part, element }: the other end of the pair."
      },
      "fit": {
       "type": "string"
@@ -14285,13 +14273,13 @@
    },
    "changes": false,
    "source": "Agent Link (was agentlink/families/assembly_more.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "family": "assembly_more",
    "runner": "steps",
    "steps": [
     {"let": {"asm": "=assembly(a.assembly)", "fit": "=a.fit", "size": "=a.size", "rows": []}},
-    {"when": "=a.pairs", "then": [{"each": "p", "in": "=a.pairs", "index": "i", "steps": [{"let": {"ends": []}}, {"each": "side", "in": ["a", "b"], "steps": [{"let": {"e": "=(p or {}).get(side)"}}, {"refuse": {"fmt": "pairs[{i}].{side}: {{ part, element }}."}, "when": "=not is_dict(e) or 'part' not in e"}, {"let": {"prt": "=part_of(asm, e['part'])"}}, {"let": {"el": "=element(prt, e.get('element', {'kind': 'face'}), 'pairs[' + str(i) + '].' + side + '.element')"}}, {"push": {"ends": "=(prt, prt.Shape.getElement(el))"}}]}, {"push": {"rows": "=pair_fit(ends[0][0], ends[0][1], ends[1][0], ends[1][1], p.get('fit', fit), p.get('size', size))"}}]}], "else": [{"let": {"js": "=[joint_of(asm, a['joint'])] if a.joint else [j for j in joints(asm).Group if get(j, 'ObjectToGround') is None]"}}, {"each": "j", "in": "=js", "steps": [{"let": {"pa, ea": "=ref_pair(get(j, 'Reference1'))", "pb, eb": "=ref_pair(get(j, 'Reference2'))"}}, {"when": "=pa is not None and pb is not None", "then": [{"when": "=a.joint", "then": [{"let": {"r": "=pair_fit(pa, ea, pb, eb, fit, size)"}}], "else": [{"try": [{"let": {"r": "=pair_fit(pa, ea, pb, eb, fit, size)"}}], "on": "refusal", "except": [{"let": {"r": "={'skipped': error.message}"}}]}]}, {"push": {"rows": "=dict([('joint', j.Label), ('kind', str(get(j, 'JointType', '')).lower())] + list(r.items()))"}}]}]}]},
-    {"refuse": {"fmt": "No joints in {asm.Label} to read fits from: name pairs [{{ a, b }}] instead."}, "code": "not_found", "when": "=not rows"},
+    {"when": "=a.a is not None or a.b is not None", "then": [{"let": {"ends": []}}, {"each": "side", "in": ["a", "b"], "steps": [{"let": {"e": "=a.get(side)"}}, {"refuse": {"fmt": "{side}: {{ part, element }}. A pair has a and b."}, "when": "=not is_dict(e) or 'part' not in e"}, {"let": {"prt": "=part_of(asm, e['part'])"}}, {"let": {"el": "=element(prt, e.get('element', {'kind': 'face'}), side + '.element')"}}, {"push": {"ends": "=(prt, prt.Shape.getElement(el))"}}]}, {"push": {"rows": "=pair_fit(ends[0][0], ends[0][1], ends[1][0], ends[1][1], fit, size)"}}], "else": [{"let": {"js": "=[joint_of(asm, a['joint'])] if a.joint else [j for j in joints(asm).Group if get(j, 'ObjectToGround') is None]"}}, {"each": "j", "in": "=js", "steps": [{"let": {"pa, ea": "=ref_pair(get(j, 'Reference1'))", "pb, eb": "=ref_pair(get(j, 'Reference2'))"}}, {"when": "=pa is not None and pb is not None", "then": [{"when": "=a.joint", "then": [{"let": {"r": "=pair_fit(pa, ea, pb, eb, fit, size)"}}], "else": [{"try": [{"let": {"r": "=pair_fit(pa, ea, pb, eb, fit, size)"}}], "on": "refusal", "except": [{"let": {"r": "={'skipped': error.message}"}}]}]}, {"push": {"rows": "=dict([('joint', j.Label), ('kind', str(get(j, 'JointType', '')).lower())] + list(r.items()))"}}]}]}]},
+    {"refuse": {"fmt": "No joints in {asm.Label} to read fits from: give a and b {{ part, element }} instead."}, "code": "not_found", "when": "=not rows"},
     {"let": {"verdicts": "=[r.get('verdict') for r in rows if r.get('verdict')]"}}
    ],
    "answer": {"fields": {"assembly": "=asm.Label", "fits": "=rows", "verdict": {"when": "=verdicts", "value": "='pass' if all(v == 'pass' for v in verdicts) else 'fix'"}}}
@@ -14741,21 +14729,85 @@
   },
   "td_cosmetic": {
    "group": "techdraw",
-   "description": "Add cosmetic geometry to a view. From 1.1 these are FreeCAD's own cosmetic edges, so they also show in the window; td_export always draws them. items: [{ kind, style }]. kind line: from, to, points on the part. kind circle: center on the part, radius mm. kind centerline: edges, the two side lines of a shaft or hole; extend mm. kind thread: edges, the two outline lines of a side view. Or circle: the round edge of the end view. internal: true for a tapped hole. pitch: ISO coarse by default. length: mm. style: thin | visible | hidden | center. clear: true removes the earlier ones. td_lines takes them by order, from 0.",
+   "description": "Add cosmetic geometry to a view. From 1.1 these are FreeCAD's own cosmetic edges, so they also show in the window; td_export always draws them. One call adds one figure: kind and its inputs stand beside tool. Several figures are several calls: in a batch, or with each. kind line: from, to, points on the part. kind circle: center on the part, radius mm. kind centerline: edges, the two side lines of a shaft or hole; extend mm. kind thread: edges, the two outline lines of a side view. Or circle: the round edge of the end view. internal: true for a tapped hole. pitch: ISO coarse by default. length: mm. style: thin | visible | hidden | center. clear: true removes the earlier ones. td_lines takes them by order, from 0.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "view": {
       "type": "string"
      },
-     "items": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "line",
+       "circle",
+       "centerline",
+       "thread"
+      ],
+      "description": "The figure. Its own inputs stand beside it."
+     },
+     "style": {
+      "type": "string",
+      "enum": [
+       "thin",
+       "visible",
+       "hidden",
+       "center"
+      ],
+      "description": "line, circle: the line style. The default is thin."
+     },
+     "from": {
       "type": "array",
       "items": {
-       "type": "object"
-      }
+       "type": "number"
+      },
+      "description": "line: [x, y, z], the start, a point on the part."
+     },
+     "to": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "line: [x, y, z], the end, a point on the part."
+     },
+     "center": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "circle: [x, y, z], a point on the part."
+     },
+     "radius": {
+      "type": "number",
+      "description": "circle: mm on the part."
+     },
+     "edges": {
+      "type": "array",
+      "items": {},
+      "description": "centerline: the two side lines of a shaft or hole, [\"Edge1\", \"Edge3\"]. thread: the two outline lines of a side view. Each is an edge of the view (td_geometry lists them)."
+     },
+     "extend": {
+      "type": "number",
+      "description": "centerline: mm past the two ends (3)."
+     },
+     "circle": {
+      "description": "thread: the round edge of the end view, \"Edge4\"."
+     },
+     "internal": {
+      "type": "boolean",
+      "description": "thread: true for a tapped hole."
+     },
+     "pitch": {
+      "type": "number",
+      "description": "thread: mm. ISO coarse by default."
+     },
+     "length": {
+      "type": "number",
+      "description": "thread: mm along a side view. The default is the full length."
      },
      "clear": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "true removes the earlier figures of the view first."
      }
     },
     "required": [
@@ -14763,14 +14815,16 @@
     ],
     "additionalProperties": false
    },
+   "kindInputs": {"line": ["from", "to"], "circle": ["center", "radius"], "centerline": ["edges", "extend"], "thread": ["edges", "circle", "internal", "pitch", "length"]},
    "changes": true,
    "source": "Agent Link (was agentlink/families/techdraw.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "runner": "steps",
    "steps": [
     {"let": {"v": "=view_of(a.view)"}},
     {"do": "=recompute([v])", "when": "=not edges_of(v)"},
-    {"let": {"items": "=a.items or []", "prims": "=loads(get(v, COSMETIC_PROP)) if COSMETIC_PROP in v.PropertiesList and get(v, COSMETIC_PROP) else []"}},
+    {"refuse": "kind: line { from, to } | circle { center, radius } | centerline { edges } | thread { edges | circle, internal, pitch, length }. clear: true alone removes the figures.", "when": "=a.kind is None and not a.clear"},
+    {"let": {"items": "=[a] if a.kind is not None else []", "prims": "=loads(get(v, COSMETIC_PROP)) if COSMETIC_PROP in v.PropertiesList and get(v, COSMETIC_PROP) else []"}},
     {"when": "=a.clear", "then": [{"each": "p", "in": "=prims", "steps": [{"do": "=drop_native(v, p)"}]}, {"let": {"prims": []}}]},
     {"let": {"first_new": "=len(prims)", "made": [], "k": "=view_scale(v) / gscale(v)"}},
     {"each": "it", "in": "=items", "steps": [{"let": {"kind": "=it.get('kind')"}}, {"let": {"style": "=it.get('style', 'center' if kind == 'centerline' else 'thin')"}}, {"refuse": "style: thin | visible | hidden | center.", "when": "=style not in ('thin', 'visible', 'hidden', 'center')"}, {"choose": "=kind", "of": {"line": [{"let": {"p": "=paper_of3d(v, it.get('from'))"}}, {"let": {"q": "=paper_of3d(v, it.to)"}}, {"push": {"prims": {"pts": "=[p, q]", "style": "=style"}}}, {"push": {"made": {"kind": "line", "length_mm": "=num(hypot(q[0] - p[0], q[1] - p[1]) / view_scale(v), 3)"}}}], "circle": [{"let": {"c": "=paper_of3d(v, it.center)"}}, {"let": {"r": "=float(it.get('radius', 0)) * view_scale(v)"}}, {"refuse": "circle: radius mm on the part.", "when": "=r <= 0"}, {"push": {"prims": {"pts": "=circle_points(c, r)", "style": "=style", "closed": true, "circle": "=[c[0], c[1], r]"}}}, {"push": {"made": {"kind": "circle", "radius": "=float(it['radius'])"}}}], "centerline": [{"let": {"refs": "=it.edges or []"}}, {"refuse": "centerline: edges [two lines of the view] (a shaft's or hole's sides).", "when": "=len(refs) != 2"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"let": {"ext": "=float(it.get('extend', 3))"}}, {"let": {"pts, d": "=mid_line(es[0], es[1], k, ext)"}}, {"let": {"pts": "=flip_y(v, pts)"}}, {"push": {"prims": {"pts": "=pts", "style": "center"}}}, {"push": {"made": {"kind": "centerline", "length_mm": "=num((d + 2 * ext) / view_scale(v), 2)"}}}], "thread": [{"let": {"internal": "=bool(it.get('internal', False))", "refs": "=it.edges or ([it['circle']] if it.circle else [])"}}, {"refuse": "thread: edges [two outline lines] (side view) or circle (end view).", "when": "=len(refs) not in (1, 2)"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"when": "=len(refs) == 1", "then": [{"let": {"cu": "=get(es[0], 'Curve')"}}, {"refuse": "thread: circle — a round edge seen end-on (a hole or shaft from its end).", "when": "=not has(cu, 'Radius')"}, {"let": {"D": "=2 * float(cu.Radius) * k / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P"}}, {"push": {"prims": {"pts": "=flip_y(v, thread_arc(cu, k, (D / 2 + (h3 if internal else -h3)) * view_scale(v)))", "style": "thin"}}}, {"push": {"made": {"kind": "thread", "end": true, "diameter": "=num(D + (2 * h3 if internal else 0), 3)", "pitch": "=P"}}}], "else": [{"let": {"sides": "=side_outline(es[0], es[1], k)"}}, {"let": {"D": "=abs(sides.gap) / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P * view_scale(v)", "length": "=float(it['length']) * view_scale(v) if it.length else sides.L"}}, {"each": "pts", "in": "=[flip_y(v, q) for q in root_lines(sides, h3 if not internal else -h3, length)]", "steps": [{"push": {"prims": {"pts": "=pts", "style": "thin"}}}]}, {"push": {"made": {"kind": "thread", "end": false, "nominal": "=num(D + (2 * 0.6134 * P if internal else 0), 3)", "pitch": "=P", "note": {"fmt": "M{num(D + (2 * 0.6134 * P if internal else 0), 1):g}x{P:g}"}}}}]}]}, "else": [{"refuse": "kind: line { from, to } | circle { center, radius } | centerline { edges } | thread { edges | circle, internal, pitch, length }."}]}]},
@@ -15033,18 +15087,43 @@
   },
   "cam_property_bag": {
    "group": "cam_more",
-   "description": "Make a CAM property bag of named values for the expressions of operations. properties: [{ name (no spaces), type Float | Length | Angle | Integer | String | Bool, value, group }]. Answer: bag, name. Expressions call a value <name>.<property>.",
+   "description": "Make a CAM property bag of named values for the expressions of operations. One call adds one value: property (its name, no spaces), type Float | Length | Angle | Integer | String | Bool, value, group. name: the bag. If a bag has that name, the tool adds the value to it. Several values are several calls with the same name: in a batch, or with each. Answer: bag, name. Expressions call a value <name>.<property>.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "name": {
-      "type": "string"
+      "type": "string",
+      "description": "The bag's label. A bag that has this label gets the property; else the tool makes a new bag."
      },
-     "properties": {
-      "type": "array",
-      "items": {
-       "type": "object"
-      }
+     "property": {
+      "type": "string",
+      "description": "The name of the value: letters and digits, no spaces."
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "Float",
+       "Length",
+       "Distance",
+       "Angle",
+       "Integer",
+       "String",
+       "Bool",
+       "Percent",
+       "Speed"
+      ],
+      "description": "The kind of the value. The default is Float."
+     },
+     "value": {
+      "description": "The value. It must fit the type."
+     },
+     "group": {
+      "type": "string",
+      "description": "The group of the property in FreeCAD's property editor. The default is Custom."
+     },
+     "info": {
+      "type": "string",
+      "description": "The tooltip of the property."
      }
     },
     "required": [],
@@ -15052,19 +15131,20 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/cam_more.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "runner": "steps",
    "steps": [
     {"refuse": "A property bag needs FreeCAD's CAM workbench, not in this build.", "code": "unavailable", "when": "=not has_cam()"},
-    {"let": {"bags": "=from_module('Path.Base', 'PropertyBag')", "props": "=a.properties or []"}},
-    {"each": "p", "in": "=props", "steps": [{"refuse": "properties: [{ name (letters and digits, no spaces), type (Float, Length, Angle, Integer, String, Bool), value, group }].", "when": "=not is_dict(p) or not p.get('name') or not str(p['name']).isidentifier()"}, {"refuse": {"fmt": "properties.{p['name']}.type {p.get('type')!r}: one of {', '.join(BAG_KINDS)}."}, "when": "=p.get('type', 'Float') not in BAG_KINDS"}]},
-    {"refuse": "properties: each name once.", "when": "=len({p['name'] for p in props}) < len(props)"},
-    {"let": {"bag": "=bags.Create(a.name or 'PropertyBag')"}},
-    {"set": {"bag.Label": "=unique(a.name, bag)"}, "when": "=a.name"},
-    {"each": "p", "in": "=props", "steps": [{"let": {"nm": "=p['name']", "kind": "=p.get('type', 'Float')"}}, {"do": "=bag.Proxy.addCustomProperty('App::Property' + kind, nm, p.get('group', 'Custom'), p.get('info', ''))"}, {"when": "='value' in p", "then": [{"try": [{"do": "=setprop(bag, nm, p['value'])"}], "except": [{"refuse": {"fmt": "properties.{nm}.value {p['value']!r} does not fit a {kind}: {error}"}}]}]}]},
+    {"let": {"bags": "=from_module('Path.Base', 'PropertyBag')", "nm": "=a.property", "kind": "=a.get('type', 'Float')"}},
+    {"refuse": "property: the name of the value (letters and digits, no spaces). type (Float, Length, Angle, Integer, String, Bool), value and group are for it.", "when": "=(nm is None and any([a.get(k) is not None for k in ('type', 'value', 'group', 'info')])) or (nm is not None and (not is_str(nm) or not nm.isidentifier()))"},
+    {"refuse": {"fmt": "type {a.get('type')!r}: one of {', '.join(BAG_KINDS)}."}, "when": "=kind not in BAG_KINDS"},
+    {"let": {"old": "=first([o for o in doc().Objects if a.name and a.name in (o.Label, o.Name) and has(get(o, 'Proxy', None), 'addCustomProperty')])"}},
+    {"refuse": {"fmt": "{old.Label} has the property {nm} already: give another name, or object_set changes its value."}, "code": "invalid_state", "when": "=old is not None and nm is not None and nm in old.PropertiesList"},
+    {"when": "=old is not None", "then": [{"let": {"bag": "=old"}}], "else": [{"let": {"bag": "=bags.Create(a.name or 'PropertyBag')"}}, {"set": {"bag.Label": "=unique(a.name, bag)"}, "when": "=a.name"}]},
+    {"when": "=nm is not None", "then": [{"do": "=bag.Proxy.addCustomProperty('App::Property' + kind, nm, a.get('group', 'Custom'), a.get('info', ''))"}, {"when": "='value' in a", "then": [{"try": [{"do": "=setprop(bag, nm, a['value'])"}], "except": [{"refuse": {"fmt": "value {a['value']!r} does not fit a {kind}: {error}"}}]}]}]},
     {"do": ["=doc().recompute()", "=snapshot(tool)"]}
    ],
-   "answer": {"fields": {"bag": "=bag.Label", "name": "=bag.Name", "properties": "=[p['name'] for p in props]", "use": {"fmt": "In an operation's expression it is {bag.Name}.<property>."}}}
+   "answer": {"fields": {"bag": "=bag.Label", "name": "=bag.Name", "properties": "=[nm] if nm is not None else []", "existing": {"when": "=old is not None", "value": true}, "use": {"fmt": "In an operation's expression it is {bag.Name}.<property>."}}}
   },
   "cam_template_export": {
    "group": "cam_more",
@@ -18625,7 +18705,7 @@
   },
   "sheet_table": {
    "group": "sheet",
-   "description": "Make and use design tables (configurations), FreeCAD's own kind. action make { params, configs, units, sheet, at, owner, property, active }. params: [names; alias rules as sheet_set]. configs: [{ name, values [..] | { param: value } }]. units: { param: \"mm\" | \"deg\" | \"\" } (numbers default to mm). sheet: the sheet to use; if no sheet has that label, the tool makes a new sheet with it. No sheet: a new sheet. at: the header cell; the active row is under it. owner: the object that holds the switch; default the one Body, else a group that holds the sheet. property: default Configuration. Then bind properties to <Sheet>.<param> with param_bind. use { config }: switches, and answers the bodies. add { config, values }: adds a row. list: the tables. guide_read sheet tells more.",
+   "description": "Make and use design tables (configurations), FreeCAD's own kind. action make { params, config, values, units, sheet, at, owner, property, active }. params: [names; alias rules as sheet_set]. config: the name of the first configuration. values: [..] | { param: value }, one for each param. action add makes each next configuration. units: { param: \"mm\" | \"deg\" | \"\" } (numbers default to mm). sheet: the sheet to use; if no sheet has that label, the tool makes a new sheet with it. No sheet: a new sheet. at: the header cell; the active row is under it. owner: the object that holds the switch; default the one Body, else a group that holds the sheet. property: default Configuration. Then bind properties to <Sheet>.<param> with param_bind. use { config }: switches, and answers the bodies. add { config, values }: adds a row. list: the tables. guide_read sheet tells more.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -18651,12 +18731,6 @@
       "type": "array",
       "items": {
        "type": "string"
-      }
-     },
-     "configs": {
-      "type": "array",
-      "items": {
-       "type": "object"
       }
      },
      "units": {
@@ -18689,7 +18763,7 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/sheet.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "runner": "steps",
    "steps": [
     {"let": {"act": "=a.get('action', 'list')"}},
@@ -18735,15 +18809,15 @@
         ]
        },
        {"refuse": "params: each name once.", "when": "=len(set(params)) != len(params)"},
-       {"let": {"confs": "=a.configs or []"}},
-       {"refuse": "configs: [{ name, values: [one per param] }], at least one.", "when": "=not confs"},
+       {"let": {"confs": "=[{'name': a.config, 'values': a.values}] if a.config is not None or a.values is not None else []"}},
+       {"refuse": "config and values: the name of the first configuration, and its values, one for each param. action add makes each next configuration.", "when": "=not confs"},
        {"let": {"names": "=[]", "rows": "=[]"}},
        {
         "each": "c",
         "in": "=confs",
         "steps": [
          {"let": {"n": "=c.get('name')", "v": "=c.get('values')"}},
-         {"refuse": "configs: each needs a name.", "when": "=not is_str(n) or not n.strip()"},
+         {"refuse": "config: the name of the configuration.", "when": "=not is_str(n) or not n.strip()"},
          {
           "when": "=is_dict(v)",
           "then": [
@@ -18758,7 +18832,6 @@
          {"push": {"names": "=n", "rows": "=v"}}
         ]
        },
-       {"refuse": "configs: each name once.", "when": "=len(set(names)) != len(names)"},
        {"let": {"units": "=a.units or {}", "at": "=address(a.get('at', 'A1'), 'at')"}},
        {"let": {"r0, c0": "=parse(at)"}},
        {"let": {"span": "=range_text((r0, c0), (r0 + 1 + len(confs), c0 + len(params)))"}},
@@ -18915,7 +18988,7 @@
       ],
       "list": [
        {"let": {"out": "=[table_reading(x, t) for x in ([find(a.sheet)] if a.sheet else sheets()) for t in tables(x)]"}},
-       {"answer": {"fields": {"designTables": "=out", "note": {"when": "=not out", "value": "None yet: sheet_table { action: \"make\", params, configs }."}}}}
+       {"answer": {"fields": {"designTables": "=out", "note": {"when": "=not out", "value": "None yet: sheet_table { action: \"make\", params, config, values }."}}}}
       ]
      },
      "else": [
@@ -20540,7 +20613,7 @@
   },
   "pd_binder": {
    "group": "feature",
-   "description": "Bring faces of another body (or all of it) into this body as a shape binder (a SubShapeBinder). Use it to sketch on or to project from. from: body or feature. faces: [{ at, normal } …] on it; none gives the whole shape. frozen: true keeps it as it is now. A source at document level gets Relative false. Then the binder moves with this body when an assembly places it. relative: true keeps FreeCAD's default. Answer: binder, faces, relative, next.",
+   "description": "Bring faces of another body (or all of it) into this body as a shape binder (a SubShapeBinder). Use it to sketch on or to project from. from: body or feature. faces: one face on it, \"Face3\" or { at, normal }, or a list of references [\"Face3\", \"Face5\"]; none gives the whole shape. frozen: true keeps it as it is now. A source at document level gets Relative false. Then the binder moves with this body when an assembly places it. relative: true keeps FreeCAD's default. Answer: binder, faces, relative, next.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20551,10 +20624,21 @@
       "type": "string"
      },
      "faces": {
-      "type": "array",
-      "items": {
-       "type": "object"
-      }
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object"
+       },
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      ],
+      "description": "One face: a reference \"Face3\" (shape_query gives them), or by where it is, { at: [x, y, z], normal: [x, y, z] } or { side: \"+z\" }. Or a list of references, [\"Face3\", \"Face5\"]. Left out: the whole shape."
      },
      "frozen": {
       "type": "boolean"
@@ -20573,7 +20657,7 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/feature_more.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-27",
    "family": "feature_more",
    "runner": "steps",
    "steps": [
@@ -20584,7 +20668,9 @@
     {"refuse": "from: another body than this one — within a body, sketch on its faces directly.", "when": "=src is b or body_of(src) is b"},
     {"refuse": {"fmt": "{src.Label} has no shape yet to bind: give it a solid first."}, "code": "invalid_state", "when": "=get(src, 'Shape', None) is None or src.Shape.isNull()"},
     {"let": {"subs": "=[]"}},
-    {"each": "q", "in": "=a.faces or []", "steps": [{"let": {"hit": "=find_face(src.Shape, q)"}}, {"push": {"subs": "='Face' + str(hit[0] + 1)"}}]},
+    {"let": {"fq": "=a.faces"}},
+    {"refuse": "faces: one face — \"Face3\", { at: [x, y, z], normal: [x, y, z] } or { side: \"+z\" } — or a list of references [\"Face3\", \"Face5\"]. A list of face objects is not taken: take the references from shape_query and give them as a list (one binder).", "when": "=not (fq is None or is_dict(fq) or is_str(fq) or (is_list(fq) and all([is_str(x) for x in fq])))"},
+    {"each": "q", "in": "=[fq] if is_dict(fq) or is_str(fq) else (fq or [])", "steps": [{"when": "=is_str(q)", "then": [{"let": {"own, dot, nm": "=q.rpartition('.')"}}, {"refuse": {"fmt": "faces: {q!r} is not a face of {src.Label}. It has Face1 to Face{len(src.Shape.Faces)}."}, "code": "not_found", "when": "=own not in ('', src.Label, src.Name) or not (nm.startswith('Face') and nm[4:].isdigit() and 1 <= int(nm[4:]) <= len(src.Shape.Faces))"}, {"push": {"subs": "=nm"}}], "else": [{"let": {"hit": "=find_face(src.Shape, q)"}}, {"push": {"subs": "='Face' + str(hit[0] + 1)"}}]}]},
     {"let": {"label": "=unique(a.name or src.Label + ' binder')"}},
     {"let": {"f": "=b.newObject('PartDesign::SubShapeBinder', 'Binder')"}},
     {"set": {"f.Label": "=label", "f.Support": "=[(src, tuple(subs) if subs else ('',))]"}},

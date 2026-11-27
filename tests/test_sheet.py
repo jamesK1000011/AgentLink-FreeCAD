@@ -58,8 +58,8 @@ class SheetTools(Base):
         self.assertGreater(i["cells"], 6)
 
     def test_5_design_table(self):
-        t = self.ok("sheet_table", {"action": "make", "name": "Variants", "params": ["blen", "bwid"],
-                                    "configs": [{"name": "S", "values": [30, 10]}, {"name": "L", "values": {"blen": 60, "bwid": 20}}]})
+        t = self.ok("sheet_table", {"action": "make", "name": "Variants", "params": ["blen", "bwid"], "config": "S", "values": [30, 10]})
+        self.ok("sheet_table", {"action": "add", "sheet": "Variants", "config": "L", "values": {"blen": 60, "bwid": 20}})
         self.assertEqual(t["active"], "S")
         self.assertEqual(t["current"]["blen"]["value"], 30)
         sheet = t["refAs"].split(".")[0]

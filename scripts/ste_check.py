@@ -51,6 +51,9 @@ WAIVERS = {
     ("tool_groups", "run"): "the English verb in the original text, not the run tool that came on 26 Nov",
     ("cam_job", "tool"): "the input tool is now toolbit (26 Nov: no input is named like a step key; no alias, rule R5)",
     ("sketch_add", "items"): "the input items is gone (27 Nov): one call adds one shape, and kind and its inputs stand beside tool; no alias, rule R5",
+    ("td_cosmetic", "items"): "the input items is gone (27 Nov): one call adds one figure, and kind and its inputs stand beside tool; no alias, rule R5",
+    ("cam_property_bag", "properties"): "the input properties is gone (27 Nov): one call adds one value (property, type, value, group); no alias, rule R5",
+    ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 
 

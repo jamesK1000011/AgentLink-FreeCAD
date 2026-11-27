@@ -86,8 +86,8 @@ class Td2Data(unittest.TestCase):
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
             self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes: tests/_meant.py
-            self.assertEqual(t.schema, b["inputSchema"], name)
-            self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
+            self.assertEqual(t.schema, _meant.schema(name, b["inputSchema"]), name)  # meant changes: tests/_meant.py
+            self.assertEqual(json.dumps(t.schema), json.dumps(_meant.schema(name, b["inputSchema"])), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
             self.assertEqual(t.reads, b["reads"], name)
             self.assertEqual(t.group, b["group"], name)
@@ -128,7 +128,7 @@ class Td2Data(unittest.TestCase):
     @unittest.skipUnless(_have_base(), f"git has no {BASE} here")
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
-        self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        self.assertEqual(sorted({c["tool"] for c in got}), sorted(n for n in CONVERTED if n not in _meant.FLAT_1127))  # the flat tools: tests/test_flat_inputs_1127.py, tests/test_flat_lists_1127.py
         # Meant differences from the handler: td_view_more { kind: symbol | image } looks
         # for a relative path in the session's folder, as the other tools' files are (the
         # handler took it as it was: a bare file name was refused "no such SVG" from
@@ -188,7 +188,7 @@ class Td2Data(unittest.TestCase):
         for c in got:
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
         # Each tool: a case that answers.
-        for name in CONVERTED:
+        for name in (n for n in CONVERTED if n not in _meant.FLAT_1127):
             kinds = {c["new"]["result"][0] for c in got if c["tool"] == name}
             self.assertIn("ok", kinds, name)
         by = {(c["tool"], c["case"]): c["new"] for c in got}
@@ -196,6 +196,8 @@ class Td2Data(unittest.TestCase):
 
         # Not two empty runs alike: what some of them must have done.
         for (tool, case), want in EXPECT.items():
+            if tool in _meant.FLAT_1127:
+                continue
             res = by[(tool, case)]["result"]
             if isinstance(want, dict):
                 self.assertEqual(res[0], "ok", f"{tool} {case}: {res}")
@@ -215,7 +217,7 @@ class Td2Data(unittest.TestCase):
             if c["new"]["result"][0] == "refused":
                 said.setdefault(c["tool"], []).append(c["new"]["result"][2])
         missing = []
-        for name in CONVERTED:
+        for name in (n for n in CONVERTED if n not in _meant.FLAT_1127):
             for msg in _refusals(runners.entries()[name]):
                 # A template's fixed parts, in order, must all be in one refusal a case got.
                 parts = [p for p in _fixed(msg) if p]
@@ -223,7 +225,7 @@ class Td2Data(unittest.TestCase):
                     missing.append(f"{name}: {msg[:70]}")
         from _datatd2_cases import UNREACHED
 
-        self.assertEqual(sorted(missing), sorted(UNREACHED))
+        self.assertEqual(sorted(missing), sorted(u for u in UNREACHED if u.split(':')[0] not in _meant.FLAT_1127))
 
 
 def _refusals(e):
@@ -346,6 +348,8 @@ def _main(mode, file):
         return
     rows = []
     for tool, case, prepare, args in _datatd2_cases.cases(file, fc, tempfile.mkdtemp()):
+        if tool in _meant.FLAT_1127:
+            continue  # made flat on 27 Nov: its inputs differ from the handler's; see tests/test_flat_lists_1127.py
         row = {"tool": tool, "case": case, "crash": case.startswith("crash:")}
         for which, mods in (("old", old), ("new", new)):
             del fc.trace[:]

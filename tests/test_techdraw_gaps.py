@@ -69,7 +69,7 @@ class TechDrawGaps(Base):
         view = self.session.doc.getObjectsByLabel(v)[0]
         # a slanted line, so a flipped y would show
         native = T.native_ok()
-        c = self.ok("td_cosmetic", {"view": v, "items": [{"kind": "line", "from": [0, 10, 8], "to": [60, 30, 8]}]})
+        c = self.ok("td_cosmetic", {"view": v, "kind": "line", "from": [0, 10, 8], "to": [60, 30, 8]})
         self.assertEqual(c["native"], 1 if native else 0, "FreeCAD's own cosmetic edge, not only our export's")
         self.assertEqual(len(view.CosmeticEdges), 1 if native else 0)
 

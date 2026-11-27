@@ -54,7 +54,7 @@ A map of this guide. `guide_read { topic: "assembly", section: [...] }` reads th
 
 ## Fits
 <!-- later: when reading a hole and shaft fit with asm_fits -->
-- `asm_fits` reads the hole and the shaft each joint puts together: both diameters, the clearance (minus is interference), how far they engage, and how far their axes are apart. Pass `joint` for one, or `pairs: [{ a, b }]` for parts with no joint.
+- `asm_fits` reads the hole and the shaft each joint puts together: both diameters, the clearance (minus is interference), how far they engage, and how far their axes are apart. Pass `joint` for one, or `a` and `b` for one pair of parts with no joint.
 - `fit: "H7/g6"` holds them to ISO 286, giving the fit's type and clearance range and whether each part is in its band. The nominal is read off the parts unless `size` says it.
 - A model drawn at nominal sizes fails a shaft band like g6 (it wants the shaft a little under). Say so, then size the part into the band, or keep the fit as a callout for the drawing (`td_dim { fit }`).
 

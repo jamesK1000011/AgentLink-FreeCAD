@@ -401,7 +401,8 @@ class Census(unittest.TestCase):
 # 787: pd_datum_plane and pd_mirrored check plane or face (both; a face as plane; a plane as face) first (rename set 8, 24 Nov).
 # 784: object_set's three property/value refusals went with { property, value } (rename set 10, 24 Nov).
 # 782: sketch_add and sketch_constrain take one shape and one constraint: the refusals for a list that is not a list, or an item that is not an object, are gone (27 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 782, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 784: pd_binder refuses a faces list of objects, and a reference that is no face of the object, before it makes the binder (27 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 784, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

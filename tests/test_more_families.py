@@ -482,8 +482,9 @@ class MoreFamilies(Base):
         self.ok("td_view", {"page": "Tc page", "bodies": ["Tc shaft"], "direction": "right", "scale": 2, "at": [220, 150], "name": "Tc end"})
         g = self.ok("td_geometry", {"view": "Tc front", "kind": "lines"})
         lines = [i["ref"] for i in g["items"] if i["kind"] == "line"]
-        c = self.ok("td_cosmetic", {"view": "Tc front", "items": [{"kind": "centerline", "edges": lines[:2]}, {"kind": "thread", "edges": lines[:2], "length": 25}]})
-        self.assertEqual(c["made"][1]["note"], "M20x2.5")
+        self.ok("td_cosmetic", {"view": "Tc front", "kind": "centerline", "edges": lines[:2]})
+        c = self.ok("td_cosmetic", {"view": "Tc front", "kind": "thread", "edges": lines[:2], "length": 25})
+        self.assertEqual(c["made"][0]["note"], "M20x2.5")
         self.ok("td_finish", {"view": "Tc front", "on": lines[0], "ra": "0.8", "process": "ground"})
         a = self.ok("td_area", {"view": "Tc end", "face": "Tc shaft.Face2"})
         self.assertAlmostEqual(a["area"], 314.159, delta=0.01)

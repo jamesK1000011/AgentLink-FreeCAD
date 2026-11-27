@@ -397,6 +397,20 @@ WRONG_FIELD_WORDS = {
                             "Several shapes are several calls: in a batch, or with each."},
     "sketch_constrain": {"constraints": "sketch_constrain adds one constraint for each call, so it has no constraints: type, refs, value and name stand beside tool. "
                                         'Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] }. Several constraints are several calls: in a batch, or with each.'},
+    # 27 Nov, the other tools that took a list of objects: one item for each
+    # call, its fields beside tool. The list is refused with the flat form.
+    "td_cosmetic": {"items": "td_cosmetic adds one figure for each call, so it has no items: kind and the figure's inputs stand beside tool. "
+                             'Example: { "tool": "td_cosmetic", "view": "Front", "kind": "centerline", "edges": ["Edge1", "Edge3"] }. '
+                             "Several figures are several calls: in a batch, or with each."},
+    "asm_fits": {"pairs": "asm_fits reads one pair for each call, so it has no pairs: a and b stand beside tool. "
+                          'Example: { "tool": "asm_fits", "a": { "part": "Pin", "element": "Face3" }, "b": { "part": "Plate", "element": "Face7" } }. '
+                          "Several pairs are several calls: in a batch, or with each."},
+    "cam_property_bag": {"properties": "cam_property_bag adds one value for each call, so it has no properties: property, type, value and group stand beside tool. "
+                                       'Example: { "tool": "cam_property_bag", "name": "Feeds", "property": "depth", "type": "Length", "value": 2 }. '
+                                       "Several values are several calls with the same name: in a batch, or with each."},
+    "sheet_table": {"configs": "sheet_table makes a table with one configuration, so it has no configs: config and values stand beside tool. "
+                               'Example: { "tool": "sheet_table", "action": "make", "params": ["length", "width"], "config": "S", "values": [40, 20] }. '
+                               'Each next configuration is one call: { "tool": "sheet_table", "action": "add", "config": "L", "values": [80, 40] }.'},
 }
 
 
