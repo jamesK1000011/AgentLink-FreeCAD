@@ -134,10 +134,11 @@ class StartedWords(unittest.TestCase):
 
 
 class Noise(unittest.TestCase):
-    def test_no_read_as_for_an_empty_value(self):
+    def test_an_empty_value_is_read_as_left_out_and_said(self):
+        # 27 Nov, facts only: an input that the hub drops is named each time
         a = {"words": "", "tool": "pd_pad"}
         said = protocol.check_input({"type": "object", "properties": {"words": {"type": "string"}, "tool": {"type": "string"}}}, a, "tool_find")
-        self.assertEqual((a, said), ({"tool": "pd_pad"}, []))
+        self.assertEqual((a, said), ({"tool": "pd_pad"}, ["words: an empty value, read as left out"]))
 
     def test_sketch_note_on_sketch_tools_only(self):
         got = in_a_process(QA_SERVER + '''

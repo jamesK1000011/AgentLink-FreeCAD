@@ -119,7 +119,8 @@ class BesideTool(unittest.TestCase):
         for k in ("other", "alone"):
             err = b[k][1]["refused"]["error"]
             self.assertIn("arguments is the old form. Put the inputs beside tool", err, k)
-            self.assertIn('{ "tool": "probe_make", "plane": "XY" }', err, k)
+            self.assertIn('{ "tool": "probe_make", <the inputs> }', err, k)
+            self.assertNotIn("plane", err, k)  # 27 Nov: an example has only the named tool's own inputs
         self.assertEqual(b["other"][1]["done"], [])
 
     def test_as_and_profile_and_wrapped_tool(self):

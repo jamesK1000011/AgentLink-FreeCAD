@@ -66,7 +66,11 @@ def old_words(key, where, name=None):
     """The words for an old key of a step: what to write now."""
     n = name if isinstance(name, str) and name else "sketch_new"
     if key == "arguments":
-        return (f"{where}: arguments is the old form. Put the inputs beside tool: {{ \"tool\": \"{n}\", \"plane\": \"XY\" }}. "
+        # The example's inputs are the named tool's own (27 Nov: doc_new was
+        # shown with plane, which it does not have): sketch_new has plane;
+        # any other tool is shown with its inputs not written out.
+        shown = EXAMPLE if n == "sketch_new" else _form(n)
+        return (f"{where}: arguments is the old form. Put the inputs beside tool: {shown}. "
                 "There is no arguments wrapper.")
     if key == "call":
         return (f"{where}: {{ call, … }} is the old form of a step. A step is {_form(n)}, "

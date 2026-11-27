@@ -466,6 +466,89 @@ class NoRepeatGuard(unittest.TestCase):
         self.assertEqual(said[0][0], "fixable")
 
 
+class LimitsAndRewritesAreSaid(unittest.TestCase):
+    """Decision 8: the behaviour stays, and the answer says it each time."""
+
+    def test_an_input_name_read_as_another_is_said(self):
+        from agentlink import protocol
+
+        schema = {"type": "object", "properties": {"center": {"type": "array"}, "kind": {"type": "string"}}, "additionalProperties": False}
+        a = {"kind": "circle", "centre": [1, 2]}
+        said = protocol.check_input(schema, a, "sketch_add")
+        self.assertEqual(a, {"kind": "circle", "center": [1, 2]})
+        self.assertEqual(said, ["centre as center"])
+
+    def test_a_cut_list_says_how_many_are_left_out(self):
+        from agentlink import options
+
+        opts = {"step": 3, "list": [{"n": i + 1, "tool": "pd_pad", "arguments": {"sketch": "S" * 30}} for i in range(4)]}
+        line = options.line(opts, limit=100)
+        self.assertTrue(line.endswith("; and 3 more (session_state gives them)"), line)
+        self.assertEqual(options.line(opts, limit=1000).count("pd_pad"), 4)
+        self.assertEqual(options._cut_value("a=" + "x" * 50, 10), "a=xxxxxxxx…")
+        self.assertIn("more edges ({len(names)} in all)", source("families", "pd_common.py"))
+        self.assertIn("outside and inside are not worked out for more than {EDGES_SIDED} edges", source("families", "pd_common.py"))
+        self.assertIn('f" and {len(names) - PLANES_SHOWN} more"', source("families", "pd_common.py"))
+
+    def test_a_box_that_is_not_exact_says_so(self):
+        got = child('''
+        from agentlink import geometry as geo
+        class S:
+            def __init__(s, n, exact=True): s.n, s.exact = n, exact; s.BoundBox = types.SimpleNamespace(XMin=-19.85, XMax=19.85, YMin=0, YMax=1, ZMin=0, ZMax=1, XLength=39.7, YLength=1, ZLength=1)
+            def countElement(s, k): return s.n
+            def optimalBoundingBox(s, a, b):
+                if not s.exact: raise RuntimeError("no")
+                return types.SimpleNamespace(XMin=-20.0, XMax=20.0, YMin=0, YMax=1, ZMin=0, ZMax=1, XLength=40.0, YLength=1, ZLength=1, isValid=lambda: True)
+        small, big = S(6), S(601)
+        print(json.dumps([geo.bound_box(small).XMin, geo.box_note(small), geo.bound_box(big).XMin, geo.box_note(big), geo.box_of(big).get("exact"), geo.box_of(small).get("exact"),
+                          pc.exact_box(small)[:2]]))
+        ''')
+        self.assertEqual(got[0], -20.0)  # the exact box, not the box of the display mesh (-19.85)
+        self.assertEqual(got[1], "")
+        self.assertEqual(got[2], -19.85)
+        self.assertTrue(got[3].startswith("The box is not exact: the shape has 601 faces, and the exact box is worked out for 600 at most."), got[3])
+        self.assertEqual(got[4:6], [False, None])
+        self.assertEqual(got[6], [-20.0, 20.0])
+
+
+class MeasuredFactsCorrected(unittest.TestCase):
+    """Decision 9: facts that were false in runs on the real FreeCAD."""
+
+    def test_a_point_joined_to_the_origin_is_said_as_the_origin(self):
+        got = child('''
+        from agentlink.families import sketch
+        sk = types.SimpleNamespace(Geometry=[])
+        print(json.dumps([sketch.ref_words(sk, -1, 1), sketch.ref_words(sk, -2, 1), sketch.ref_words(sk, -1, 0), sketch.ref_words(sk, -2, 0), sketch.ref_words(sk, -1, 2)]))
+        ''')
+        self.assertEqual(got, ["the origin", "the origin", "the x axis", "the y axis", "the end of the x axis"])
+
+    def test_a_refusal_example_has_only_the_named_tools_own_inputs(self):
+        from agentlink import callshape
+
+        self.assertNotIn("plane", callshape.old_words("arguments", "calls.0", "doc_new"))
+        self.assertIn('{ "tool": "doc_new", <the inputs> }', callshape.old_words("arguments", "calls.0", "doc_new"))
+        self.assertIn('{ "tool": "sketch_new", "plane": "XY" }', callshape.old_words("arguments", "calls.0", "sketch_new"))
+
+    def test_doc_save_does_not_answer_touched_or_modified(self):
+        e = entries()["doc_save"]
+        self.assertNotIn("modified_state", json.dumps(e["answer"]))
+        self.assertNotIn("touched", e["description"])
+
+    def test_the_used_sketch_note_says_when_the_body_is_not_recomputed(self):
+        got = child('''
+        feat = types.SimpleNamespace(Label="Pad", Name="Pad", TypeId="PartDesign::Pad", State=["Touched"])
+        sk = types.SimpleNamespace(Label="Base", Name="Base", TypeId="Sketcher::SketchObject", InList=[feat], State=[], Document=types.SimpleNamespace(RecomputesFrozen=False))
+        feat.Profile = (sk, [])
+        body = types.SimpleNamespace(Label="Body", Name="Body", Group=[sk, feat], State=[], hasObject=lambda o: True)
+        pc.body_of = lambda o: body
+        mark = {"sketch": "Base", "body": "Body", "volume": 72.0, "box": (0, 1, 0, 1, 0, 1), "solids": 1}
+        change = pc.used_change(sk, mark)
+        print(json.dumps([change, pc.used_sketch_note(sk, body, "sketch_add", change)]))
+        ''')
+        self.assertEqual(got[0], "Body is not recomputed yet (its features are Touched), so its change is not measured here.")
+        self.assertEqual(got[1], "Note: Base is the profile of Pad. " + got[0])
+
+
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
         self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")

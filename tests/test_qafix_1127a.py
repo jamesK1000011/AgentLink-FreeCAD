@@ -472,7 +472,9 @@ class UsedSketch(unittest.TestCase):
         self.assertEqual(got["note"], "Note: Base is the profile of Pad. This call changed Body: volume change -6.25 mm³, now 65.75 mm³.")
         self.assertEqual(got["forecast"], "Note: Base is the profile of Pad; adding to it changes Pad.")  # not measured: the words as before
         self.assertTrue(got["noteFree"].startswith("Base is used by Pad. This call changed Body: volume change -6.25 mm³, now 65.75 mm³. Body also has a sketch that no feature uses: Free."), got["noteFree"])
-        for k in ("held", "touched", "noMark", "otherSketch"):  # not measured: not said
+        for k in ("held", "touched"):  # 27 Nov: not recomputed is said plainly
+            self.assertEqual(got[k], "Body is not recomputed yet (its features are Touched), so its change is not measured here.", k)
+        for k in ("noMark", "otherSketch"):  # not measured: not said
             self.assertIsNone(got[k], k)
         self.assertEqual(got["same"], "After this call the volume of Body is 72 mm³: volume change 0 mm³.")
         self.assertEqual(got["kept"], 72.0)

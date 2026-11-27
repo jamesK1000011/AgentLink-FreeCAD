@@ -866,7 +866,9 @@ def check_input(schema, args, tool=None):
     required = set(schema.get("required", []))
     empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
     for k in empty:
-        args.pop(k)  # read as left out, and not said: an empty value carries nothing (26 Nov QA: noise on every tool_find)
+        args.pop(k)  # read as left out, and said (27 Nov: an input that the hub drops is named each time)
+    if empty:
+        read_as.append(f"{', '.join(empty)}: an empty value, read as left out")
     answer_only = [k for k in args if k in ANSWER_FIELDS and k not in props]
     for k in answer_only:
         args.pop(k)
@@ -886,6 +888,7 @@ def check_input(schema, args, tool=None):
         alt = next((s for s in SYNONYMS.get(k, ()) if s in props and s not in args), None)
         if alt is not None:
             args[alt] = args.pop(k)
+            read_as.append(f"{k} as {alt}")  # said each time (27 Nov: an input name read as another)
     unknown = [k for k in args if k not in props]
     if unknown and schema.get("additionalProperties") is False and tool in FORGIVING_READS:
         # A pure read: a field it does not have is ignored and named, not

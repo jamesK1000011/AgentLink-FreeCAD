@@ -197,11 +197,15 @@ def _snake(t):
 
 
 def ref_words(sk, g, pos=0):
-    """A constraint's reference in words: "the start of line 3", "the x axis"."""
-    if g == -1:
-        return "the x axis"
-    if g == -2:
-        return "the y axis"
+    """A constraint's reference in words: "the start of line 3", "the x
+    axis", "the origin". Sketcher's axes are geometry -1 (x) and -2 (y);
+    vertex 1 of each is the sketch origin (27 Nov: refs [[0, 3], "origin"]
+    were said as "the x axis", though the point was joined to the origin)."""
+    if g in (-1, -2):
+        axis = "the x axis" if g == -1 else "the y axis"
+        if pos == 1:
+            return "the origin"
+        return f"the end of {axis}" if pos == 2 else axis
     if g <= -3:
         what = f"outside edge {g}"
     elif 0 <= g < len(sk.Geometry):

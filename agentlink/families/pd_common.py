@@ -310,12 +310,16 @@ def used_mark(sk):
         return None
 
 
+NOT_RECOMPUTED = "{body} is not recomputed yet (its features are Touched), so its change is not measured here."
+
+
 def used_change(sk, mark, only_changed=False):
     """After a call that changed sketch sk: what the call changed of the
     body, measured against mark (used_mark's, read before the call), in
-    resultline.body_change_text's words. None when it was not measured: no
-    mark, another sketch, the document's recompute is held (a batch with
-    build: "end"), or an object of the body waits for a recompute.
+    resultline.body_change_text's words. NOT_RECOMPUTED's words when the
+    document's recompute is held (a batch with build: "end") or an object
+    of the body waits for a recompute. None when there is no mark or it is
+    another sketch.
     only_changed: None too when the volume, the box and the solids are as
     they were (a constraint that moves nothing of the body)."""
     try:
@@ -325,10 +329,12 @@ def used_change(sk, mark, only_changed=False):
         if body is None or body.Name != mark.get("body"):
             return None
         if getattr(getattr(sk, "Document", None), "RecomputesFrozen", False) is True:
-            return None
+            return NOT_RECOMPUTED.format(body=body.Label)
         for o in [body, *list(getattr(body, "Group", None) or [])]:
             if "Touched" in (getattr(o, "State", None) or ()):
-                return None
+                # On FreeCAD the features wait for a recompute after a sketch
+                # tool (27 Nov, a real run): said plainly, not passed over.
+                return NOT_RECOMPUTED.format(body=body.Label)
         shape = body.Shape
         if shape is None or shape.isNull():
             return None
@@ -564,13 +570,16 @@ def status_words(o):
         return "invalid"
 
 
+PLANES_SHOWN = 12  # datum planes a refusal names; the rest are counted
+
+
 def _planes_there(body):
     """The planes a sketch of this body can take, for a refusal."""
     doc = body.Document
     names = [o.Label for o in body.Group if _is(o, ("PartDesign::Plane", "Part::DatumPlane"))]
     names += [f"{o.Label}.XY_Plane" for o in doc.Objects if _is(o, CSYS_TYPES)]
     names += [o.Label for o in doc.Objects if _is(o, ("Part::DatumPlane",)) and o.Label not in names]
-    return "there: XY, XZ, YZ" + (", " + ", ".join(names[:12]) if names else "")
+    return "there: XY, XZ, YZ" + (", " + ", ".join(names[:PLANES_SHOWN]) if names else "") + (f" and {len(names) - PLANES_SHOWN} more" if len(names) > PLANES_SHOWN else "")
 
 
 def solid_features(body, upto=None):
@@ -942,6 +951,9 @@ def edge_words(shape, names, cap=EDGES_SHOWN):
     if len(names) > cap:
         out.append(f"… and {len(names) - cap} more edges ({len(names)} in all)")
     head = sides_line(sides)
+    if not sides and len(names) > EDGES_SIDED:
+        # a limit that is used is said (27 Nov)
+        head = f"{len(names)} edges: outside and inside are not worked out for more than {EDGES_SIDED} edges"
     return ([head] if head else []) + out
 
 

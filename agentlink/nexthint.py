@@ -71,7 +71,7 @@ def _cut(text, n):
 
 def _buttons(names, n=5):
     names = [_cut(b, 18) for b in (names or []) if str(b or "").strip()]
-    return ", ".join(names[:n]) + (" …" if len(names) > n else "")
+    return ", ".join(names[:n]) + (f" and {len(names) - n} more" if len(names) > n else "")
 
 
 # ---- the facts ----------------------------------------------------------------------------

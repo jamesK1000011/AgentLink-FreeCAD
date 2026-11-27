@@ -300,6 +300,12 @@ def ask_words(a):
     return " ".join(x for x in (a["arg"], a.get("unit")) if x) + "".join(f"|{w}" for w in (a.get("or") or {}))
 
 
+def _cut_value(text, limit):
+    """text cut at limit characters, with "…" at the end when it was cut
+    (27 Nov: a value that is cut says so)."""
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
 def option_words(o):
     """"1 pd_pad sketch=Sketch001 body=Body ask length mm"."""
     parts = [str(o["n"]), o["tool"]]
@@ -308,10 +314,10 @@ def option_words(o):
         w = _val(v)
         if k in choices:
             w += "".join(f" or {_val(x)}" for x in choices[k][1:])
-        parts.append(f"{k}={w[:MAX_VALUE]}")
+        parts.append(_cut_value(f"{k}={w}", len(k) + 1 + MAX_VALUE))
     for k, v in choices.items():
         if k not in o["arguments"]:
-            parts.append(f"{k}={' or '.join(_val(x) for x in v)}"[:MAX_VALUE])
+            parts.append(_cut_value(f"{k}={' or '.join(_val(x) for x in v)}", MAX_VALUE))
     if o.get("ask"):
         parts.append("ask " + ", ".join(ask_words(a) for a in o["ask"]))
     return " ".join(parts)
@@ -324,11 +330,15 @@ def line(opts, limit=MAX_LINE):
         return None
     head = f"step {opts['step']}: "
     words = [option_words(o) for o in opts["list"]]
+    n = len(words)
     while words and len(head) + len("; ".join(words)) > limit:
         words.pop()
     if not words:
         return None
-    return head + "; ".join(words)
+    # Options left out to keep the line short are counted (27 Nov: a list
+    # that is cut says so); session_state gives them all.
+    more = f"; and {n - len(words)} more (session_state gives them)" if len(words) < n else ""
+    return head + "; ".join(words) + more
 
 
 def public(opts):
