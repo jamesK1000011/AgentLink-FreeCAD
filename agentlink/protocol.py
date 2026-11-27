@@ -1864,7 +1864,7 @@ def _default_sketch(s, doc):
         return None
 
 
-def _same_target(s, rec):
+def _same_target(s, rec, args=None):
     """Whether a call with a recorded call's arguments acts on the same thing
     now: the same document; the same sketch (the named one, or the one it
     takes when none is named); else nothing made in the document since it."""
@@ -1875,7 +1875,20 @@ def _same_target(s, rec):
         return False
     if rec.get("sketch"):
         if not rec.get("filled"):
-            return True  # named in the arguments: the same sketch
+            # Named in the arguments: the same sketch, unless the name now
+            # means another one (a sketch_new of this batch got "name 2"
+            # because the name was taken; renamed_sketch).
+            ref = args.get("sketch") if isinstance(args, dict) else None
+            if isinstance(ref, str):
+                try:
+                    from .families import pd_common as pc
+
+                    alias = pc.renamed_sketch(s, doc, ref)
+                except Exception:  # noqa: BLE001
+                    alias = None
+                if alias is not None:
+                    return alias.Name == rec["sketch"]
+            return True
         now = _default_sketch(s, doc)
         return now is not None and now.Name == rec["sketch"]
     return rec.get("token") is not None and _token(doc) == rec["token"]
@@ -1896,7 +1909,7 @@ def again_before(server, params):
     call = canonical_call(args)
     ran = getattr(server, "_ran", None) or []
     for rec in reversed(ran):
-        if rec["name"] == name and rec["call"] == call and rec["made"] and _same_target(s, rec) and _still_there(rec["made"]):
+        if rec["name"] == name and rec["call"] == call and rec["made"] and _same_target(s, rec, args) and _still_there(rec["made"]):
             ago = server._seq - rec["seq"]
             msg = (f"{AGAIN_WORDS}, and answered ok (made: {_made_words(rec['made'])}; "
                    f"calls since then: {ago - 1}). If it runs again, it adds the same again. Nothing was done. "

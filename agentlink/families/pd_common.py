@@ -1482,10 +1482,12 @@ def profile_faces(feat):
 
 def profile_results(feat, reg, old, tol, cut=True):
     """{profiles: "2 profiles: the circle r 2.5 at (45, 0) is off the body;
-    1 cut."} for a sketch of several profiles (26 Nov QA: one hole of two
-    was off the part, and nothing said so); {} for one profile, or on any
-    error. A profile did something when its prism along the sketch's
-    normal meets the region the feature added or removed."""
+    1 cut in full."} for a sketch of several profiles (26 Nov QA: one hole
+    of two was off the part, and nothing said so); {} for one profile, or on
+    any error. A profile did something when its prism along the sketch's
+    normal meets the region the feature added or removed. One that did only
+    part says the share: the volume it took against its area times the depth
+    it took (27 Nov QA: "both cut" for two half holes)."""
     try:
         got = profile_faces(feat)
         if not got:
@@ -1495,11 +1497,27 @@ def profile_results(feat, reg, old, tol, cut=True):
         bb = old.BoundBox
         span = 2 * max(bb.DiagonalLength, reg.BoundBox.DiagonalLength, 1.0) + bb.Center.Length + reg.BoundBox.Center.Length
         verb = "cut" if cut else "added"
-        idle, idle_circles = [], 0
+        idle, idle_circles, full_n = [], 0, 0
         for words, f in got:
             n = f.normalAt(0, 0)
             prism = f.translated(n * -span).extrude(n * (2 * span))
-            if prism.common(reg).Volume > tol:
+            hit = prism.common(reg)
+            if hit.Volume > tol:
+                # How much of the profile did it: the volume it took against
+                # the volume its area gives over the same depth (the extent
+                # of what it took along the sketch's normal).
+                try:
+                    along = [v.Point.x * n.x + v.Point.y * n.y + v.Point.z * n.z for v in hit.Vertexes]
+                    whole = f.Area * (max(along) - min(along))
+                    if whole <= 0:
+                        raise ValueError("no depth")
+                except Exception:  # noqa: BLE001 - not measured: said so, never "cut"
+                    idle.append(f"{words} meets the removed material (how much of it was not measured)")
+                    continue
+                if hit.Volume >= whole - tol:
+                    full_n += 1
+                else:
+                    idle.append(f"{words} {verb} {100 * hit.Volume / whole:.4g}% of the volume its area gives over the same depth ({hit.Volume:.4g} of {whole:.4g} mm³)")
                 continue
             idle_circles += words.startswith("the circle")
             if not cut:
@@ -1508,11 +1526,10 @@ def profile_results(feat, reg, old, tol, cut=True):
                 idle.append(f"{words} cut nothing")
             else:
                 idle.append(f"{words} is off the body")
-        did = len(got) - len(idle)
         head = f"{n_all} profiles" + (f" ({len(got)} looked at)" if n_all > len(got) else "")
         if not idle:
-            return {"profiles": f"{head}: {'both' if did == 2 else 'all ' + str(did)} {verb}."}
-        out = {"profiles": f"{head}: " + "; ".join(idle) + f"; {did} {verb}."}
+            return {"profiles": f"{head}: {'both' if full_n == 2 else 'all ' + str(full_n)} {verb} in full."}
+        out = {"profiles": f"{head}: " + "; ".join(idle) + (f"; {full_n} {verb} in full." if full_n else ".")}
         if getattr(feat, "TypeId", "") == "PartDesign::Hole":
             # The holes not drilled (26 Nov QA: "holes: 2" when one circle of
             # two was off the body): pd_hole's answer counts only those cut

@@ -117,9 +117,17 @@ print(json.dumps({
 class Prism:
     def __init__(s, f): s.f = f
     def common(s, other):
-        class R: Volume = s.f.hits.get(other.tag, 0.0)
+        vol = s.f.hits.get(other.tag, 0.0)
+        class P:
+            Point = V(0, 0, 0)
+        class Q:
+            Point = V(0, 0, vol / 1.0)   # a cut 1 mm^2 wide: its depth is its volume
+        class R:
+            Volume = vol
+            Vertexes = [P, Q]
         return R()
 class Face:
+    Area = 1.0
     def __init__(s, hits): s.hits = hits
     def normalAt(s, u, v): return V(0, 0, 1)
     def translated(s, v): return s
@@ -149,11 +157,11 @@ pc.profile_faces = boom
 out["error"] = pc.profile_results(None, reg, old, 0.01, cut=True)
 print(json.dumps(out))
 ''')
-        self.assertEqual(got["pocket"], {"profiles": "2 profiles: the circle r 2.5 at (45, 0) is off the body; 1 cut."})
-        self.assertEqual(got["missed"], {"profiles": "2 profiles: the circle r 3 at (5, 0) cut nothing; 1 cut."})
-        self.assertEqual(got["pad"], {"profiles": "2 profiles: the circle r 3 at (5, 0) adds nothing (inside the body already); 1 added."})
-        self.assertEqual(got["both"], {"profiles": "2 profiles: both cut."})
-        self.assertEqual(got["many"], {"profiles": "16 profiles (12 looked at): all 12 cut."})
+        self.assertEqual(got["pocket"], {"profiles": "2 profiles: the circle r 2.5 at (45, 0) is off the body; 1 cut in full."})
+        self.assertEqual(got["missed"], {"profiles": "2 profiles: the circle r 3 at (5, 0) cut nothing; 1 cut in full."})
+        self.assertEqual(got["pad"], {"profiles": "2 profiles: the circle r 3 at (5, 0) adds nothing (inside the body already); 1 added in full."})
+        self.assertEqual(got["both"], {"profiles": "2 profiles: both cut in full."})
+        self.assertEqual(got["many"], {"profiles": "16 profiles (12 looked at): all 12 cut in full."})
         self.assertEqual(got["one"], {})
         self.assertEqual(got["error"], {})
 

@@ -5,6 +5,7 @@
 # reading, and edits. Coordinates are the sketch's own, in mm; angles in
 # degrees.
 
+import json
 import math
 import re
 import os
@@ -210,6 +211,12 @@ TINY_GAP_MM = 0.01
 TINY_GAP = 1e-4
 
 
+# The constraint sketch_add's card says joins a line to an arc, "tangent on
+# their two end points [[line, v], [arc, v]]" (tools.json): the todo gives
+# the same one for such a pair.
+JOIN_LINE_ARC = "tangent"
+
+
 def _at(p):
     return f"({geo.r3(p[0]):g}, {geo.r3(p[1]):g})"
 
@@ -241,8 +248,13 @@ def open_end_words(ends, curves, size, dist, rounds=(), joined=None):
             pairs.add(key)
             if joined is not None:
                 joined.append(((gid, p), (g2, q)))
-            near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: "
-                        "sketch_constrain coincident joins them")
+            if {kind, k2} == {"line", "arc"}:
+                # As the card says: tangent on the two end points, line first.
+                refs = [[gid, pos], [g2, s2]] if kind == "line" else [[g2, s2], [gid, pos]]
+                join = f"sketch_constrain {JOIN_LINE_ARC} on the two end points {json.dumps(refs)} joins them (coincident and smooth)"
+            else:
+                join = "sketch_constrain coincident joins them"
+            near.append(f"{POS[pos]} {kind} {gid} {at(p)} is {geo.r3(d):g} mm from {POS[s2]} {k2} {g2} {at(q)}: {join}")
 
     # Two ends a hair apart are one joint left open: the coincident words
     # first, always (26 Nov QA: an end 0.001 mm from the next one got the
