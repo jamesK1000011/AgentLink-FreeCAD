@@ -77,6 +77,22 @@ def box_note(shape):
     return "The box is not exact: this FreeCAD gave no exact box. This box is FreeCAD's quick BoundBox, which can be the box of the display mesh."
 
 
+def placement_fact(o):
+    """An object's Placement as { at, axis, angle } (mm, deg) when it is not
+    the identity; None when it is the identity or cannot be read. A body's
+    sketch planes and axes are its own: with a Placement that is not the
+    identity they are not the world's."""
+    import math
+
+    try:
+        p = o.Placement
+        if p.isIdentity():
+            return None
+        return {"at": vec(p.Base), "axis": vec(p.Rotation.Axis), "angle": round(math.degrees(p.Rotation.Angle), 4)}
+    except Exception:
+        return None
+
+
 def shape_key(shape):
     """A cheap key that changes when the shape does: its hash (the OCC shape
     and placement), kind, element counts and quick box. The hash alone is

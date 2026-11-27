@@ -1118,6 +1118,11 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
     stored = stored_values(feat)
     if stored:
         out["stored"] = stored
+    placed = geo.placement_fact(body)
+    if placed:
+        # The boxes of this answer are the world's; the body's sketch planes
+        # (XY, XZ, YZ) and axes are the body's own, placed so.
+        out["bodyPlacement"] = placed
     if "box" in out:
         # Where the body is, not only its size (24 Nov QA: a centred
         # sketch on XZ gave the right size 40 as z -20..20, in 7 of 9 runs).
@@ -1152,6 +1157,14 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
         out["boxNote"] = note
     if line and keep.get("lies"):
         line += " " + keep["lies"]
+    elif line and feat is not None and keep.get("old") is None:
+        # The first feature of a body: which side of its sketch it went.
+        along = normal_span_words(feat, body)
+        if along:
+            line += " " + along
+    if line and placed:
+        line += (f" {body.Label}'s Placement is at {placed['at']}, axis {placed['axis']}, angle {placed['angle']} deg: "
+                 "the boxes here are the world's, and the body's planes and axes are placed so.")
     if line and valid is False:
         line += " FreeCAD's shape check (isValid) says that the body's shape is not valid. FreeCAD gave no error."
     if line:
@@ -1831,6 +1844,26 @@ def outside_text(label, prof, body, normal, tol=1e-6):
     return f"The sketch {label}: " + "; ".join(words) + "."
 
 
+def normal_span_words(feat, body):
+    """"Along the normal of sketch S the body spans 0..10 (0 is the sketch
+    plane; + is the way the normal points)." for a feature with a sketch;
+    "" when there is none or it cannot be read."""
+    try:
+        prof = getattr(feat, "Profile", None)
+        sk = prof[0] if isinstance(prof, (list, tuple)) else prof
+        if sk is None or not hasattr(sk, "Placement"):
+            return ""
+        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+        import FreeCAD
+
+        n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+        frame = ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
+        along = rl.frame_ranges(frame, exact_box(body.Shape))[2]
+        return f"Along the normal of sketch {sk.Label} the body spans {rl.span(*along)} (0 is the sketch plane; + is the way the normal points)."
+    except Exception:  # noqa: BLE001 - a reading only
+        return ""
+
+
 def sketch_lies_words(feat, body):
     """Where the sketch of a feature that changed no volume lies against the
     body, as measured: the features that share the sketch as their profile,
@@ -1852,9 +1885,9 @@ def sketch_lies_words(feat, body):
             out.append(f"Sketch {sk.Label} is also the profile of {', '.join(o.Label for o in others)}.")
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
         bb = geo.bound_box(body.Shape)
-        frame = ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
-        along = rl.frame_ranges(frame, _bbt(bb))[2]
-        out.append(f"Along the normal of sketch {sk.Label} the body spans {rl.span(*along)} (0 is the sketch plane; + is the way the normal points).")
+        along = normal_span_words(feat, body)
+        if along:
+            out.append(along)
         off = outside_words(sk, bb, n)
         if off:
             out.append(off)

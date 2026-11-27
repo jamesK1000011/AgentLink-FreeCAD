@@ -55,6 +55,7 @@ WAIVERS = {
     ("cam_property_bag", "properties"): "the input properties is gone (27 Nov): one call adds one value (property, type, value, group); no alias, rule R5",
     ("pd_chamfer", "only"): "the hub does not refuse a chamfer that changes nothing (27 Nov, facts only): FreeCAD keeps it, and the answer gives volume change 0",
     ("pd_pad", "sketch_state"): "the advice to use sketch_state first is gone (27 Nov, facts only: no method advice in a card)",
+    ("sketch_new", "never"): "the advice never to use a face index is gone (27 Nov, facts only); the card gives the fact that face and edge numbers can change",
     ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 

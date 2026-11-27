@@ -869,7 +869,7 @@ class Session:
         mine = self.doc.Name in self.agent_docs
         got = {"at": _t.strftime("%H:%M"), "where": getattr(self, "where", "hidden"), "documents": docs,
                "agentDocument": self.doc.Name,
-               "bodies": [{k: b[k] for k in ("name", "volume", "box") if k in b} for b in bodies[:8]]}
+               "bodies": [{k: b[k] for k in ("name", "volume", "box", "bounds", "placement") if k in b} for b in bodies[:8]]}
         if len(bodies) > 8:
             got["moreBodies"] = len(bodies) - 8
         opts = self._options_state().get("options")
@@ -1001,6 +1001,23 @@ class Session:
         """One body for session_state: its stats, and with more than one
         solid, how many and whether the Body means it (AllowCompound)."""
         row = {"name": o.Label, **self.stats_of(o)}
+        # Where it is, not only its size (27 Nov, facts only): the world box,
+        # and the object's Placement when it is not the identity.
+        try:
+            sh = o.Shape
+            if sh is not None and not sh.isNull() and "box" in row:
+                from . import resultline
+
+                b = geo.bound_box(sh)
+                row["bounds"] = resultline.box_text((b.XMin, b.XMax, b.YMin, b.YMax, b.ZMin, b.ZMax))
+                note = geo.box_note(sh)
+                if note:
+                    row["boxNote"] = note
+        except Exception:  # noqa: BLE001 - a reading only
+            pass
+        placed = geo.placement_fact(o)
+        if placed:
+            row["placement"] = placed
         if row.get("solids", 1) > 1:
             n = row["solids"]
             row["multiSolid"] = (f"{n} solids in one Body (AllowCompound is true, FreeCAD's default)" if self.allows_compound(o)

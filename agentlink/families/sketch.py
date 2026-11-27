@@ -154,6 +154,22 @@ def describe_con(sk, i):
     return out
 
 
+def con_brief(sk, ids):
+    """Each constraint of ids in one short text: its id, FreeCAD's type and
+    its refs [geometry, vertex], and its value when it has one:
+    "4 Coincident [0, 2] [1, 1]", "9 Radius [4, 0] = 5". A constraint that
+    cannot be read is passed over."""
+    out = []
+    for i in ids:
+        try:
+            d = describe_con(sk, i)
+        except Exception:  # noqa: BLE001 - not read: not said
+            continue
+        refs = " ".join(f"[{g}, {p}]" for g, p in d["refs"])
+        out.append(f"{d['id']} {d['type']} {refs}" + (f" = {d['value']:g}" if "value" in d else ""))
+    return out
+
+
 POS = {1: "the start of", 2: "the end of", 3: "the centre of"}
 
 
@@ -1411,6 +1427,34 @@ def face_frame(P, up=None):
     return P.inverse().multiply(D)
 
 
+def attachment(sk, wrote=""):
+    """What FreeCAD stores for the attachment of sketch sk, by FreeCAD's own
+    property names: AttachmentSupport (as "Label: Face3"), MapMode,
+    MapReversed and AttachmentOffset { at, axis, angle }. wrote: the reason
+    Agent Link set AttachmentOffset itself (a face sketch lined up with the
+    world, up, offset), said in setBy; "" when it did not."""
+    out = {}
+    try:
+        sup = getattr(sk, pc.support_prop(sk), None) or []
+        said = []
+        for item in (sup if isinstance(sup, (list, tuple)) else [sup]):
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                subs = [item[1]] if isinstance(item[1], str) else [str(x) for x in item[1] if x]
+                said.append(str(item[0].Label) + (": " + ", ".join(subs) if subs else ""))
+            elif hasattr(item, "Label"):
+                said.append(str(item.Label))
+        out[pc.support_prop(sk)] = said[0] if len(said) == 1 else said
+        out["MapMode"] = str(sk.MapMode)
+        out["MapReversed"] = bool(getattr(sk, "MapReversed", False))
+        ao = sk.AttachmentOffset
+        out["AttachmentOffset"] = picks.placement_json(ao)
+        if wrote:
+            out["setBy"] = f"Agent Link set AttachmentOffset ({wrote}). FreeCAD's own value is the identity."
+    except Exception:  # noqa: BLE001 - a reading only
+        pass
+    return out
+
+
 def up_frame(P, up):
     """The attachment offset that turns a sketch placed at P about its own
     normal so its y runs along the world axis up (orient.up_axes). The origin
@@ -1578,5 +1622,6 @@ def tools(session):
                "frame": frame, "state_of": state_of, "fresh": fresh, "join_points": join_points, "join_move_words": join_move_words, "dof_of": dof_of, "con_result": con_result, "add_result": add_result, "new_result": new_result, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "face_said": face_said, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
-               "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent, "by_default": by_default}
+               "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent, "by_default": by_default,
+               "attachment": attachment, "con_brief": con_brief, "placement_json": picks.placement_json, "placement_fact": geo.placement_fact}
     return runners.tools(GROUP, s, helpers)

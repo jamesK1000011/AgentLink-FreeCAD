@@ -49,7 +49,7 @@ class Cards(unittest.TestCase):
         first_two = d.split(". ")[:2]
         self.assertIn("sketch_new", " ".join(first_two))
         self.assertNotIn("pd_binder", " ".join(first_two))
-        self.assertIn("pd_binder", d)  # the skeleton advice stays, later
+        self.assertNotIn("Make one body for each made part", d)  # facts only (27 Nov): no method advice in a card
 
     def test_session_state_takes_machine(self):
         with open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8") as f:

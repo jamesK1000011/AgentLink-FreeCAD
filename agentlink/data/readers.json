@@ -604,6 +604,7 @@
     "summarised",
     "touched_marks",
     "unique",
+    "unit_of",
     "vec3"
    ],
    "changers": [
@@ -1086,6 +1087,7 @@
   "sketch": {
    "readers": [
     "V",
+    "attachment",
     "axes",
     "body",
     "body_extent",
@@ -1094,6 +1096,7 @@
     "bounds",
     "broken",
     "by_default",
+    "con_brief",
     "con_index",
     "con_result",
     "con_words",
@@ -1119,6 +1122,8 @@
     "offset_out",
     "on_words",
     "placement",
+    "placement_fact",
+    "placement_json",
     "plane_mode",
     "plane_ref",
     "quantity",

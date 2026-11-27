@@ -236,6 +236,78 @@ class SketchAddDefaults(unittest.TestCase):
                          "center not given, so center is [0, 0]; sides not given, so sides is 6; closed not given, so closed is false; rotation not given, so rotation is 0")
 
 
+class BlindfoldGaps(unittest.TestCase):
+    """Audit section 4: the fact that closes each gap is in the answer."""
+
+    def test_a_placement_that_is_not_the_identity_is_said(self):
+        got = child('''
+        from agentlink import geometry as geo
+        class Rot:
+            Axis = types.SimpleNamespace(x=0.0, y=0.0, z=1.0); Angle = 1.5707963267948966
+        class P:
+            def __init__(s, ident): s.ident = ident; s.Base = types.SimpleNamespace(x=10.0, y=0.0, z=5.0); s.Rotation = Rot()
+            def isIdentity(s): return s.ident
+        print(json.dumps([geo.placement_fact(types.SimpleNamespace(Placement=P(True))), geo.placement_fact(types.SimpleNamespace(Placement=P(False))),
+                          geo.placement_fact(types.SimpleNamespace())]))
+        ''')
+        self.assertEqual(got, [None, {"at": [10.0, 0.0, 5.0], "axis": [0.0, 0.0, 1.0], "angle": 90.0}, None])
+        self.assertIn('out["bodyPlacement"] = placed', source("families", "pd_common.py"))
+        self.assertIn('row["placement"] = placed', source("tools.py"))
+        self.assertIn('row["bounds"] = resultline.box_text(', source("tools.py"))  # session_state: where each body is
+
+    def test_the_new_body_says_its_placement_and_allow_compound(self):
+        f = entries()["pd_body_new"]["answer"]["fields"]
+        self.assertEqual(f["placement"], "=placement_json(b.Placement)")
+        self.assertEqual(f["allowCompound"]["value"], "=get(b, 'AllowCompound')")
+        self.assertEqual(f["next"], 'sketch_new { body, plane: "XY" }')  # decision 7: next stays
+
+    def test_a_face_sketch_says_what_freecad_stores_and_who_set_the_offset(self):
+        got = child('''
+        from agentlink.families import sketch
+        pad = types.SimpleNamespace(Label="Pad", Name="Pad")
+        ao = types.SimpleNamespace(Base=types.SimpleNamespace(x=1.0, y=2.0, z=0.0), Rotation=types.SimpleNamespace(Axis=types.SimpleNamespace(x=0.0, y=0.0, z=1.0), Angle=0.0))
+        sk = types.SimpleNamespace(PropertiesList=["AttachmentSupport"], AttachmentSupport=[(pad, ("Face3",))], MapMode="FlatFace", MapReversed=False, AttachmentOffset=ao)
+        print(json.dumps([sketch.attachment(sk, "a face sketch is lined up with the world"), sketch.attachment(sk)]))
+        ''')
+        self.assertEqual(got[0], {"AttachmentSupport": "Pad: Face3", "MapMode": "FlatFace", "MapReversed": False,
+                                  "AttachmentOffset": {"at": [1.0, 2.0, 0.0], "axis": [0.0, 0.0, 1.0], "angle": 0.0},
+                                  "setBy": "Agent Link set AttachmentOffset (a face sketch is lined up with the world). FreeCAD's own value is the identity."})
+        self.assertNotIn("setBy", got[1])
+        self.assertIn('"attachment": "=attachment(sk, wrote)"', json.dumps(entries()["sketch_new"]["answer"]))
+
+    def test_sketch_add_lists_the_constraints_a_shape_came_with(self):
+        got = child('''
+        from agentlink.families import sketch
+        C = lambda t, a, ap, b=-2000, bp=0, v=None: types.SimpleNamespace(Type=t, Name="", First=a, FirstPos=ap, Second=b, SecondPos=bp, Third=-2000, ThirdPos=0, Driving=True, Value=v)
+        sk = types.SimpleNamespace(Constraints=[C("Coincident", 0, 2, 1, 1), C("Horizontal", 0, 0), C("Radius", 4, 0, v=5.0)])
+        print(json.dumps(sketch.con_brief(sk, [0, 1, 2, 9])))
+        ''')
+        self.assertEqual(got, ["0 Coincident [0, 2] [1, 1]", "1 Horizontal [0, 0]", "2 Radius [4, 0] = 5"])
+        self.assertIn('"constraintList": "=con_brief(sk, cids)"', json.dumps(entries()["sketch_add"]["steps"]))
+
+    def test_the_first_feature_says_which_side_of_its_sketch_it_went(self):
+        got = child('''
+        class V3:
+            def __init__(s, x, y, z): s.x, s.y, s.z = x, y, z
+        import FreeCAD
+        FreeCAD.Vector = V3
+        bb = types.SimpleNamespace(XMin=0.0, XMax=60.0, YMin=0.0, YMax=30.0, ZMin=-5.0, ZMax=0.0)
+        shape = types.SimpleNamespace(BoundBox=bb, countElement=lambda k: 6, optimalBoundingBox=lambda a, b: types.SimpleNamespace(isValid=lambda: True, **bb.__dict__))
+        pl = types.SimpleNamespace(Base=V3(0.0, 0.0, 0.0), Rotation=types.SimpleNamespace(multVec=lambda v: V3(0.0, 0.0, 1.0)))
+        sk = types.SimpleNamespace(Label="Base", Placement=pl)
+        feat = types.SimpleNamespace(Profile=(sk, []))
+        print(json.dumps(pc.normal_span_words(feat, types.SimpleNamespace(Shape=shape))))
+        ''')
+        self.assertEqual(got, "Along the normal of sketch Base the body spans -5..0 (0 is the sketch plane; + is the way the normal points).")
+
+    def test_export_says_the_tolerance_used_and_the_unit(self):
+        f = entries()["export"]["answer"]["fields"]
+        self.assertEqual(f["tolerance"], {"when": "=tol is not None", "value": "=tol"})
+        self.assertEqual(f["notGiven"]["value"], "tolerance not given, so tolerance is 0.01")
+        self.assertIn("unit", f)
+        self.assertIn('return None if fmt in ("wrl", "x3d") else "mm"', source("families", "doc.py"))
+
+
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
         self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")

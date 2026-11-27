@@ -420,6 +420,16 @@ def attach_redirect(o, vals):
                                "note": f"{o.Label} is attached (MapMode {o.MapMode}): FreeCAD computes its Placement, so the AttachmentOffset was set to put it where asked."}}
 
 
+def unit_of(fmt):
+    """The unit of the numbers in a file export writes: "m" for the scene
+    formats (glb, gltf, dae: Agent Link's own writers, metres and Y up),
+    "mm" for what FreeCAD writes as the document has it; None where it is
+    not known here (wrl, x3d)."""
+    if fmt in SCENE_OUT:
+        return "m"
+    return None if fmt in ("wrl", "x3d") else "mm"
+
+
 def modified_state(d):
     """Whether the document has changes since its save: FreeCAD's own flags
     (App touched, the window's "*"), and the objects still marked touched."""
@@ -1232,7 +1242,7 @@ def tools(session):
         "new_doc": new_doc, "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
         "listed_docs": lambda: FreeCAD.listDocuments(), "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
         "unsaved": unsaved, "touched_marks": touched_marks, "current_name": current_name, "back_to": back_to, "recent_files": recent_files, "open_at": open_at,
-        "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "agent_file": agent_file, "note_agent_file": note_agent_file, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
+        "unit_of": unit_of, "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "agent_file": agent_file, "note_agent_file": note_agent_file, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
         # files
         "isfile": os.path.isfile, "exists": os.path.exists, "abspath": os.path.abspath, "basename": os.path.basename, "dirname": os.path.dirname,
         "makedirs": lambda p: os.makedirs(p, exist_ok=True), "filesize": os.path.getsize, "stem": lambda p: os.path.splitext(os.path.basename(p))[0],
