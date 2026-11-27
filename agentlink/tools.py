@@ -819,9 +819,30 @@ class Session:
                        "session_state reads all of this again.")
         return got
 
+    # Every top-level part that session_state's answer can have: the names
+    # that its input what takes (27 Nov, decision 11).
+    STATE_PARTS = ("document", "label", "freecad", "bodies", "documents", "hidden", "hiddenNote", "assemblies", "step", "steps", "stepsLeftOut", "outDir",
+                   "where", "next", "options", "toolsChanged", "leftOut", "warning", "machine", "queue", "dialog", "agentDocument", "frontDocument",
+                   "mismatch", "time", "note", "launcher")
+
     def session_state(self, a):
+        what = a.get("what")
+        if what is not None:
+            names = [what] if isinstance(what, str) else what
+            if a.get("orient"):
+                raise ToolError("invalid_input", "what: not with orient. orient: true is the short read; what names parts of the full answer.")
+            if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
+                raise ToolError("invalid_input", f"what: a part name or a list of part names. The part names: {', '.join(self.STATE_PARTS)}.")
+            unknown = [n for n in names if n not in self.STATE_PARTS]
+            if unknown:
+                raise ToolError("invalid_input", f"what: {', '.join(unknown)} is not a part name. The part names: {', '.join(self.STATE_PARTS)}.")
+            full = self._state_all(a)
+            return {k: full[k] for k in names if k in full}
         if a.get("orient"):
             return self.orientation()
+        return self._state_all(a)
+
+    def _state_all(self, a):
         return {
             "document": self.doc.Name,
             "label": self.doc.Label,
@@ -830,6 +851,7 @@ class Session:
             "documents": self.documents_state(),
             **self._hidden_state(),
             "step": len(self.steps),
+            **self._steps_state(),
             "outDir": self.out_dir,
             "where": getattr(self, "where", "hidden"),
             **self._next_state(),
@@ -842,6 +864,16 @@ class Session:
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
             **({"launcher": _launcher()} if a.get("launcher") else {}),
         }
+
+    def _steps_state(self):
+        """steps: the session's calls of changing tools, as facts
+        (protocol.steps_part); stepsLeftOut when older lines do not fit."""
+        try:
+            from .protocol import steps_part
+
+            return steps_part(getattr(self, "server", None))
+        except Exception:  # noqa: BLE001 - a reading only
+            return {"steps": []}
 
     def _front_state(self):
         """agentDocument, frontDocument and mismatch while the document in
@@ -1718,8 +1750,9 @@ def make_tools(session):
                               "(after a restart, for example). Then the tools that act on the front document act on the other one. doc_switch to the agent's "
                               "document binds both again. documents: every open document (name, label, unsaved, byAgent; the agent's own has agent: true). "
                               "machine: true adds the machine (chip, cores, memory, fan, heavy-job slots); it also comes while heavy jobs run or wait. "
-                              "orient: true answers only a short read: where, the documents, the agent's document and its bodies, the options. Changes nothing.",
-             obj({"launcher": {"type": "boolean"}, "orient": {"type": "boolean"}, "machine": {"type": "boolean"}}), s.session_state),
+                              "orient: true answers only a short read: where, the documents, the agent's document and its bodies, the options. The answer gives all parts: document, label, freecad, bodies, documents, step, steps, outDir, where, next, options. steps: one line for each call of a changing tool that the hub ran or refused in this session. The lines are in order. A line has the call's number, the tool, the object, a feature's volume change and the history step. A refused call has \"refused\" and its code. Reads are not lines, and run, batch, fast and pick are not lines: each call that they run is. The list is the session's: it starts again at initialize, and it stays when a document is closed. stepsLeftOut: how many older lines do not fit. orient: true does not give steps. what: a part name or a list of part names. The answer then has only those parts. The part names: document, label, freecad, bodies, documents, hidden, hiddenNote, assemblies, step, steps, stepsLeftOut, outDir, where, next, options. More part names: toolsChanged, leftOut, warning, machine, queue, dialog, agentDocument, frontDocument, mismatch, time, note, launcher. An unknown name is refused, and the refusal lists the names. A part that the document does not have now is left out. what and orient together are refused. Changes nothing.",
+             obj({"launcher": {"type": "boolean"}, "orient": {"type": "boolean"}, "machine": {"type": "boolean"},
+                  "what": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}], "description": "A part name or a list of part names: the answer has only those parts."}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang). Agent Link runs this outside FreeCAD. The "
                                   "documents come back from their newest saved copies, as after a crash. Use it for a stuck window; app_restart quits a working window cleanly.", obj({}), _force_restart_here),
         Tool("app_open", "Open the FreeCAD window when it is closed. Agent Link starts it in the background: it does not come to the front and takes no focus. "

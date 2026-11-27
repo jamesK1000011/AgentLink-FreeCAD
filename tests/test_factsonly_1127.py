@@ -596,6 +596,110 @@ class HubFactsOfTheBrief(unittest.TestCase):
         self.assertNotIn("says stop", text)
 
 
+class SessionSteps(unittest.TestCase):
+    """Decision 11: session_state has the part steps, the fact list of this
+    session's calls of changing tools; get reads the parts by name."""
+
+    def server(self):
+        from agentlink.protocol import Server, Tool, ToolError
+
+        schema = {"type": "object", "properties": {"name": {"type": "string"}, "length": {"type": "number"}}, "additionalProperties": False}
+
+        def refuse(a):
+            raise ToolError("invalid_input", "length: mm, over 0.")
+
+        tools = [Tool("probe_body", "Make.", schema, lambda a: {"body": a.get("name") or "Body", "step": 1}, changes=True),
+                 Tool("probe_pad", "Pad.", schema, lambda a: {"result": "Pad added material.", "feature": "Pad", "volumeChange": 6000.0, "step": 2}, changes=True),
+                 Tool("probe_bad", "Refuse.", schema, refuse, changes=True),
+                 Tool("probe_read", "Read.", schema, lambda a: {"bodies": []}, changes=False)]
+        return Server("t", "0", tools)
+
+    def test_steps_lists_a_made_object_a_feature_with_its_volume_change_and_a_refused_call(self):
+        from agentlink import protocol
+
+        srv = self.server()
+        srv.call({"name": "probe_body", "arguments": {"name": "Plate"}})
+        srv.call({"name": "probe_read", "arguments": {}})  # a read: no line
+        srv.call({"name": "probe_pad", "arguments": {"length": 6}})
+        srv.call({"name": "probe_bad", "arguments": {"length": 0}})
+        srv.call({"name": "probe_pad", "arguments": {"length": 6}})  # the same call again runs again (decision 6): one more line
+        got = protocol.steps_part(srv)
+        self.assertEqual(got, {"steps": ["1 probe_body Plate: step 1", "2 probe_pad Pad: volume change +6000 mm³, step 2", "3 probe_bad: refused invalid_input",
+                                         "4 probe_pad Pad: volume change +6000 mm³, step 2"]})
+
+    def test_the_newest_lines_that_fit_and_the_cut_off_notice(self):
+        from agentlink import protocol
+
+        srv = self.server()
+        for i in range(30):
+            srv.call({"name": "probe_body", "arguments": {"name": f"B{i}"}})
+        got = protocol.steps_part(srv, limit=200)
+        self.assertLess(len(got["steps"]), 30)
+        self.assertEqual(got["steps"][-1], "30 probe_body B29: step 1")  # the newest are kept
+        n = 30 - len(got["steps"])
+        self.assertEqual(got["stepsLeftOut"], f"{n} older lines are not shown: steps holds 200 characters at most. "
+                                              "The batch records (batches/ in the session folder) hold the calls of each batch.")
+        self.assertNotIn("stepsLeftOut", protocol.steps_part(srv))
+
+    STATE = '''
+        from agentlink import tools
+        from agentlink.protocol import ToolError
+        ses = types.SimpleNamespace(STATE_PARTS=tools.Session.STATE_PARTS, orientation=lambda: {"where": "hidden"},
+                                    _state_all=lambda a: {"document": "Part", "bodies": [{"name": "Body"}], "step": 1, "steps": ["1 pd_pad Pad: step 1"], "outDir": "/tmp/x"})
+        def st(a):
+            try:
+                return tools.Session.session_state(ses, a)
+            except ToolError as e:
+                return ["refused", e.code, e.message]
+        NAMES = ", ".join(tools.Session.STATE_PARTS)
+'''
+
+    def test_no_what_gives_all_parts_with_steps(self):
+        got = child(self.STATE + '''
+        print(json.dumps([list(st({})), st({"orient": True})]))
+        ''')
+        self.assertEqual(got[0], ["document", "bodies", "step", "steps", "outDir"])
+        self.assertEqual(got[1], {"where": "hidden"})  # orient: true stays the short read, with no steps
+
+    def test_what_as_a_name_and_as_a_list(self):
+        got = child(self.STATE + '''
+        print(json.dumps([st({"what": "steps"}), st({"what": ["steps", "bodies"]}), st({"what": ["bodies"]}), st({}), st({"what": ["next"]})]))
+        ''')
+        self.assertEqual(got[0], {"steps": ["1 pd_pad Pad: step 1"]})
+        self.assertEqual(got[1], {"steps": ["1 pd_pad Pad: step 1"], "bodies": [{"name": "Body"}]})
+        self.assertEqual(got[2], {"bodies": [{"name": "Body"}]})  # no steps key
+        self.assertEqual(got[1], {k: got[3][k] for k in ("steps", "bodies")})  # one code path: the same data as the full answer
+        self.assertEqual(got[4], {})  # a part that the document does not have now is left out
+
+    def test_an_unknown_part_name_is_refused_with_the_names(self):
+        got = child(self.STATE + '''
+        print(json.dumps([st({"what": "volume"}), st({"what": ["steps", "volume"]}), st({"what": []}), st({"what": "steps", "orient": True}), NAMES]))
+        ''')
+        for r in got[:4]:
+            self.assertEqual(r[:2], ["refused", "invalid_input"])
+        self.assertEqual(got[0][2], "what: volume is not a part name. The part names: " + got[4] + ".")
+        self.assertIn("steps", got[4])
+
+    def test_the_descriptions_and_get_is_as_it_was(self):
+        t = source("tools.py")
+        orient = t[t.index("    def orientation(self):"):t.index("    STATE_PARTS = (")]
+        self.assertNotIn("steps_part", orient)
+        self.assertNotIn('"only"', t)
+        with open(os.path.join(ROOT, "agentlink", "data", "ste.json"), encoding="utf-8") as f:
+            ste = next(v for v in json.load(f).values() if isinstance(v, dict) and "session_state" in v)["session_state"]
+        for said in ("The answer gives all parts: document, label, freecad, bodies, documents, step, steps, outDir, where, next, options.",
+                     "what: a part name or a list of part names. The answer then has only those parts.", "orient: true does not give steps.",
+                     "An unknown name is refused, and the refusal lists the names.",
+                     "it starts again at initialize, and it stays when a document is closed."):
+            self.assertIn(said, ste, said)
+            self.assertIn(said, t, said)
+        from agentlink import fastpath
+
+        self.assertEqual(fastpath.ACTIVE, ("active.body", "active.sketch", "active.document", "selection", "bodies"))
+        self.assertFalse(hasattr(fastpath, "SESSION_PARTS"))
+        self.assertNotIn("steps", source("families", "fast.py").split('Tool("get"')[1].split("Tool(")[0])
+
+
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
         self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")

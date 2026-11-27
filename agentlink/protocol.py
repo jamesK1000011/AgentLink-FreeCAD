@@ -1287,6 +1287,7 @@ class Server:
                     except Exception:
                         pass
                 self._oriented = False
+                self._step_log = []  # a new session: its list of calls starts again (session_state's steps)
                 now = getattr(self, "instructions_now", None)
                 if now is not None:
                     # Made again at each connect: the guide list is read from
@@ -1378,6 +1379,10 @@ class Server:
             result = self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
+        try:
+            note_step(self, params, result)
+        except Exception:  # noqa: BLE001 - a record only
+            pass
         with around.part("notice"):
             _add_notice(result)
             _add_rider(result, params.get("name"))
@@ -1854,6 +1859,94 @@ class Server:
         if trace:
             err["trace"] = trace
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
+
+
+# ---- the session's calls, as facts (session_state's steps; 27 Nov) -----------------
+#
+# One short line for each call of a changing tool that the hub ran or
+# refused in this session, in order: its number, the tool, the object that
+# its answer names, the measured volume change where the answer has one, the
+# history step; or "refused" with the refusal's code. The runners (run,
+# batch, fast, pick) are not lines: each call that they run is. Reads are
+# not listed. The list is the session's: it starts again at initialize, and
+# it stays when a document is closed. No word of advice is in a line.
+
+STEP_RUNNERS = frozenset(("run", "batch", "fast", "pick"))
+STEP_OBJECT_KEYS = ("feature", "sketch", "body", "object", "document", "label", "name")
+STEPS_CHARS = 30_000  # characters of step lines in one answer (half of MAX_REPLY); the newest that fit are given
+
+
+def step_line(n, name, body, error=None):
+    """One line of the session's steps, from a call's answer (body) or its
+    refusal (error)."""
+    if isinstance(error, dict):
+        return f"{n} {name}: refused {error.get('code')}"
+    body = body if isinstance(body, dict) else {}
+    what = next((body[k] for k in STEP_OBJECT_KEYS if isinstance(body.get(k), str) and body[k]), None)
+    out = f"{n} {name}" + (f" {what}" if what else "")
+    facts = []
+    v = body.get("volumeChange")
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        from . import resultline
+
+        facts.append(f"volume change {resultline.signed(v)} mm³")
+    st = body.get("step")
+    if isinstance(st, int) and not isinstance(st, bool):
+        facts.append(f"step {st}")
+    return out + (": " + ", ".join(facts) if facts else "")
+
+
+def note_step(server, params, result):
+    """A call of a changing tool that ran or was refused, put on the
+    session's list (server._step_log). Reads and the runners are passed
+    over; a call of a name that is no tool is a refused line."""
+    name = params.get("name")
+    name = plain_name(server, name) if isinstance(name, str) else name
+    if not isinstance(name, str) or name in STEP_RUNNERS:
+        return
+    tool = server.tools.get(name)
+    args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+    if tool is not None:
+        try:
+            changes = bool(tool.changes_for(args))
+        except Exception:  # noqa: BLE001
+            changes = bool(getattr(tool, "changes", False))
+        if not changes:
+            return
+    content = (result or {}).get("content") or []
+    body = None
+    if content and content[0].get("type") == "text":
+        try:
+            body = json.loads(content[0]["text"])
+        except ValueError:
+            body = None
+    log = getattr(server, "_step_log", None)
+    if log is None:
+        log = server._step_log = []
+    err = body.get("error") if isinstance(body, dict) and (result or {}).get("isError") else None
+    if (result or {}).get("isError") and not isinstance(err, dict):
+        err = {"code": "failed"}
+    log.append(step_line(len(log) + 1, name, body, err))
+
+
+def steps_part(server, limit=STEPS_CHARS):
+    """{ steps: [lines], stepsLeftOut?: words } for session_state: the
+    newest lines that fit limit characters, and how many older lines are
+    left out (said each time it applies)."""
+    log = list(getattr(server, "_step_log", None) or [])
+    kept, used = [], 0
+    for ln in reversed(log):
+        if kept and used + len(ln) + 4 > limit:
+            break
+        kept.append(ln)
+        used += len(ln) + 4
+    kept.reverse()
+    out = {"steps": kept}
+    if len(kept) < len(log):
+        n = len(log) - len(kept)
+        out["stepsLeftOut"] = (f"{n} older line{'s' if n != 1 else ''} are not shown: steps holds {limit} characters at most. "
+                               "The batch records (batches/ in the session folder) hold the calls of each batch.")
+    return out
 
 
 # ---- what a refusal names -----------------------------------------------------
