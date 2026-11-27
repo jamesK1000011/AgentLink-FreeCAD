@@ -186,12 +186,13 @@ class ListedSchema(unittest.TestCase):
         self.assertEqual(sorted(b["properties"]), ["calls", "rollback", "stopOnError"])
         self.assertEqual(b["required"], ["calls"])
         self.assertEqual(b["properties"]["calls"]["items"]["required"], ["tool"])
-        self.assertNotIn("additionalProperties", b["properties"]["calls"]["items"])
+        # true, said in full: a server that writes to the schema lets the inputs through only then (27 Nov).
+        self.assertIs(b["properties"]["calls"]["items"].get("additionalProperties"), True)
         self.assertNotIn("additionalProperties", b)
         self.assertEqual(sorted(got["fast"]["properties"]), ["calls", "check", "rollback"])
         self.assertEqual(got["fast"]["properties"]["calls"]["items"]["required"], ["tool"])
         self.assertEqual(got["run"]["required"], ["tool"])
-        self.assertNotIn("additionalProperties", got["run"])
+        self.assertIs(got["run"].get("additionalProperties"), True)
 
     def test_hidden_fields_still_work_and_unknown_is_refused(self):
         got = run('''

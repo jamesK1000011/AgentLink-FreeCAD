@@ -101,10 +101,13 @@ def base(tools=None):
 # object: tool, and the tool's inputs beside it. The server checks each step
 # against the named tool's own schema, as it checks a direct call. No
 # additionalProperties: false here: a client that checks a call against the
-# listed schema must let the inputs through.
+# listed schema must let the inputs through. additionalProperties: true is
+# said in full: a server that makes the model write to the schema (llama.cpp
+# with tools) lets a key through only when the schema says so (live, 27 Nov:
+# with no word on it, every step came as { "tool": name } with no inputs).
 _STEP_ITEM = {"type": "object",
               "properties": {"tool": {"type": "string", "description": "The tool's plain name, as tool_find gives it (pd_pad). Its inputs stand beside it."}},
-              "required": ["tool"]}
+              "required": ["tool"], "additionalProperties": True}
 LISTED_SCHEMAS = {
     "run": copy.deepcopy(_STEP_ITEM),
     "batch": {"type": "object",

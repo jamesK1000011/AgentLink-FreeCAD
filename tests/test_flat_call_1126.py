@@ -207,3 +207,18 @@ class CookbookArguments(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StepSchemaLetsInputsThrough(unittest.TestCase):
+    """A server that makes the model write to the schema (llama.cpp with tools)
+    lets a key through only when the schema says additionalProperties: true
+    (live run, 27 Nov: every step came as { "tool": name } with no inputs)."""
+
+    def test_listed_step_schemas_say_additional_properties_true(self):
+        from agentlink import staticbase
+        from agentlink.families import fast as fast_family
+
+        self.assertIs(staticbase.LISTED_SCHEMAS["run"].get("additionalProperties"), True)
+        for name in ("batch", "fast"):
+            self.assertIs(staticbase.LISTED_SCHEMAS[name]["properties"]["calls"]["items"].get("additionalProperties"), True)
+        self.assertIs(fast_family.STEP_SCHEMA.get("additionalProperties"), True)

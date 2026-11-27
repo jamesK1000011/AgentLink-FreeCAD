@@ -16,7 +16,7 @@ INFO = "The fast path: run runs one step; fast runs many steps and gives one sho
 
 STEP = '{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }'
 STEP_SCHEMA = {"type": "object", "properties": {"tool": {"type": "string", "description": "The tool's plain name (pd_pad). Its inputs stand beside it."}},
-               "required": ["tool"]}
+               "required": ["tool"], "additionalProperties": True}
 
 
 def tools(session):
