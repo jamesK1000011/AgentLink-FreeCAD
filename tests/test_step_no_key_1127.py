@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 """The step schema declares no key (27 Nov).
 
 llama.cpp b12800 makes, for an object with a declared key and open other keys,
