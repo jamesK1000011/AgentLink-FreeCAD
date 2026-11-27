@@ -39,9 +39,8 @@
 #
 # The session's own record of a document goes the same way, by the same
 # book: its steps (what history_diff compares), meta, tx (undo steps made in
-# it), calls (the changing calls, for a macro), checks (what history_diff
-# says to run again) and measured (when its geometry last changed and was
-# last measured: agentlink/measured.py). They are the document's, not the session's: carried
+# it), calls (the changing calls, for a macro) and checks (what history_diff
+# says to run again). They are the document's, not the session's: carried
 # into the next document they gave a history_diff across two documents, a
 # macro of calls made in two, and an undo count that was another stack's.
 # session.steps, .meta, .tx, .calls and .checks are properties over own().
@@ -94,12 +93,12 @@ def settles_itself(session, key):
         return False
 
 
-OWN_KEYS = ("steps", "meta", "tx", "calls", "checks", "measured")
+OWN_KEYS = ("steps", "meta", "tx", "calls", "checks")
 
 
 def fresh():
     """The session's own record of a document it has done nothing in yet."""
-    return {"steps": [], "meta": {}, "tx": 0, "calls": [], "checks": {}, "measured": {}}
+    return {"steps": [], "meta": {}, "tx": 0, "calls": [], "checks": {}}
 
 
 def _book(session):

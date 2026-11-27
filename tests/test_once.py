@@ -97,19 +97,6 @@ class Thin(unittest.TestCase):
         self.assertEqual(once.thin_reply(self.s, "x", {"health": {"verdict": v}})["health"]["verdict"], v)
         self.assertEqual(once.health_said(self.s)["overlap"], OVERLAP)  # reachable
 
-    def test_a_sketch_readings_dof_note_once(self):
-        def reading(dof):
-            return {"sketch": "S", "state": {"sketch": "S", "dof": dof, "readyForFeature": True, "note": f"{dof} degrees of freedom: {once.DOF_NOTE}"}}
-
-        self.assertIn("note", once.thin_reply(self.s, "sketch_add", reading(4))["state"])
-        later = once.thin_reply(self.s, "sketch_constrain", reading(3))
-        self.assertNotIn("note", later["state"])
-        self.assertEqual(later["state"]["dof"], 3)  # the count stays, as dof
-        self.assertNotIn("saidBefore", later["state"])  # the count is the reading: nothing to name
-        top = once.thin_reply(self.s, "sketch_state", reading(2)["state"])  # sketch_state's own answer is the reading
-        self.assertNotIn("note", top)
-        self.assertIn(once.DOF_NOTE, once.health_said(self.s)["sketchNote"])  # reachable
-
     def test_a_batch_thins_its_calls_in_order_and_never_a_refusal(self):
         tools = {"doc_new": self.tool}
         reply = {"results": [{"tool": "doc_new", "ok": True, "result": self.answer("A")},

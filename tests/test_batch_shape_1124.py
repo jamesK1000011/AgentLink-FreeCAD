@@ -273,25 +273,6 @@ class NoToolKey(unittest.TestCase):
         self.assertNotIn('"B"', err)
 
 
-class DressupValid(unittest.TestCase):
-    """24 Nov QA: a fillet that FreeCAD computed without an error left a shape
-    that is not valid, and the answer said ok. dressup_valid reads that."""
-
-    def test_reads_the_check(self):
-        got = run('''
-    from agentlink.families import pd_common
-    class Sh:
-        def __init__(self, ok, n=10): self.ok, self.Faces = ok, [0] * n
-        def isNull(self): return False
-        def isValid(self): return self.ok
-    class B:
-        def __init__(self, sh): self.Shape = sh
-    print(json.dumps([pd_common.dressup_valid(B(Sh(True))), pd_common.dressup_valid(B(Sh(False))),
-                      pd_common.dressup_valid(B(Sh(False, 5000))), pd_common.dressup_valid(B(None))]))
-''')
-        self.assertEqual(got, [True, False, True, True])
-
-
 class CascadeNotCounted(unittest.TestCase):
     """24 Nov QA: with stopOnError: false, the refusals after the first in a
     batch are not counted toward the repeat stop; the first is."""
@@ -327,12 +308,6 @@ class QA1125Words(unittest.TestCase):
             i, j = steps.find("face is the face to go up to"), steps.find('"types"')
             self.assertTrue(0 < i < j, n)  # refused before the extent is chosen
             self.assertIn("a.face is not None and not a.extent and a.get('length') is not None", steps, n)
-
-    def test_no_change_uses_a_tolerance(self):
-        self.assertIn("tol = max(0.01, 1e-7 * max(abs(before), abs(out[\"volume\"])))", self.pd)
-        for k in ('must_change == "add" and delta <= tol', 'must_change == "cut" and delta >= -tol', 'must_change == "changed" and abs(delta) <= tol'):
-            self.assertIn(k, self.pd)
-        self.assertNotIn("delta >= -1e-6", self.pd)
 
     def test_unknown_edge_key_is_named(self):
         self.assertIn('is not a key of an edge query. Keys: {', self.pd)

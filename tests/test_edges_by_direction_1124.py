@@ -62,7 +62,6 @@ class Cards(unittest.TestCase):
         d = self.e["pd_pocket"]["description"]
         fact = "The pocket starts on its sketch's plane and goes into the body, against the sketch's normal."
         self.assertTrue(d.startswith("Pocket a closed sketch out of the body. " + fact), d)
-        self.assertIn("To cut from below, sketch on the bottom face.", d)
         for later in ("sides:", "taper:", "extent:"):
             self.assertLess(d.index(fact), d.index(later), later)
         self.assertNotIn("It cuts against the normal of the sketch.", d)  # said once, first
@@ -163,35 +162,6 @@ for err in ("SketchBased: Up to face: Must not intersect sketch!", "BRep_API: co
 out["fit"] = [pc.fit_hint(HINT), pc.fit_hint(HINT, "Wire is not closed."), pc.fit_hint("Check the sketch with sketch_state (closed wires)."), pc.fit_hint("Other words.")]
 print(json.dumps(out))
 '''
-
-
-class Hints(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.got = child(SETTLE)
-
-    def test_sketch_check_only_for_sketch_errors(self):
-        g = self.got
-        for err in ("SketchBased: Up to face: Must not intersect sketch!", "BRep_API: command not done",
-                    "SketchBased: Up to face: Must not be parallel to extrusion direction!"):
-            self.assertNotIn("sketch_state", g[err][1], err)
-        for err in ("Wire is not closed.", "Creating a face from sketch failed"):
-            self.assertIn("Check the sketch with sketch_state (closed wires, no open vertices)", g[err][1], err)
-            self.assertNotIn(NAMES_NOTHING, g[err][1], err)
-        self.assertEqual(g["fit"], ["reversed: true goes the other way into the body.",
-                                    "Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way into the body.",
-                                    "", "Other words."])
-
-    def test_up_to_face_says_what_it_means(self):
-        m = self.got["SketchBased: Up to face: Must not intersect sketch!"][1]
-        self.assertIn("The face to go up to touches the sketch (often it is the face that the sketch is on).", m)
-        self.assertIn("or use extent length.", m)
-        self.assertNotIn(NAMES_NOTHING, m)
-        self.assertIn("parallel to the direction of the feature", self.got["SketchBased: Up to face: Must not be parallel to extrusion direction!"][1])
-
-    def test_an_error_that_names_nothing_says_so(self):
-        m = self.got["BRep_API: command not done"][1]
-        self.assertTrue(m.endswith("nothing was kept. reversed: true goes the other way into the body. " + NAMES_NOTHING), m)
 
 
 class KindSentence(unittest.TestCase):

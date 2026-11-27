@@ -79,60 +79,6 @@ class V:
         return self.x * o.x + self.y * o.y + self.z * o.z
 
 
-class CutSide(unittest.TestCase):
-    def setUp(self):
-        fc = types.ModuleType("FreeCAD")
-        fc.Vector = V
-        names = ("FreeCAD", "Part", "agentlink.geometry", "agentlink.families.picks", "agentlink.families.pd_common")
-        self._old = {n: sys.modules.get(n) for n in names}
-        sys.modules["FreeCAD"] = fc
-        sys.modules["Part"] = types.ModuleType("Part")
-        self.addCleanup(self.restore)
-        try:
-            from agentlink.families import pd_common
-        except ImportError as e:  # another FreeCAD-only import
-            self.skipTest(f"needs FreeCAD: {e}")
-        self.pd = pd_common
-
-    def restore(self):
-        # Do not leave the stand-ins for the other tests.
-        for n, m in self._old.items():
-            if m is None:
-                sys.modules.pop(n, None)
-            else:
-                sys.modules[n] = m
-
-    def words(self, body_z, reversed_):
-        rot = types.SimpleNamespace(multVec=lambda v: V(0, 0, 1))
-        sk = types.SimpleNamespace(Label="Sketch001", Placement=types.SimpleNamespace(Rotation=rot, Base=V(0, 0, 0)))
-        feat = types.SimpleNamespace(Profile=[sk, ["Face1"]], Reversed=reversed_)
-        bb = types.SimpleNamespace(XMin=-5, XMax=5, YMin=-5, YMax=5, ZMin=body_z - 2, ZMax=body_z + 2)
-        body = types.SimpleNamespace(Shape=types.SimpleNamespace(BoundBox=bb))
-        return self.pd.cut_side_words(feat, body)
-
-    def test_body_on_normal_side_says_reversed_true(self):
-        w = self.words(10, False)
-        self.assertIn("+z", w)
-        self.assertIn("reversed: true", w)
-
-    def test_already_reversed_says_false(self):
-        self.assertIn("reversed: false", self.words(-10, True))
-
-    def test_the_pads_own_sketch_needs_one_of_its_own(self):
-        rot = types.SimpleNamespace(multVec=lambda v: V(0, 0, 1))
-        sk = types.SimpleNamespace(Label="Base", Placement=types.SimpleNamespace(Rotation=rot, Base=V(0, 0, 0)))
-        pad = types.SimpleNamespace(Label="Pad", Profile=[sk, ["Face1"]])
-        hole = types.SimpleNamespace(Label="Hole", Profile=[sk, []], Reversed=False)
-        sk.InList = [pad, hole]
-        bb = types.SimpleNamespace(XMin=-5, XMax=5, YMin=-5, YMax=5, ZMin=0, ZMax=5)
-        w = self.pd.cut_side_words(hole, types.SimpleNamespace(Shape=types.SimpleNamespace(BoundBox=bb)))
-        self.assertIn("profile of Pad", w)
-        self.assertIn("sketch_new { face", w)
-
-    def test_cut_toward_body_says_overlap(self):
-        self.assertIn("overlaps", self.words(-10, False))
-
-
 if __name__ == "__main__":
     unittest.main()
 
@@ -291,7 +237,7 @@ class OutlineBesideBody(unittest.TestCase):
     def test_beside_names_both_ranges(self):
         w = self.pd.outside_text("Holes", (12.5, 47.5, 12.5, 17.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1))
         self.assertIn("the outline lies at y 12.5 to 17.5; the body spans y -30 to 0", w)
-        self.assertIn("not its direction", w)
+        self.assertNotIn("Move", w)  # facts only (27 Nov): the measured spans, no instruction
 
     def test_over_the_body_says_nothing(self):
         self.assertEqual(self.pd.outside_text("Holes", (12.5, 47.5, -17.5, -12.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1)), "")

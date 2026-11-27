@@ -76,7 +76,7 @@ def tools(session):
               "required": ["calls"], "additionalProperties": False}, fast),
         Tool("get", ("Read one value, and get only that value with its unit. "
                      "what: \"Pad.Length\" (a property), \"Body.volume\" (also area, mass, centerOfMass, size), "
-                     "\"Body.Edge7.length\" (an edge or a face: length, radius, area), \"sketch.dof\" (also closedWires, readyForFeature), "
+                     "\"Body.Edge7.length\" (an edge or a face: length, radius, area), \"sketch.dof\" (also closedWires, wiresMeet), "
                      "\"active.body\", \"active.sketch\", \"selection\" or \"bodies\". "
                      "body and sketch in lower case are the current ones. what can be a list of up to 20. "
                      "Answer: { what: value }, for example { \"Body.volume\": \"1520 mm³\" }. In a list, a value that cannot be read goes in missed, with why. "

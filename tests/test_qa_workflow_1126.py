@@ -196,34 +196,5 @@ class Noise(unittest.TestCase):
         self.assertNotIn("the person's", got[0])
         self.assertTrue(got[1].endswith("is the person's"), got[1])
 
-    def test_pocket_reversed_words_not_beside_the_side_words(self):
-        got = in_a_process(QA_SERVER + '''
-    from agentlink.families import pd_common as pc
-    from agentlink.protocol import ToolError
-    pc.newly_broken = lambda doc: []
-    pc.fit_hint = lambda h, e=None: h
-    pc.body_reading = lambda b: {"volume": 100.0}
-    pc.where_went = lambda *a: {}
-    HINT = "Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way into the body."
-    out = {}
-    for name, side in (("beside", "The sketch S's outline is beside the body, not over it: x 50 to 60. Move the outline over the body (its position, not its direction)."),
-                       ("way", "The sketch S's normal is +z, and the body is on the side its normal points to. reversed: true sends the cut that way."),
-                       ("none", "")):
-        pc.cut_side_words = lambda f, b, side=side: side
-        f = Obj(D, "Pocket")
-        f.TypeId = "PartDesign::Pocket"
-        D.recompute = lambda: None
-        try:
-            pc.settle(s, Obj(D, "Body"), f, "pd_pocket", before=100.0, must_change="cut", hint=HINT)
-        except ToolError as e:
-            out[name] = e.message
-    print(json.dumps(out))
-''')
-        self.assertNotIn("goes the other way", got["beside"])
-        self.assertIn("Check the sketch with sketch_state (closed wires, no open vertices).", got["beside"])
-        self.assertEqual(got["way"].count("reversed: true"), 1, got["way"])
-        self.assertIn("goes the other way", got["none"])
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -44,15 +44,37 @@ def bound_box(shape):
     cylinder read 54.814 × 54.907 and a 28 mm ring 27.95, while headless
     (no tessellation) the same shapes read exact. optimalBoundingBox
     without the triangulation is the true box; it is slower, so shapes over
-    BOX_EXACT_FACES faces keep the quick one."""
+    BOX_EXACT_FACES faces keep the quick one (box_note says so)."""
+    return bound_box_said(shape)[0]
+
+
+def bound_box_said(shape):
+    """(the box, whether it is the exact one). Not exact: the shape has
+    more than BOX_EXACT_FACES faces, or this FreeCAD gave no exact box."""
     try:
         if shape.countElement("Face") <= BOX_EXACT_FACES:
             b = shape.optimalBoundingBox(False, False)
             if b.isValid():
-                return b
+                return b, True
     except Exception:
         pass
-    return shape.BoundBox
+    return shape.BoundBox, False
+
+
+def box_note(shape):
+    """The words an answer gives with a box that is not the exact one; ""
+    for an exact box. A fact about how the box was read, said each time it
+    applies (27 Nov: a limit that is used is said)."""
+    try:
+        if bound_box_said(shape)[1]:
+            return ""
+        n = shape.countElement("Face")
+    except Exception:
+        return ""
+    if n > BOX_EXACT_FACES:
+        return (f"The box is not exact: the shape has {n} faces, and the exact box is worked out for {BOX_EXACT_FACES} at most. "
+                "This box is FreeCAD's quick BoundBox, which can be the box of the display mesh.")
+    return "The box is not exact: this FreeCAD gave no exact box. This box is FreeCAD's quick BoundBox, which can be the box of the display mesh."
 
 
 def shape_key(shape):
@@ -67,8 +89,9 @@ def shape_key(shape):
 
 
 def box_of(shape):
-    b = bound_box(shape)
-    return {"min": [r3(b.XMin), r3(b.YMin), r3(b.ZMin)], "max": [r3(b.XMax), r3(b.YMax), r3(b.ZMax)], "size": [r3(b.XLength), r3(b.YLength), r3(b.ZLength)]}
+    b, exact = bound_box_said(shape)
+    return {"min": [r3(b.XMin), r3(b.YMin), r3(b.ZMin)], "max": [r3(b.XMax), r3(b.YMax), r3(b.ZMax)], "size": [r3(b.XLength), r3(b.YLength), r3(b.ZLength)],
+            **({} if exact else {"exact": False})}
 
 
 def box_json(b, nd=1):

@@ -311,7 +311,7 @@ SCHEMAS = {
                 "after": [("path", "edges", {"description": "Edges of the path to sweep along, joined end to end: [\"Edge3\"]."}),
                           ("edges", "mode", {"type": "string"}), ("mode", "transition", {"type": "string"}),
                           # bicycle L5 build (21 Nov, finding 4): Refine off by default on a pipe
-                          ("subtractive", "refine", {"type": "boolean", "description": "FreeCAD's Refine on the pipe; false by default."})]},
+                          ("subtractive", "refine", {"type": "boolean", "description": "FreeCAD's Refine on the pipe; left out: FreeCAD's own value."})]},
     # bicycle L5 build (21 Nov, finding 3): a sketch hung on an edge again in place, or its lost element re-pointed
     "sketch_attach": {"why": "bicycle L5 finding 3: edge, mode, at, repair",
                       "after": [("flip", "edge", {"type": "string", "description": "An object's edge, \"Binder.Edge1\": the sketch hangs on it."}),

@@ -304,7 +304,7 @@ def used_mark(sk):
         shape = body.Shape if body is not None else None
         if shape is None or shape.isNull() or not shape.Solids:
             return None
-        return {"sketch": sk.Name, "body": body.Name, "volume": float(shape.Volume), "box": _bbt(shape.BoundBox), "solids": len(shape.Solids)}
+        return {"sketch": sk.Name, "body": body.Name, "volume": float(shape.Volume), "box": exact_box(shape), "solids": len(shape.Solids)}
     except Exception:  # noqa: BLE001 - not measured: nothing is said
         return None
 
@@ -331,7 +331,7 @@ def used_change(sk, mark, only_changed=False):
         shape = body.Shape
         if shape is None or shape.isNull():
             return None
-        vol, box, solids = float(shape.Volume), _bbt(shape.BoundBox), len(shape.Solids)
+        vol, box, solids = float(shape.Volume), exact_box(shape), len(shape.Solids)
         same = abs(vol - mark["volume"]) <= 1e-2 and solids == mark["solids"] and all(abs(a - b) <= rl.TOL for a, b in zip(box, mark["box"]))
         if only_changed and same:
             return None
@@ -1033,20 +1033,21 @@ def newly_broken(doc):
     return [b for b in broken(doc) if b["object"] not in labels]
 
 
-def dressup_valid(body):
-    """False only when the body's shape is there and FreeCAD's check says it
-    is not valid; a shape too large to check in time counts as valid."""
+def shape_valid(body):
+    """FreeCAD's shape check of the body's shape (Shape.isValid): True or
+    False; a text that says why it was not run (no shape, or more faces
+    than health.FACES_VALID); None when it could not be read."""
     try:
         sh = body.Shape
         if sh is None or sh.isNull():
-            return True
+            return None
         from ..health import FACES_VALID
 
         if len(sh.Faces) > FACES_VALID:
-            return True
+            return f"not checked: the shape has {len(sh.Faces)} faces, and the check runs for {FACES_VALID} at most"
         return bool(sh.isValid())
-    except Exception:  # noqa: BLE001 - not known: not refused
-        return True
+    except Exception:  # noqa: BLE001 - not known: not said
+        return None
 
 
 def body_reading(body):
@@ -1067,164 +1068,76 @@ def profile_words(feat):
         name = sk.Label
         geo = [g for i, g in enumerate(getattr(sk, "Geometry", ()) or ()) if not sk.getConstruction(i)] if hasattr(sk, "getConstruction") else list(getattr(sk, "Geometry", ()) or ())
         if not geo:
-            return f"The sketch {name} has no geometry (construction lines do not count): add the outline with sketch_add first."
+            return f"The sketch {name} has no geometry that is not construction geometry."
         wires = list(sk.Shape.Wires)
         opened = [i for i, w in enumerate(wires) if not w.isClosed()]
         if opened:
-            return f"The sketch {name} has {len(opened)} open outline{'s' if len(opened) > 1 else ''}: close each one (sketch_state names the open ends)."
+            return f"The sketch {name} has {len(opened)} open wire{'s' if len(opened) > 1 else ''} (sketch_state gives the open ends)."
         for i in range(len(wires)):
             for j in range(i + 1, len(wires)):
                 if wires[i].distToShape(wires[j])[0] < 1e-6:
-                    return (f"In the sketch {name}, two outlines cross or touch (outline {i + 1} and {j + 1}): a hole circle on the outer edge does this. "
-                            "Move it inside the outline, or make it smaller.")
-    except Exception:  # noqa: BLE001 - advice only
+                    return f"In the sketch {name}, wire {i + 1} and wire {j + 1} cross or touch."
+    except Exception:  # noqa: BLE001 - a reading only
         return ""
     return ""
 
 
-# A card's hint to check the sketch fits an error about the sketch or its
-# profile only (24 Nov QA: it came after "Up to face: Must not intersect
-# sketch" and "BRep_API: command not done", which are not).
-SKETCH_CHECK = "Check the sketch with sketch_state"
-SKETCH_ERROR = re.compile(r"not closed|open (?:wire|edge|vert)|shape object is empty|(?:sketch|profile) is empty|empty (?:sketch|profile)"
-                          r"|self.?intersect|face from (?:the )?(?:sketch|profile)|(?:sketch|profile) has no face|no faces? (?:in|from) (?:the )?(?:sketch|profile)"
-                          r"|(?:make|create|creating) (?:a )?face", re.I)
-# FreeCAD's up-to-face checks (FeatureSketchBased): what each one means.
-UP_TO_WORDS = (
-    (re.compile(r"up to face: must not intersect sketch", re.I),
-     "The face to go up to touches the sketch (often it is the face that the sketch is on). "
-     "Choose a face away from the sketch, in the direction of the feature, or use extent length."),
-    (re.compile(r"up to face: must not be parallel", re.I),
-     "The face to go up to is parallel to the direction of the feature, so the feature never meets it. Choose a face across that direction."),
-)
-
-
-def sketch_error(error):
-    """Whether FreeCAD's error is about the sketch or its profile."""
-    return bool(SKETCH_ERROR.search(str(error or "")))
-
-
-def fit_hint(hint, error=""):
-    """hint without its sentence to check the sketch when the error is not
-    about the sketch; the rest as it was."""
-    if not hint or SKETCH_CHECK not in hint or sketch_error(error):
-        return hint
-    parts = [p for p in re.split(r"(?<=[;.])\s+", hint) if SKETCH_CHECK not in p]
-    return re.sub(r";$", ".", " ".join(parts).strip())
-
-
-_CONNECTOR_END = re.compile(r"(?:\s*(?:[,;:]|\b(?:or|and|then|with)\b))+\s*$", re.I)
-
-
-def drop_phrase(text, phrase):
-    """text without the clauses that say phrase (the refusal said it once
-    already). Clauses are the parts of a sentence between semicolons. A
-    clause keeps its words before phrase, less a last "or", "and", comma or
-    colon; a sentence with nothing left goes. So no sentence is cut mid-way
-    (26 Nov run: "put the sketch on the face it enters, or." from "…, or
-    reversed: true.")."""
-    if not text or phrase not in text:
-        return text
-    out = []
-    for s in re.split(r"(?<=[.!?])\s+", text.strip()):
-        if phrase not in s:
-            out.append(s)
-            continue
-        end = s[-1] if s[-1] in ".!?" else "."
-        kept = []
-        for c in re.split(r"\s*;\s*", s[:-1] if s[-1] in ".!?" else s):
-            if phrase in c:
-                c = _CONNECTOR_END.sub("", c[:c.find(phrase)]).strip()
-            if c:
-                kept.append(c)
-        if kept:
-            out.append("; ".join(kept) + end)
-    return " ".join(out)
-
-
 def settle(session, body, feat, tool, before=None, must_change=None, hint="", seen=None):
-    """Recompute; refuse (the call's transaction is rolled back) if the
-    feature or anything after it failed; else the body's reading, with
-    result first (agentlink/resultline.py). seen: the edge words of a fillet
-    or chamfer, when the tool has them."""
-    from ..protocol import NAMES_NOTHING
+    """Recompute; refuse (the call's transaction is rolled back) if FreeCAD
+    reports that the feature or anything after it failed, with FreeCAD's
+    own error; else the body's reading, with result first
+    (agentlink/resultline.py). seen: the edge words of a fillet or chamfer,
+    when the tool has them.
 
+    Facts only (27 Nov): what FreeCAD kept is kept. A feature that changed
+    no volume, and a dress-up whose shape FreeCAD's check says is not
+    valid, are answered with the measured fact (volumeChange 0; valid:
+    false). must_change and hint are taken and not used: no call is refused
+    for its result, and no words of the authors follow FreeCAD's error. The
+    measured facts that follow it: the sketch's own state when FreeCAD says
+    the profile makes no face, and the body's AllowCompound when FreeCAD
+    refuses several solids."""
     doc = session.doc
     doc.recompute()
     bad = newly_broken(doc)  # not what was failing before the call
     if bad:
         mine = [b for b in bad if feat is not None and b["object"] == feat.Label]
         first = (mine or bad)[0]
-        hint = fit_hint(hint, first["error"])
-        known = sketch_error(first["error"])  # the sketch hint says what to change
-        for pat, words in UP_TO_WORDS:
-            if pat.search(first["error"]):
-                hint, known = words, True
-        later = feat is None or first["object"] != feat.Label  # a feature after this one broke
-        if (not hint or later) and ("edge link" in first["error"].lower() or "face link" in first["error"].lower() or "invalid link" in first["error"].lower()):
-            # FreeCAD names a feature's edges and faces by the model before
-            # it; a change upstream can leave a later feature's references
-            # pointing at what is no longer there (worst in 1.0).
-            hint = (f"{first['object']} refers to edges or faces of the model as it was, which the change renamed or removed. "
-                    f"feature_remove {first['object']}, make the change, then add it again on the new edges (shape_query finds them; pd_fillet, pd_chamfer, pd_draft or pd_thickness).")
-            known = True
+        fact = ""
         if "shape object is empty" in first["error"].lower() or "wire is not closed" in first["error"].lower():
             # The profile makes no face (live, 22 Nov: a circle across the
-            # outline's edge, twice): say why, from the sketch itself.
-            why = profile_words(feat)
-            if why:
-                hint = (why + " " + hint).strip()
-            known = True
+            # outline's edge, twice): the sketch's measured state.
+            fact = profile_words(feat)
         if "multiple solids" in first["error"].lower():
             # FreeCAD 1.1: a body takes several solids only while its
-            # AllowCompound is true (the default); with it off, a feature
-            # that leaves two pieces is an error.
-            hint = (f"The result would be more than one solid and {body.Label}'s AllowCompound is off: make the feature touch the rest of the body, "
-                    f"or object_set {{ object: \"{body.Label}\", values: {{ AllowCompound: true }} }} first.")
-            known = True
-        if not known:
-            hint = (hint + " " + NAMES_NOTHING).strip()
-        raise ToolError("failed", f"{first['object']} ({first['type']}) failed: {first['error']}" + (f"; also broken: {[b['object'] for b in bad if b is not first]}" if len(bad) > 1 else "") + f" — nothing was kept.{(' ' + hint) if hint else ''}")
-    hint = fit_hint(hint)
-    if feat is not None and getattr(feat, "TypeId", "") in DRESSUPS and not dressup_valid(body):
-        # 24 Nov QA: a fillet that FreeCAD computed without an error left a
-        # shape that is not valid (2 solids, NOT valid), and the answer said
-        # ok; the health line said broken only after it.
-        raise ToolError("failed", f"{feat.Label} ({short(feat)}) made a shape that is not valid (FreeCAD's shape check), though it gave no error — nothing was kept. "
-                                  f"{hint or 'Try a smaller size, or fewer edges.'}".strip())
-    out = {**({"feature": feat.Label, "type": short(feat)} if feat is not None else {}), "valid": True, **body_reading(body)}
+            # AllowCompound is true (the default).
+            fact = f"AllowCompound is false on {body.Label}."
+        raise ToolError("failed", f"{first['object']} ({first['type']}) failed: {first['error']}" + (f"; also broken: {[b['object'] for b in bad if b is not first]}" if len(bad) > 1 else "") + f" — nothing was kept.{(' ' + fact) if fact else ''}")
+    valid = shape_valid(body)
+    out = {**({"feature": feat.Label, "type": short(feat)} if feat is not None else {}), **({} if valid is None else {"valid": valid}), **body_reading(body)}
+    stored = stored_values(feat)
+    if stored:
+        out["stored"] = stored
     if "box" in out:
         # Where the body is, not only its size (24 Nov QA: a centred
         # sketch on XZ gave the right size 40 as z -20..20, in 7 of 9 runs).
         try:
-            out["bounds"] = span_text(body.Shape.BoundBox)
+            out["bounds"] = span_text(geo.bound_box(body.Shape))
         except Exception:  # noqa: BLE001 - a reading only
             pass
     keep = {}
     if before is not None and "volume" in out:
         delta = out["volume"] - before
-        out["volumeChange"] = round(delta, 2)
-        # No change within the noise of FreeCAD's volume on a curved body
-        # (24 Nov QA: five cuts that removed nothing came back ok with
-        # volumeChange -0.0, as the test of 1e-6 let the noise through).
+        out["volumeChange"] = round(delta, 2) + 0.0  # never "-0.0"
+        # The region of the change is worked out only when its volume is more
+        # than the noise of FreeCAD's volume on a curved body.
         tol = max(0.01, 1e-7 * max(abs(before), abs(out["volume"])))
-        if must_change == "add" and delta <= tol:
-            raise ToolError("failed", f"{feat.Label} added no material — it lies inside the body already. Nothing was kept. {hint}".strip())
-        dress = feat is not None and getattr(feat, "TypeId", "") in DRESSUPS
-        if must_change == "cut" and delta >= -tol:
-            what = ("removed no material — the wall did not hollow the body" if dress
-                    else "cut nothing — the profile does not meet the body that way")
-            side = "" if dress else cut_side_words(feat, body)
-            if side:
-                # The side words say which way (or that the outline is beside
-                # the body): the card's own reversed words would say it twice,
-                # or point away from the fix (26 Nov QA).
-                hint = drop_phrase(hint, "reversed: true")
-            raise ToolError("failed", f"{feat.Label} {what}.{(' ' + side) if side else ''} Nothing was kept. {hint}".strip())
-        if must_change == "changed" and abs(delta) <= tol:
-            # A fillet or chamfer may add material (an inside corner, concave)
-            # or take it away (an outside one): only no change at all is wrong.
-            raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
+        if feat is not None and out["volumeChange"] == 0:
+            # FreeCAD kept a feature that changed no volume: where its sketch
+            # lies against the body, as measured (no word on what was meant).
+            lies = sketch_lies_words(feat, body)
+            if lies:
+                keep["lies"] = lies
         if feat is not None:
             out.update(where_went(feat, body, delta, tol, keep))
             if "where" in out:
@@ -1233,24 +1146,104 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
                 head = {k: out[k] for k in ("feature", "type") if k in out}
                 out = {**head, "where": out["where"], **{k: v for k, v in out.items() if k not in head and k != "where"}}
     out = with_changed(session, body, out, before)
-    if out.get("volume") is not None:
-        note_answered(session, body)
     line = result_line(feat, body, tool, out.get("volumeChange"), keep, seen, out.get("where"))
+    note = geo.box_note(body.Shape) if "box" in out else ""
+    if note:
+        out["boxNote"] = note
+    if line and keep.get("lies"):
+        line += " " + keep["lies"]
+    if line and valid is False:
+        line += " FreeCAD's shape check (isValid) says that the body's shape is not valid. FreeCAD gave no error."
     if line:
         out = {"result": line, **out}
     return picks.finish(session, tool, out, recompute=False)
 
 
-def note_answered(session, body):
-    """This answer gives body's reading (volume, box, solids) after the
-    recompute: the session counts it as a measure of that body once the
-    change is kept (Session.note_answered; agentlink/measured.py)."""
+# ---- what FreeCAD stored (facts only, 27 Nov) ---------------------------------------------
+# A feature's answer gives the values FreeCAD holds for it after the
+# recompute, under FreeCAD's own property names: a caller that cannot see
+# the task panel reads there what a left-out input became (Type, SideType,
+# Reversed, Refine, ThreadFit …). Only the properties this FreeCAD's
+# feature has; a link is said as its object's label and sub-names.
+
+STORED = {
+    "PartDesign::Pad": ("Type", "SideType", "Midplane", "Length", "Type2", "Length2", "Offset", "Reversed", "TaperAngle", "TaperAngle2", "AlongSketchNormal", "UseCustomVector", "Direction", "Refine"),
+    "PartDesign::Pocket": ("Type", "SideType", "Midplane", "Length", "Type2", "Length2", "Offset", "Reversed", "TaperAngle", "TaperAngle2", "AlongSketchNormal", "UseCustomVector", "Direction", "Refine"),
+    "PartDesign::Revolution": ("Type", "Angle", "Angle2", "Midplane", "Reversed", "ReferenceAxis", "Refine"),
+    "PartDesign::Groove": ("Type", "Angle", "Angle2", "Midplane", "Reversed", "ReferenceAxis", "Refine"),
+    "PartDesign::Hole": ("Diameter", "DepthType", "Depth", "DrillPoint", "DrillPointAngle", "DrillForDepth", "Threaded", "ModelThread", "ThreadType", "ThreadSize", "ThreadClass",
+                         "ThreadFit", "ThreadDirection", "ThreadDepthType", "ThreadDepth", "HoleCutType", "HoleCutCustomValues", "HoleCutDiameter", "HoleCutDepth",
+                         "HoleCutCountersinkAngle", "Tapered", "TaperedAngle", "Reversed", "BaseProfileType", "Refine"),
+    "PartDesign::Fillet": ("Radius", "UseAllEdges", "Refine"),
+    "PartDesign::Chamfer": ("ChamferType", "Size", "Size2", "Angle", "FlipDirection", "UseAllEdges", "Refine"),
+    "PartDesign::Draft": ("Angle", "NeutralPlane", "PullDirection", "Reversed", "Refine"),
+    "PartDesign::Thickness": ("Value", "Reversed", "Intersection", "Mode", "Join", "Refine"),
+    "PartDesign::LinearPattern": ("Direction", "Reversed", "Mode", "Length", "Offset", "Occurrences", "Direction2", "Occurrences2", "TransformMode", "Refine"),
+    "PartDesign::PolarPattern": ("Axis", "Reversed", "Mode", "Angle", "Offset", "Occurrences", "TransformMode", "Refine"),
+    "PartDesign::Mirrored": ("MirrorPlane", "TransformMode", "Refine"),
+    "PartDesign::MultiTransform": ("TransformMode", "Refine"),
+}
+
+
+def _stored_value(v):
+    """One property value as JSON: a number of a quantity, a link as
+    "Label" or "Label: sub, sub", a vector as [x, y, z]."""
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    if hasattr(v, "Label") and hasattr(v, "Name"):
+        return str(v.Label)
+    if isinstance(v, (list, tuple)):
+        if len(v) == 2 and hasattr(v[0], "Label") and isinstance(v[1], (list, tuple, str)):
+            subs = [v[1]] if isinstance(v[1], str) else [str(x) for x in v[1] if x]
+            return str(v[0].Label) + (": " + ", ".join(subs) if subs else "")
+        return [_stored_value(x) for x in v]
+    if all(hasattr(v, k) for k in ("x", "y", "z")):
+        return [round(float(v.x), 6), round(float(v.y), 6), round(float(v.z), 6)]
+    return picks.num_json(v)
+
+
+def stored_values(feat):
+    """{ FreeCAD property: stored value } of feat for the properties STORED
+    lists for its type and this FreeCAD's feature has; {} for another
+    type. Read after the recompute. Never raises."""
+    if feat is None:
+        return {}
+    out = {}
     try:
-        got = session.__dict__.get("_answered")
-        if isinstance(got, list):
-            got.append(body.Label)
-    except Exception:  # noqa: BLE001 - a stand-in session
+        have = set(feat.PropertiesList)
+    except Exception:  # noqa: BLE001
+        return {}
+    for k in STORED.get(getattr(feat, "TypeId", ""), ()):
+        if k not in have:
+            continue
+        try:
+            out[k] = _stored_value(getattr(feat, k))
+        except Exception:  # noqa: BLE001 - not read: not said
+            continue
+    return out
+
+
+def not_given(out, a, defaults):
+    """Put notGiven into the answer out: "<input> not given, so <input> is
+    <value>" for each input of defaults ({input: the value the tool used})
+    that the call a did not give (the form sketch_add uses for center).
+    Returns out. A default of None is passed over (the input does not
+    apply to this call). Nothing is put when the call gave them all."""
+    try:
+        words = [f"{k} not given, so {k} is {_default_word(v)}" for k, v in (defaults or {}).items() if v is not None and a.get(k) is None]
+        if words and isinstance(out, dict):
+            out["notGiven"] = "; ".join(words)
+    except Exception:  # noqa: BLE001 - a reading only
         pass
+    return out
+
+
+def _default_word(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return rl.num(v) if not float(v).is_integer() else str(int(v))
+    return str(v)
 
 
 # ---- what changed since the body's last reading (owner, 25 Nov) ----------------------------
@@ -1363,6 +1356,13 @@ def _bbt(bb):
     return (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax)
 
 
+def exact_box(shape):
+    """A shape's box as (xmin, xmax, ymin, ymax, zmin, zmax), from its
+    geometry (geometry.bound_box: the exact box, not the box of the display
+    mesh; geometry.box_note says when it is not exact)."""
+    return _bbt(geo.bound_box(shape))
+
+
 def where_went(feat, body, delta, tol=0.01, keep=None):
     """{added: "x .., y .., z ..", beyond: [sides]} or {removed: …, opens:
     [faces of the body it breaks through]}, from the body before the
@@ -1392,8 +1392,8 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
                 return {}
             if keep is not None:
                 keep["reg"], keep["cut"] = reg, False
-            nb, ob = _bbt(reg.BoundBox), _bbt(old.BoundBox)
-            out = {"added": span_text(reg.BoundBox), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
+            nb, ob = exact_box(reg), exact_box(old)
+            out = {"added": span_text(geo.bound_box(reg)), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
             out.update(profile_results(feat, reg, old, tol, cut=False, rec=_profile_rec(keep)))
             return out
         reg = old.cut(new)
@@ -1401,7 +1401,7 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
             return {}
         if keep is not None:
             keep["reg"], keep["cut"] = reg, True
-        out = {"removed": span_text(reg.BoundBox)}
+        out = {"removed": span_text(geo.bound_box(reg))}
         diag = max(old.BoundBox.DiagonalLength, 1.0)
         # The old body's surface, not its solid: a point inside a solid is at
         # distance 0 from it (live, 25 Nov: a hollow's inner walls were listed).
@@ -1410,7 +1410,7 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
         if keep is not None:
             keep["lids"] = lids
         out["opens"] = lids or ["nothing: the cut is closed inside the body"]
-        out["where"] = removed_sentence(sides, _bbt(reg.BoundBox))
+        out["where"] = removed_sentence(sides, exact_box(reg))
         pieces = [x for x in reg.Solids if x.Volume > tol]
         if len(pieces) > 1:
             # 26 Nov QA: two notches in one pocket came back as one box that
@@ -1499,11 +1499,13 @@ def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
         lines = seen
         if lines is None and have_old and names:
             lines = edge_words(old, names)
-        return rl.dressup_result(label, tool, delta, len(names), _size_words(feat), list(lines or []), solids, was)
-    new_box = _bbt(new.BoundBox) if new_ok else None
+        return rl.dressup_result(label, tool, delta, len(names), _size_words(feat), list(lines or []), solids, was,
+                                 changed=edges_changed(old, new, names) if have_old and new_ok else None,
+                                 body_box=exact_box(new) if new_ok else None)
+    new_box = exact_box(new) if new_ok else None
     if not have_old:
         return rl.feature_result(label, tool, delta, body_box=new_box, solids=solids)
-    old_box = _bbt(old.BoundBox)
+    old_box = exact_box(old)
     reg = keep.get("reg")
     note = where_text if isinstance(where_text, str) and where_text.startswith("not worked out") else ""
     note = (note[0].upper() + note[1:] + ".") if note and not note.endswith(".") else note
@@ -1512,7 +1514,7 @@ def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
     cut = bool(keep.get("cut"))
     tol = keep.get("tol", 0.01)
     pieces = [x for x in reg.Solids if x.Volume > tol] or [reg]
-    boxes = [_bbt(x.BoundBox) for x in pieces[:PIECES_SHOWN]]
+    boxes = [exact_box(x) for x in pieces[:PIECES_SHOWN]]
     more = max(0, len(pieces) - PIECES_SHOWN)
     unlooked = max(0, len(reg.Faces) - WHERE_LIDS)
     faces, gap, touching, looked = [], None, None, True
@@ -1578,8 +1580,8 @@ def pieces_sentence(pieces, skin, diag):
     words = []
     for x in pieces[:PIECES_SHOWN]:
         _w, sides = _lids(x, skin, diag)
-        said = removed_sentence(sides, _bbt(x.BoundBox))
-        words.append(f"{span_text(x.BoundBox)}: {said[0].lower()}{said[1:].rstrip('.')}")
+        said = removed_sentence(sides, exact_box(x))
+        words.append(f"{span_text(geo.bound_box(x))}: {said[0].lower()}{said[1:].rstrip('.')}")
     more = f"; and {len(pieces) - PIECES_SHOWN} more" if len(pieces) > PIECES_SHOWN else ""
     return f"{len(pieces)} separate cuts: " + "; ".join(words) + more + "."
 
@@ -1777,6 +1779,25 @@ def holes_cut(spots, out):
         return spots
 
 
+def edges_changed(old, new, names):
+    """How many of the edges names of the shape old are not on the shape
+    new: an edge counts when the point halfway along it is farther than
+    TOUCH from every face of new (a rounded or bevelled edge is not there
+    now). None when it cannot be measured."""
+    try:
+        skin = Part.Compound(list(new.Faces))
+        edges = old.Edges
+        n = 0
+        for name in names:
+            e = edges[int(str(name)[4:]) - 1]
+            mid = e.valueAt((e.FirstParameter + e.LastParameter) / 2.0)
+            if skin.distToShape(Part.Vertex(mid))[0] > TOUCH:
+                n += 1
+        return n
+    except Exception:  # noqa: BLE001 - not measured: not said
+        return None
+
+
 def _profile_of(o):
     prof = getattr(o, "Profile", None)
     return prof[0] if isinstance(prof, (list, tuple)) and prof else prof
@@ -1795,7 +1816,9 @@ def outside_words(sk, bb, n):
 
 def outside_text(label, prof, body, normal, tol=1e-6):
     """Plain-number form of outside_words (profile and body boxes as
-    xmin, xmax, ymin, ymax, zmin, zmax; normal x, y, z)."""
+    xmin, xmax, ymin, ymax, zmin, zmax; normal x, y, z): the measured
+    spans of the outline and of the body on each axis of the sketch's plane
+    where the two do not overlap; "" when they overlap on each."""
     words = []
     for i, ax in enumerate("xyz"):
         if abs(normal[i]) > 0.9:  # the axis the cut goes along
@@ -1805,47 +1828,38 @@ def outside_text(label, prof, body, normal, tol=1e-6):
             words.append(f"the outline lies at {ax} {plo:g} to {phi:g}; the body spans {ax} {blo:g} to {bhi:g}")
     if not words:
         return ""
-    return (f"The sketch {label}'s outline is beside the body, not over it: " + "; ".join(words) +
-            ". Move the outline over the body (its position, not its direction).")
+    return f"The sketch {label}: " + "; ".join(words) + "."
 
 
-def cut_side_words(feat, body):
-    """Where a cut that cut nothing went, against where the body is: the
-    sketch's normal, and the side of the sketch the body lies on (live,
-    22 Nov: an agent found a pocket's side by trial, twice)."""
+def sketch_lies_words(feat, body):
+    """Where the sketch of a feature that changed no volume lies against the
+    body, as measured: the features that share the sketch as their profile,
+    the body's span along the sketch's normal (0 is the sketch plane), and
+    the axes of the sketch's plane on which the outline and the body do not
+    overlap. "" for a feature with no sketch, or when it cannot be read.
+    No word says what the caller meant or what to change."""
     try:
         prof = getattr(feat, "Profile", None)
         sk = prof[0] if isinstance(prof, (list, tuple)) else prof
+        if sk is None or not hasattr(sk, "Placement"):
+            return ""
         pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
         import FreeCAD
 
-        # The sketch is another feature's profile already (live, 22 Nov: holes
-        # drilled from the pad's own sketch, 14 times): it needs its own.
+        out = []
         others = [o for o in (getattr(sk, "InList", None) or ()) if o is not feat and _profile_of(o) is sk]
         if others:
-            return (f"The sketch {sk.Label} is the profile of {others[0].Label} already, so it lies on the body's own face. "
-                    "A hole or pocket needs a sketch of its own, on the face it goes into: sketch_new { face: { at, normal } }, then sketch_add.")
+            out.append(f"Sketch {sk.Label} is also the profile of {', '.join(o.Label for o in others)}.")
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
-        bb = body.Shape.BoundBox
-        # First: does the outline lie over the body at all, across the
-        # sketch's plane? (live, 23 Nov: holes at y +15 beside a plate at
-        # y -30..0 got the direction words three times.)
+        bb = geo.bound_box(body.Shape)
+        frame = ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
+        along = rl.frame_ranges(frame, _bbt(bb))[2]
+        out.append(f"Along the normal of sketch {sk.Label} the body spans {rl.span(*along)} (0 is the sketch plane; + is the way the normal points).")
         off = outside_words(sk, bb, n)
         if off:
-            return off
-        c = FreeCAD.Vector((bb.XMin + bb.XMax) / 2, (bb.YMin + bb.YMax) / 2, (bb.ZMin + bb.ZMax) / 2)
-        side = (c - pl.Base).dot(n)
-        axis = max(("x", abs(n.x), n.x), ("y", abs(n.y), n.y), ("z", abs(n.z), n.z), key=lambda t: t[1])
-        normal = f"{'+' if axis[2] > 0 else '-'}{axis[0]}"
-        rev = bool(getattr(feat, "Reversed", False))
-        if abs(side) < 1e-6:
-            return f"The sketch {sk.Label}'s normal is {normal}; the body's centre is in the sketch's plane."
-        where = "on the side its normal points to" if side > 0 else "on the side opposite its normal"
-        # A pocket goes against the normal, reversed along it.
-        fix = (f" reversed: {'false' if rev else 'true'} sends the cut that way." if (side > 0) != rev else
-               " The cut went toward the body: check that the sketch overlaps it (its position, not its side).")
-        return f"The sketch {sk.Label}'s normal is {normal}, and the body is {where}." + fix
-    except Exception:  # noqa: BLE001 - advice only
+            out.append(off)
+        return " ".join(out)
+    except Exception:  # noqa: BLE001 - a reading only
         return ""
 
 

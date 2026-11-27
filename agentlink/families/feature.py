@@ -44,9 +44,10 @@ def set_sides(f, side, length2=None):
     if side in (None, "one"):
         return True
     if has(f, "SideType"):
+        # Type2 and Length2 stay FreeCAD's own defaults unless the call gives
+        # length2 (27 Nov: the tool sets no value of its own; the answer's
+        # stored gives what FreeCAD holds).
         f.SideType = {"two": "Two sides", "symmetric": "Symmetric"}[side]
-        if side == "two" and length2 is None and has(f, "Type2") and f.Type == "ThroughAll":
-            f.Type2 = "ThroughAll"  # through all, both ways: the second side is a 5 mm length otherwise
     elif side == "symmetric":
         f.Midplane = True
     elif f.Type != "Length":
@@ -446,10 +447,32 @@ def pipe_options(f, a):
         if v not in allowed:
             raise ToolError("invalid_input", f"{key} {v!r}: one of {', '.join(allowed)}.")
         setattr(f, prop, v)
-    # Bicycle L5 build (21 Nov, finding 4): Refine on every pipe of a large
-    # weldment made the body unorientable after small changes; off by default.
-    if "Refine" in (getattr(f, "PropertiesList", None) or ()):
-        f.Refine = bool(a.get("refine", False))
+    # Refine is set only when the call gives it: left out, the Pipe keeps
+    # the value FreeCAD gave it (27 Nov: FreeCAD's defaults everywhere).
+    if a.get("refine") is not None and "Refine" in (getattr(f, "PropertiesList", None) or ()):
+        f.Refine = bool(a.get("refine"))
+
+
+def thread_change(b, f):
+    """The volume of body b with Hole f's modelled thread less its volume
+    without it, mm³, as measured: ModelThread is set false, the document
+    recomputed and the volume read; then ModelThread is set true again and
+    the document recomputed. None when it was not measured."""
+    try:
+        if not bool(getattr(f, "ModelThread", False)):
+            return None
+        doc = f.Document
+        with_thread = pc.volume(b)
+        f.ModelThread = False
+        try:
+            doc.recompute()
+            without = pc.volume(b)
+        finally:
+            f.ModelThread = True
+            doc.recompute()
+        return round(with_thread - without, 2) + 0.0
+    except Exception:  # noqa: BLE001 - not measured: not said
+        return None
 
 
 def tools(session):
@@ -468,9 +491,10 @@ def tools(session):
         return f
 
     def settle(b, f, tool, before=None, must_change=None, hint="", seen=None):
-        """Recompute, refuse a feature (or a later one) that failed or changed
-        nothing where it must, else the body's reading (pd_common.settle).
-        seen: a fillet's or chamfer's edge words, for the result line."""
+        """Recompute, refuse a feature (or a later one) that FreeCAD reports
+        as failed, else the body's reading (pd_common.settle). must_change
+        and hint are not used. seen: a fillet's or chamfer's edge words, for
+        the result line."""
         return pc.settle(s, b, f, tool, before, must_change, hint=hint, **({} if seen is None else {"seen": seen}))
 
     # What the tools' entries (agentlink/data/tools.json) call by name.
@@ -487,5 +511,5 @@ def tools(session):
                "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots, "holes_cut": pc.holes_cut,
                "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body,
                "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec, "path_closed": path_closed, "closed_tube_words": closed_tube_words,
-               "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options}
+               "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options, "not_given": pc.not_given, "thread_change": thread_change}
     return runners.tools(GROUP, s, helpers)

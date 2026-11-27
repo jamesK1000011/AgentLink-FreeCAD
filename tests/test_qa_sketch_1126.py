@@ -63,8 +63,7 @@ class Branches(unittest.TestCase):
     ends = [(2, "line", 1, (157.5, 0)), (2, "line", 2, (0, 5)), (4, "line", 1, (157.5, 0)), (4, "line", 2, (0, -5))]
     print(json.dumps(sketch.branch_words(ends, {0: "circle", 2: "line", 4: "line"}, 183.0, dist_of(geo), [0])))
 ''')
-        self.assertEqual(got, ["lines 2 and 4 meet circle 0 at (157.5, 0): a wire branches there; an outline has two edges at each joint, "
-                               "so use an arc there, not a full circle"])
+        self.assertEqual(got, ["lines 2 and 4 meet circle 0 at (157.5, 0): a wire branches there"])
 
     def test_three_ends_at_one_point_and_one_end_on_a_line(self):
         got = in_a_process(GEO + '''
@@ -73,7 +72,7 @@ class Branches(unittest.TestCase):
     ends = [(g, "line", pos, (q.x, q.y)) for g, l in geo.items() for pos, q in ((1, l.StartPoint), (2, l.EndPoint))]
     print(json.dumps(sketch.branch_words(ends, {g: "line" for g in geo}, 120.0, dist_of(geo))))
 ''')
-        self.assertEqual(got, ["lines 0, 1 and 6 meet at (50, 0): a wire branches there; an outline has two edges at each joint",
+        self.assertEqual(got, ["lines 0, 1 and 6 meet at (50, 0): a wire branches there",
                                "line 6 meets line 7 at (50, 50)", "line 8 meets line 7 at (20, 50)"])
 
     def test_a_plain_outline_has_no_branch(self):
@@ -92,7 +91,7 @@ class Crossing(unittest.TestCase):
     at = {(0, 2): (7.5, 6.6), (1, 2): (40, 5)}
     print(json.dumps(sketch.cross_words(["circle 0", "circle 1", "the loop of lines 2, 3, 4 and 5"], lambda i, j: at.get((i, j)))))
 ''')
-        self.assertEqual(got, ["circle 0 meets the loop of lines 2, 3, 4 and 5 at (7.5, 6.6): a pad or pocket uses only loops that do not cross or touch; make one outline",
+        self.assertEqual(got, ["circle 0 meets the loop of lines 2, 3, 4 and 5 at (7.5, 6.6)",
                                "circle 1 meets the loop of lines 2, 3, 4 and 5 at (40, 5)"])
 
     def test_loops_apart_or_nested_say_nothing(self):
@@ -114,7 +113,7 @@ class RoundEnds(unittest.TestCase):
     print(json.dumps(sketch.open_end_words(ends, [0, 1, 2, 3], 161.6, dist_of(geo), [0, 3])))
 ''')
         # the other two ends are on circle 3 (radius 6): branches, which branch_words says
-        self.assertEqual(got, ["the start of line 1 [1, 1] (0, 7.4) and the start of line 2 [2, 1] (0, -7.4) are open ends, 14.8 mm apart. A closed outline has no open end"])
+        self.assertEqual(got, ["the start of line 1 [1, 1] (0, 7.4) and the start of line 2 [2, 1] (0, -7.4) are open ends, 14.8 mm apart"])
         self.assertNotIn("joins", " ".join(got))
 
     def test_a_circle_far_away_changes_nothing(self):
@@ -124,7 +123,7 @@ class RoundEnds(unittest.TestCase):
     ends = [(4, "line", 2, (0, 0.4)), (1, "line", 1, (0, 0))]
     print(json.dumps(sketch.open_end_words(ends, [0, 1, 2, 3, 4], 170.0, dist_of(geo), [0])))
 ''')
-        self.assertEqual(got, ["the end of line 4 [4, 2] (0, 0.4) and the start of line 1 [1, 1] (0, 0) are open ends, 0.4 mm apart. A closed outline has no open end"])
+        self.assertEqual(got, ["the end of line 4 [4, 2] (0, 0.4) and the start of line 1 [1, 1] (0, 0) are open ends, 0.4 mm apart"])
 
 
 # state_of on a stand-in sketch: its geometry, and its Shape's wires as FreeCAD builds them.
@@ -187,8 +186,8 @@ class Ready(unittest.TestCase):
 ''')
         self.assertEqual((got["wires"], got["closedWires"]), (2, 1))
         self.assertNotIn("openVertices", got)
-        self.assertFalse(got["readyForFeature"])
-        self.assertEqual(got["todo"], "lines 0, 1 and 6 meet at (50, 0): a wire branches there; an outline has two edges at each joint; "
+        self.assertNotIn("readyForFeature", got)
+        self.assertEqual(got["todo"], "lines 0, 1 and 6 meet at (50, 0): a wire branches there; "
                                       "lines 3, 4 and 6 meet at (50, 50)")
 
     def test_loops_that_cross_are_not_ready(self):
@@ -198,8 +197,9 @@ class Ready(unittest.TestCase):
     print(json.dumps(sketch.state_of(sk)))
 ''')
         self.assertEqual((got["wires"], got["closedWires"]), (2, 2))
-        self.assertFalse(got["readyForFeature"])
-        self.assertEqual(got["todo"], "circle 0 meets circle 1 at (10, 0): a pad or pocket uses only loops that do not cross or touch; make one outline")
+        self.assertNotIn("readyForFeature", got)
+        self.assertEqual((got["wiresMeet"], got["selfCrossing"]), (1, "not tested"))
+        self.assertEqual(got["todo"], "circle 0 meets circle 1 at (10, 0)")
 
     def test_a_loop_inside_another_and_one_loop_are_ready(self):
         got = in_a_process(STATE + '''
@@ -207,9 +207,10 @@ class Ready(unittest.TestCase):
     nested = sketch.state_of(sketch_of(geo, [circle_wire(geo[0]), circle_wire(geo[1])], 57.0))
     one = sketch.state_of(sketch_of({0: geo[0]}, [circle_wire(geo[0])], 57.0))
     none = sketch.state_of(sketch_of({}, [], 0.0))
-    print(json.dumps([nested["readyForFeature"], one["readyForFeature"], none["readyForFeature"], none["todo"]]))
+    print(json.dumps([nested["wiresMeet"], one["wiresMeet"], "wiresMeet" in none, none.get("todo"), "readyForFeature" in nested]))
 ''')
-        self.assertEqual(got, [True, True, False, "no profile yet: sketch_add"])
+        # facts only (27 Nov): no word on ready; a sketch with no wire has no todo and no crossing test
+        self.assertEqual(got, [0, 0, False, None, False])
 
     def test_circles_plus_lines_name_the_round_ends(self):
         # crank, gpt-oss and gemma: full circles plus two lines that end on them
@@ -218,10 +219,9 @@ class Ready(unittest.TestCase):
     sk = sketch_of(geo, [circle_wire(geo[0]), circle_wire(geo[1]), lines_wire(geo, [2]), lines_wire(geo, [3])], 76.7)
     print(json.dumps(sketch.state_of(sk)))
 ''')
-        self.assertFalse(got["readyForFeature"])
         self.assertNotIn("coincident joins them", got["todo"])
-        self.assertEqual(got["todo"], "line 2 meets circle 0 at (0, -10): a wire branches there; an outline has two edges at each joint, "
-                                      "so use an arc there, not a full circle; line 2 meets circle 1 at (60, -6); line 3 meets circle 1 at (60, 6); "
+        self.assertEqual(got["todo"], "line 2 meets circle 0 at (0, -10): a wire branches there; "
+                                      "line 2 meets circle 1 at (60, -6); line 3 meets circle 1 at (60, 6); "
                                       "line 3 meets circle 0 at (0, 10)")
 
 
@@ -230,9 +230,10 @@ class Words(unittest.TestCase):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]
         d = e["sketch_add"]["description"]
-        self.assertIn("Round ends joined by straight sides: draw arcs, not full circles. A full circle is a closed loop of its own.", d)
-        self.assertIn("sketch_constrain tangent on their two end points [[line, v], [arc, v]]", d)
-        self.assertIn("It is false for an open wire, a branch, or closed loops that cross or touch.", e["sketch_state"]["description"])
+        self.assertIn("A full circle is a closed wire of its own.", d)
+        self.assertNotIn("draw arcs, not full circles", d)  # facts only (27 Nov)
+        self.assertIn("sketch_constrain tangent on two end points [[line, v], [arc, v]]", d)
+        self.assertNotIn("readyForFeature", e["sketch_state"]["description"])
         with open(os.path.join(ROOT, "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
             g = f.read()
         for pair in ("`refs: [[2, 1], [0, 2]]`", "`[[2, 2], [1, 1]]`", "`[[1, 2], [3, 1]]`", "`[[3, 2], [0, 1]]`"):

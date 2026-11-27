@@ -69,7 +69,7 @@ class OpenEndsNameNoConstraint(unittest.TestCase):
 
     def test_a_line_and_an_arc(self):
         got = self.words([[2, "line", 1, [10, 20]], [0, "arc", 2, [10, 20.009]]])
-        self.assertEqual(got, ["the start of line 2 [2, 1] (10, 20) and the end of arc 0 [0, 2] (10, 20.009) are open ends, 0.009 mm apart. A closed outline has no open end"])
+        self.assertEqual(got, ["the start of line 2 [2, 1] (10, 20) and the end of arc 0 [0, 2] (10, 20.009) are open ends, 0.009 mm apart"])
         # The arc found first: the same two ends, in the order found.
         got = self.words([[0, "arc", 2, [10, 20]], [2, "line", 1, [10, 20.009]]])
         self.assertIn("the end of arc 0 [0, 2] (10, 20) and the start of line 2 [2, 1] (10, 20.009) are open ends, 0.009 mm apart", got[0])
@@ -83,7 +83,7 @@ class OpenEndsNameNoConstraint(unittest.TestCase):
     def test_the_card_says_what_joins_a_line_to_an_arc(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             card = json.load(f)["entries"]["sketch_add"]["description"]
-        self.assertIn("Join each line to an arc with sketch_constrain tangent on their two end points", card)
+        self.assertIn("sketch_constrain tangent on two end points [[line, v], [arc, v]] makes them coincident and smooth.", card)
 
 
 class PartialProfiles(unittest.TestCase):

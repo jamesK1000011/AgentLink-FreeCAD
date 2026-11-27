@@ -53,6 +53,8 @@ WAIVERS = {
     ("sketch_add", "items"): "the input items is gone (27 Nov): one call adds one shape, and kind and its inputs stand beside tool; no alias, rule R5",
     ("td_cosmetic", "items"): "the input items is gone (27 Nov): one call adds one figure, and kind and its inputs stand beside tool; no alias, rule R5",
     ("cam_property_bag", "properties"): "the input properties is gone (27 Nov): one call adds one value (property, type, value, group); no alias, rule R5",
+    ("pd_chamfer", "only"): "the hub does not refuse a chamfer that changes nothing (27 Nov, facts only): FreeCAD keeps it, and the answer gives volume change 0",
+    ("pd_pad", "sketch_state"): "the advice to use sketch_state first is gone (27 Nov, facts only: no method advice in a card)",
     ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 

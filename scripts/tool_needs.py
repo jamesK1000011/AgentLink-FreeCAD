@@ -115,7 +115,7 @@ READ_METHODS = (
     "inverse", "inverted", "isIdentity", "isSame", "toMatrix", "toEuler", "toEulerAngles", "getYawPitchRoll", "isNull", "isValid", "isClosed",
     "isSolid", "isInside", "isPartner", "distToShape", "common", "fuse", "section", "removeSplitter", "slices", "makeOffsetShape", "makeOffset2D",
     "makeThickness", "makeFillet", "makeChamfer", "extrude", "revolve", "transformGeometry", "transformed", "translated", "rotated", "scaled",
-    "childShapes", "ancestorsOfType", "findPlane", "getElement", "countElement", "valueAt", "tangentAt", "normalAt", "parameterAt", "curvatureAt",
+    "childShapes", "ancestorsOfType", "findPlane", "getElement", "countElement", "optimalBoundingBox", "valueAt", "tangentAt", "normalAt", "parameterAt", "curvatureAt",
     "derivative1At", "discretize", "toShape", "toNurbs", "value", "normal", "tangent", "parameter", "curvature", "projectPoint", "isPlanar",
     "intersected", "united", "getPoint", "closestPoint", "countComponents", "getSeparateComponents", "hasNonManifolds", "hasSelfIntersections",
     "hasNonUniformOrientedFacets", "countNonUniformOrientedFacets", "getPlanarSegments", "getSegmentsOfType", "getSegmentsByCurvature",

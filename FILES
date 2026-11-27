@@ -168,7 +168,6 @@ agentlink/livenames.py
 agentlink/livescript.py
 agentlink/loftmath.py
 agentlink/materials.py
-agentlink/measured.py
 agentlink/memguard.py
 agentlink/meshbool.py
 agentlink/meshdist.py
@@ -407,6 +406,7 @@ tests/test_ext_root_addon.py
 tests/test_extstate.py
 tests/test_face_selectors.py
 tests/test_facepick.py
+tests/test_factsonly_1127.py
 tests/test_failure_trace.py
 tests/test_famfix.py
 tests/test_fastpath.py
@@ -479,7 +479,6 @@ tests/test_lost_face_1124.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py
-tests/test_measure_gate.py
 tests/test_meshbool.py
 tests/test_meshdist.py
 tests/test_meshformats.py

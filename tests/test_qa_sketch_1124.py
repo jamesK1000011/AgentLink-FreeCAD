@@ -270,7 +270,7 @@ class OpenEnds(unittest.TestCase):
     # 27 Nov (owner): the words are facts only. Each open end has its ref and
     # the measured distance to the nearest other open end. No share of the
     # outline's size decides anything, and nothing says what was meant.
-    TAIL = ". A closed outline has no open end"
+    TAIL = ""
 
     def test_a_stray_line_says_its_open_end_and_the_distance(self):
         # A closed rectangle (0-3, the last side ending at (0, 0)) and line 4 from its corner out to (150, 0).
@@ -319,7 +319,8 @@ class OpenEnds(unittest.TestCase):
     def test_state_of_uses_the_words(self):
         with open(os.path.join(ROOT, "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
             src = f.read()
-        self.assertIn('why += said or ["close the open wires: coincident constraints at the open vertices"]', src)
+        self.assertIn("said += _branch_words(sk, joins) + gaps", src)
+        self.assertNotIn("close the open wires", src)  # facts only (27 Nov)
 
     def test_the_sketch_ends_are_matched_to_their_curves(self):
         got = in_a_process(SETUP + '''
@@ -347,7 +348,7 @@ class OpenEnds(unittest.TestCase):
                                Shape=types.SimpleNamespace(BoundBox=types.SimpleNamespace(DiagonalLength=158.1)))
     print(json.dumps(sketch._open_end_words(sk, [[150.0, 0.0]])))
 ''')
-        self.assertEqual(got, ["the end of line 4 [4, 2] (150, 0) is an open end, the only one. A closed outline has no open end"])
+        self.assertEqual(got, ["the end of line 4 [4, 2] (150, 0) is an open end, the only one"])
 
 
 class ItemIndex(unittest.TestCase):

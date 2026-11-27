@@ -300,7 +300,8 @@ class RefineOnAWeldment(unittest.TestCase):
             F.pipe_options(f, {"refine": True})
             print(json.dumps([off, f.Refine]))
         ''')
-        self.assertEqual(got, [False, True])
+        # 27 Nov, FreeCAD's defaults everywhere: refine left out keeps the value FreeCAD gave the Pipe
+        self.assertEqual(got, [True, True])
 
     def test_the_guide_has_the_trap(self):
         with open(os.path.join(ROOT, "agentlink", "guides", "design.md"), encoding="utf-8") as f:

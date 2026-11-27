@@ -170,7 +170,7 @@ def tools(session):
         return None, f"relative: FreeCAD's default — {src.Label} is inside {(parent or pc.body_of(src)).Label}"
 
     # What the tools' entries (agentlink/data/tools.json) call by name.
-    helpers = {"doc": doc, "new": new, "binder_relative": binder_relative, "attach_origin": attach_origin, "attach_on": attach_on, "keep_teeth": keep_teeth, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
+    helpers = {"not_given": pc.not_given, "doc": doc, "new": new, "binder_relative": binder_relative, "attach_origin": attach_origin, "attach_on": attach_on, "keep_teeth": keep_teeth, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
                "settle": lambda b, f, tool, before=None, must_change=None, hint="", seen=None: pc.settle(s, b, f, tool, before, must_change, hint=hint, **({} if seen is None else {"seen": seen})),
                "unique": lambda label, *own: s.unique(label, *own), "body": lambda ref: pc.pd_body(doc(), ref),
                "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b, s), "in_body": pc.in_body, "body_of": pc.body_of, "volume": pc.volume,

@@ -11,7 +11,10 @@ The rules (owner, 27 Nov):
     guess. Where a number was not measured, the sentence is left out.
   - Numbers in mm, rounded to 2 places. World axes are X, Y and Z.
   - The only tolerance is the equality tolerance TOL that the answers
-    already used (beyond_sides, added_sentence): 1e-3 mm.
+    already used (beyond_sides, added_sentence): 1e-3 mm. A volume change
+    is said as its number rounded to 2 places; the words "added" and
+    "removed" follow the sign of that rounded number, and a change that
+    rounds to 0 is said as "volume change 0 mm³".
   - A cap that hides items says how many are not shown.
   - A box against another box uses one set of words everywhere (against):
     "past -x by 5", "inside (10 from -x, 20 from +x)". World axes.
@@ -76,8 +79,8 @@ def feature_head(label, tool, delta):
     words; the tool's own words are used when there is none."""
     if delta is None:
         return f"{label} {TOOL_PHRASE.get(tool, 'changed the body')}."
-    if abs(delta) <= 1e-2:  # FreeCAD's volume noise, as settle reads it
-        return f"{label} left the volume as it was."
+    if num(delta) == "0":  # the number as it is said: no other limit
+        return f"{label}: volume change 0 mm³."
     word = "added" if delta > 0 else "removed"
     return f"{label} {word} material, volume change {signed(delta)} mm³."
 
@@ -140,12 +143,12 @@ def profiles_text(n, looked, part, none, cut=True):
 def body_change_text(body, vol0, vol1, box0=None, box1=None, solids0=None, solids1=None):
     """What one call changed of a body, from its volume, box and solids
     before and after: "This call changed Body: volume change -196.35 mm³,
-    now 14053.65 mm³." or "This call left the volume of Body as it was
-    (14250 mm³)." Then the two boxes when they differ, and the solids when
-    their count differs."""
+    now 14053.65 mm³." or "After this call the volume of Body is 14250 mm³:
+    volume change 0 mm³." Then the two boxes when they differ, and the
+    solids when their count differs."""
     delta = vol1 - vol0
-    if abs(delta) <= 1e-2:  # FreeCAD's volume noise, as feature_head reads it
-        out = [f"This call left the volume of {body} as it was ({num(vol1)} mm³)."]
+    if num(delta) == "0":  # the number as it is said: no other limit
+        out = [f"After this call the volume of {body} is {num(vol1)} mm³: volume change 0 mm³."]
     else:
         out = [f"This call changed {body}: volume change {signed(delta)} mm³, now {num(vol1)} mm³."]
     if box0 is not None and box1 is not None and any(abs(a - b) > TOL for a, b in zip(box0, box1)):
@@ -233,17 +236,24 @@ def feature_result(label, tool, delta, region=None, region_more=0, old_box=None,
     return " ".join(t for t in out if t)
 
 
-def dressup_result(label, tool, delta, n_edges, size_words, edge_lines, solids=None, solids_was=None):
-    """The result line of a fillet or a chamfer: the edge words that the
-    answer already had, and the radius or size read from the feature."""
-    verb = EDGE_VERB.get(tool, "changed")
-    head = f"{label} {verb} {plural(n_edges, 'edge')}"
+def dressup_result(label, tool, delta, n_edges, size_words, edge_lines, solids=None, solids_was=None, changed=None, body_box=None):
+    """The result line of a fillet or a chamfer: how many edges the feature
+    holds (what FreeCAD was given), how many of them the result changed
+    (changed: a measured count, or None when not measured: an edge counts
+    when its mid-point is not on the body's surface after the feature),
+    the radius or size read from the feature, the edge words that the
+    answer already had, and the body's box after (body_box)."""
+    head = f"{label}: FreeCAD was given {plural(n_edges, 'edge')}"
+    if changed is not None:
+        head += f"; the result changed {changed} of them"
     if size_words:
         head += f", {size_words}"
     head += f", volume change {signed(delta)} mm³." if delta is not None else "."
     out = [head]
     if edge_lines:
         out.append("Edges: " + "; ".join(edge_lines) + ".")
+    if body_box is not None:
+        out.append(f"The body now is {box_text(body_box)}.")
     out.append(solids_text(solids, solids_was))
     return " ".join(t for t in out if t)
 
@@ -328,7 +338,14 @@ def pt(p):
 def default_text(default):
     """"center not given, so center is [0, 0]": an input that places the
     shape, which the call did not give, and the value the tool used."""
-    return "; ".join(f"{k} not given, so {k} is [{', '.join(num(c) for c in v)}]" for k, v in (default or {}).items())
+    def word(v):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (list, tuple)):
+            return f"[{', '.join(num(c) for c in v)}]"
+        return num(v)
+
+    return "; ".join(f"{k} not given, so {k} is {word(v)}" for k, v in (default or {}).items())
 
 
 def shape_text(kind, ids, xr=None, yr=None, world=None, circle=None, arc=None, line=None, default=None):

@@ -18,7 +18,6 @@ from .. import geometry as geo
 from .. import orient
 from .. import resultline as rl
 from .. import runners
-from ..once import DOF_NOTE
 from ..protocol import ToolError
 from . import pd_common as pc
 from . import picks
@@ -68,7 +67,7 @@ def body_ranges(b, sk):
         shape = b.Shape
         if shape is None or shape.isNull() or not shape.Solids:
             return None
-        return rl.frame_ranges(frame_of(sk), _box6(shape.BoundBox))
+        return rl.frame_ranges(frame_of(sk), _box6(geo.bound_box(shape)))
     except Exception:  # noqa: BLE001 - no reading: nothing said
         return None
 
@@ -94,7 +93,7 @@ def face_ranges(link, sk):
         sub = subs[0] if subs else ""
         if not isinstance(sub, str) or not sub.startswith("Face"):
             return None
-        return rl.frame_ranges(frame_of(sk), _box6(obj.Shape.getElement(sub).BoundBox))
+        return rl.frame_ranges(frame_of(sk), _box6(geo.bound_box(obj.Shape.getElement(sub))))
     except Exception:  # noqa: BLE001 - no reading: nothing said
         return None
 
@@ -311,10 +310,6 @@ def open_end_words(ends, curves, size, dist, rounds=(), joined=None):
             words.append(f"{me} is an open end; the nearest other open end is {_end_words(g2, k2, s2, q)}, {_mm(d)} mm away")
     if len(words) > OPEN_ENDS_SHOWN:
         words = words[:OPEN_ENDS_SHOWN] + [f"and {len(words) - OPEN_ENDS_SHOWN} more open ends (openVertices)"]
-    if words:
-        # Why an open end is in the todo, once. No constraint is named: which
-        # ends go together is not measured (the cards say what joins two points).
-        words[-1] += ". A closed outline has no open end"
     return words
 
 
@@ -359,7 +354,7 @@ def branch_words(ends, curves, size, dist, rounds=(), joins=()):
                 break
         else:
             spots.append((p, [(kind, gid)]))
-    words, round_ = [], False
+    words = []
     for p, at_ in spots:
         mine = {g for _k, g in at_}
         through = [(curves[g], g) for g in curves if g not in mine and dist(g, p) <= tol and not joined(mine, p, g)]
@@ -368,15 +363,14 @@ def branch_words(ends, curves, size, dist, rounds=(), joins=()):
         who = _names(at_)
         if through:
             words.append(f"{who} {'meets' if len(at_) == 1 else 'meet'} {_names(through)} at {_at(p)}")
-            round_ = round_ or any(g in rounds for _k, g in through)
         else:
             words.append(f"{who} meet at {_at(p)}")
     if not words:
         return []
     if len(words) > 4:
         words = words[:4] + [f"and {len(words) - 4} more points where a wire branches"]
-    # The why, once: on the first point.
-    words[0] += ": a wire branches there; an outline has two edges at each joint" + (", so use an arc there, not a full circle" if round_ else "")
+    # The measured fact, once: on the first point.
+    words[0] += ": a wire branches there"
     return words
 
 
@@ -394,7 +388,6 @@ def cross_words(loops, meet):
         return []
     if len(words) > 4:
         words = words[:4] + [f"and {len(words) - 4} more loops that meet"]
-    words[0] += ": a pad or pocket uses only loops that do not cross or touch; make one outline"
     return words
 
 
@@ -438,9 +431,28 @@ def _branch_words(sk, joins=()):
 MAX_LOOPS = 40   # closed wires past which the crossing test is not run
 
 
+def cross_test(sk, wires):
+    """The crossing test of the closed wires of sketch sk, as facts (27 Nov,
+    facts only): (words, why). words: cross_words' list ([] when no two
+    closed wires meet), or None when the test did not run; why: the reason
+    then ("" when it ran). The test compares each closed wire with each
+    other closed wire. It does not compare a wire with itself."""
+    try:
+        loops = [w for w in wires if w.isClosed()]
+    except Exception:  # noqa: BLE001
+        return None, "the wires were not read"
+    if len(loops) > MAX_LOOPS:
+        return None, f"{len(loops)} closed wires, and the test runs for {MAX_LOOPS} at most"
+    if len(loops) < 2:
+        return [], ""
+    got = _cross_words(sk, wires)
+    return (None, "the wires were not read") if got is None else (got, "")
+
+
 def _cross_words(sk, wires):
     """cross_words for the closed wires of sketch sk (its Shape's, in the
-    world: read back into the sketch's own x/y); [] when it cannot be read."""
+    world: read back into the sketch's own x/y); [] when none meet or the
+    test did not run, None when it cannot be read."""
     try:
         loops = [w for w in wires if w.isClosed()]
         if len(loops) < 2 or len(loops) > MAX_LOOPS:
@@ -474,8 +486,8 @@ def _cross_words(sk, wires):
             return (q.x, q.y)
 
         return cross_words([name(w) for w in loops], meet)
-    except Exception:  # noqa: BLE001 - no reading: nothing said
-        return []
+    except Exception:  # noqa: BLE001 - no reading: said as not tested
+        return None
 
 
 def _open_end_words(sk, openv, joined=None):
@@ -565,34 +577,53 @@ def state_of(sk):
         "closedWires": closed,
     }
     if openv:
-        out["openVertices"] = openv[:12]
+        out["openVertices"] = openv[:OPEN_LISTED]
+        if len(openv) > OPEN_LISTED:
+            out["openVerticesCount"] = len(openv)  # the list is cut: the count of all
+    points = _free_points(sk)
+    if points:
+        out["points"] = points
     for k, v in (("conflicting", conflicting), ("redundant", redundant), ("partiallyRedundant", partial), ("malformed", malformed)):
         if v:
             out[k] = v
-    # Ready only when every wire is closed (open wires with T-junctions have
-    # no one-edge end) and no two closed wires cross or touch: FreeCAD makes
-    # a face of loops apart or one inside another (a hole), not of loops
-    # that meet.
-    cross = _cross_words(sk, wires) if wires and closed == len(wires) else []
-    ready = code == 0 and not conflicting and not redundant and not malformed and bool(wires) and closed == len(wires) and not cross
-    out["readyForFeature"] = ready
-    if not ready:
-        why = []
-        if conflicting or redundant or malformed or code != 0:
-            why.append("fix the constraints named (sketch_edit deleteConstraints)")
-        if openv or (wires and closed < len(wires)):
-            joins = []
-            gaps = _open_end_words(sk, openv, joins)
-            said = _branch_words(sk, joins) + gaps
-            why += said or ["close the open wires: coincident constraints at the open vertices"]
-        why += cross
-        if not wires:
-            why.append("no profile yet: sketch_add")
-        out["todo"] = "; ".join(why) or "the sketch has no closed wire"
-    elif dof:
-        # Its words after the count are said once a conversation (agentlink/once.py).
-        out["note"] = f"{dof} degrees of freedom: {DOF_NOTE}"
+    # Facts only (27 Nov): no word says whether the sketch is ready for a
+    # feature. FreeCAD's Hole takes a sketch of points only; a pipe's path is
+    # an open wire. The measured state: the wires, the open ends, the points,
+    # and the closed wires that meet another closed wire (where that test ran).
+    cross = []
+    if closed:
+        cross, why_not = cross_test(sk, wires)
+        if cross is None:
+            out["wiresMeet"] = f"not tested: {why_not}"
+            cross = []
+        else:
+            out["wiresMeet"] = len(cross)
+        out["selfCrossing"] = "not tested"
+    said = []
+    if openv or (wires and closed < len(wires)):
+        joins = []
+        gaps = _open_end_words(sk, openv, joins)
+        said += _branch_words(sk, joins) + gaps
+    said += cross
+    if said:
+        out["todo"] = "; ".join(said)
     return out
+
+
+OPEN_LISTED = 12  # open ends that openVertices lists; openVerticesCount says how many there are
+
+
+def _free_points(sk):
+    """How many points of sketch sk are not construction geometry (FreeCAD's
+    Hole drills at each one, by its BaseProfileType)."""
+    n = 0
+    try:
+        for i, g in enumerate(sk.Geometry):
+            if _geo_kind(g) == "Point" and not sk.getConstruction(i):
+                n += 1
+    except Exception:  # noqa: BLE001 - not read: not said
+        return 0
+    return n
 
 
 def item_error(e):
@@ -643,14 +674,33 @@ ORIGIN_DEFAULT = {"circle": "center", "rectangle": "center", "rounded_rectangle"
                   "arc_slot": "center", "ellipse": "center", "hyperbola": "center", "parabola": "vertex"}
 
 
+# The other inputs a builder fills when the call does not give them:
+# {kind: {input: the value build uses}} (27 Nov, facts only: every value
+# that the tool stored and the call did not give is said). A parabola's
+# from and to (-2 and 2 times its focal) and what a kind refuses when left
+# out (a radius, a size) are not here.
+VALUE_DEFAULT = {"arc": {"start": 0, "end": 90}, "arc_slot": {"start": 0, "end": 90}, "polygon": {"sides": 6, "rotation": 0},
+                 "ellipse": {"rotation": 0}, "parabola": {"rotation": 0}, "hyperbola": {"rotation": 0, "from": -1, "to": 1},
+                 "bspline": {"closed": False, "interpolate": True}, "polyline": {"closed": False}}
+
+
 def by_default(item):
-    """{input: [0, 0]} when the builder places this shape at the sketch
-    origin because the call did not give that input; else None."""
+    """{input: value} for each input that the builder filled because the
+    call did not give it: the place ([0, 0], the sketch origin) and the
+    values of VALUE_DEFAULT; None when the call gave them all."""
     k = item.get("kind")
+    out = {}
     f = ORIGIN_DEFAULT.get(k)
-    if f is None or f in item or (k in ("rectangle", "rounded_rectangle") and "corner" in item):
-        return None
-    return {f: [0, 0]}
+    if not (f is None or f in item or (k in ("rectangle", "rounded_rectangle") and "corner" in item)):
+        out[f] = [0, 0]
+    for name, v in VALUE_DEFAULT.get(k, {}).items():
+        if item.get(name) is None:
+            out[name] = v
+    if k == "bspline" and item.get("interpolate") is False and item.get("degree") is None:
+        out["degree"] = 3
+    if item.get("construction") is None:
+        out["construction"] = False
+    return out or None
 
 
 def _origin_or(item, field):
@@ -1126,14 +1176,14 @@ def lies_words(sk, world):
     f = support_face(sk)
     if f is not None:
         try:
-            out.append(rl.lies_text("the face", world, _box6(f.BoundBox), flat=True))
+            out.append(rl.lies_text("the face", world, _box6(geo.bound_box(f)), flat=True))
         except Exception:  # noqa: BLE001
             pass
     try:
         b = pc.body_of(sk)
         shape = b.Shape if b is not None else None
         if shape is not None and not shape.isNull() and shape.Solids:
-            out.append(rl.lies_text("the body", world, _box6(shape.BoundBox)))
+            out.append(rl.lies_text("the body", world, _box6(geo.bound_box(shape))))
     except Exception:  # noqa: BLE001
         pass
     return [t for t in out if t]

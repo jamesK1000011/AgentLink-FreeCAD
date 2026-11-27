@@ -6560,7 +6560,7 @@
   },
   "pd_pad": {
    "group": "feature",
-   "description": "Pad a closed sketch into the body, along its normal. extent: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes face { side: \"+z\" }, { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. The first pad takes a length. The tool refuses an open sketch (use sketch_state first) and a pad inside the body. Faces and edges get new numbers: query again. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pad a closed sketch into the body, along its normal. extent: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes face { side: \"+z\" }, { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. length left out: FreeCAD's default, 10 mm. The first pad takes extent length. Faces and edges get new numbers: query again. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6619,9 +6619,9 @@
     {"refuse": {"fmt": "sides {side!r}: one, two (with length2) or symmetric."}, "when": "=side not in ('one', 'two', 'symmetric')"},
     {"refuse": {"fmt": "extent {typ}: {b.Label} has no solid to go up to yet — the first pad takes extent length."}, "code": "invalid_state", "when": "=typ != 'length' and tip is None"},
     {"let": {"L": "=a.length"}},
-    {"refuse": "length: mm, over 0 — or extent up_to_face | up_to_first | up_to_last.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
+    {"refuse": "length: mm, over 0 — or extent up_to_face | up_to_first | up_to_last.", "when": "=typ == 'length' and L is not None and (not is_num(L) or L <= 0)"},
     {"let": {"L2": "=a.length2"}},
-    {"refuse": "sides two: give length2, the mm on the other side of the sketch (length is this side's) — or sides symmetric to share length both ways.", "when": "=side == 'two' and typ == 'length' and (not is_num(L2) or L2 <= 0)"},
+    {"refuse": "length2: mm, over 0. It is the length on the other side of the sketch (length is this side's).", "when": "=side == 'two' and typ == 'length' and L2 is not None and (not is_num(L2) or L2 <= 0)"},
     {"let": {"taper": "=a.taper"}},
     {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; extent length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
     {"let": {"up_face": null}},
@@ -6641,7 +6641,7 @@
        {"set": {"f.Type": "UpToFace", "f.UpToFace": "=(tip, [up_face])"}}
       ],
       "length": [
-       {"set": {"f.Length": "=float(L)"}}
+       {"set": {"f.Length": "=float(L)"}, "when": "=L is not None"}
       ]
      },
      "else": [
@@ -6655,15 +6655,16 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "=tool", "=before", "add", "Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way."],
+    "with": ["=b", "=f", "=tool", "=before"],
     "then": [
-     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"},
+     {"do": "=not_given(out, a, {'extent': typ, 'length': num_json(f.Length) if typ == 'length' else None, 'sides': 'one', 'length2': num_json(f.Length2) if side == 'two' and typ == 'length' else None, 'reversed': False, 'taper': 0})"}
     ]
    }
   },
   "pd_pocket": {
    "group": "feature",
-   "description": "Pocket a closed sketch out of the body. The pocket starts on its sketch's plane and goes into the body, against the sketch's normal. To cut from below, sketch on the bottom face. reversed: true goes the other way, along the normal. The tool refuses a pocket that cuts nothing. Then use reversed: true, or put the sketch on the face that it goes into. extent: length | through_all | up_to_first | up_to_face (face). sides: one | two (length2) | symmetric. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pocket a closed sketch out of the body. The pocket starts on its sketch's plane and goes into the body, against the sketch's normal. reversed: true goes the other way, along the normal. length left out: FreeCAD's default, 5 mm. extent: length | through_all | up_to_first | up_to_face (face). sides: one | two (length2) | symmetric. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6722,9 +6723,9 @@
     {"let": {"side": "=a.sides or 'one'"}},
     {"refuse": {"fmt": "sides {side!r}: one, two (with length2) or symmetric."}, "when": "=side not in ('one', 'two', 'symmetric')"},
     {"let": {"L": "=a.length"}},
-    {"refuse": "length: mm, over 0 — or extent up_to_face | up_to_first | through_all.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
+    {"refuse": "length: mm, over 0 — or extent up_to_face | up_to_first | through_all.", "when": "=typ == 'length' and L is not None and (not is_num(L) or L <= 0)"},
     {"let": {"L2": "=a.length2"}},
-    {"refuse": "sides two: give length2, the mm on the other side of the sketch (length is this side's) — or sides symmetric to share length both ways.", "when": "=side == 'two' and typ == 'length' and (not is_num(L2) or L2 <= 0)"},
+    {"refuse": "length2: mm, over 0. It is the length on the other side of the sketch (length is this side's).", "when": "=side == 'two' and typ == 'length' and L2 is not None and (not is_num(L2) or L2 <= 0)"},
     {"let": {"taper": "=a.taper"}},
     {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; extent length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
     {"let": {"up_face": null}},
@@ -6744,7 +6745,7 @@
        {"set": {"f.Type": "UpToFace", "f.UpToFace": "=(tip, [up_face])"}}
       ],
       "length": [
-       {"set": {"f.Length": "=float(L)"}}
+       {"set": {"f.Length": "=float(L)"}, "when": "=L is not None"}
       ]
      },
      "else": [
@@ -6758,9 +6759,10 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "=tool", "=before", "cut", "Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way into the body."],
+    "with": ["=b", "=f", "=tool", "=before"],
     "then": [
-     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"},
+     {"do": "=not_given(out, a, {'extent': typ, 'length': num_json(f.Length) if typ == 'length' else None, 'sides': 'one', 'length2': num_json(f.Length2) if side == 'two' and typ == 'length' else None, 'reversed': False, 'taper': 0})"}
     ]
    }
   },
@@ -6816,15 +6818,16 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "=tool", "=before", "add", "The profile must be closed and lie wholly on one side of the axis (sketch_state)."],
+    "with": ["=b", "=f", "=tool", "=before"],
     "then": [
-     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"},
+     {"do": "=not_given(out, a, {'axis': 'V_Axis', 'angle': 360, 'sides': 'one', 'reversed': False})"}
     ]
    }
   },
   "pd_groove": {
    "group": "feature",
-   "description": "Cut by revolving a closed sketch about an axis (inputs as pd_revolution). The tool refuses a groove that cuts nothing. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Cut by revolving a closed sketch about an axis (inputs as pd_revolution). Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6875,15 +6878,16 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "=tool", "=before", "cut", "The profile must be closed and lie wholly on one side of the axis (sketch_state): reversed: true turns a part-turn groove the other way."],
+    "with": ["=b", "=f", "=tool", "=before"],
     "then": [
-     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"},
+     {"do": "=not_given(out, a, {'axis': 'V_Axis', 'angle': 360, 'sides': 'one', 'reversed': False})"}
     ]
    }
   },
   "pd_hole": {
    "group": "feature",
-   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. Put the sketch on the face that the holes go into. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: default true, the tap-drill size; cosmetic unless modelThread. threaded: false makes a clearance hole (fit close|normal|loose). depth: mm | \"through\". drillPoint: flat|angled. cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes (the number it drilled), diameter, thread, cut. For two or more circles, profiles names each circle that cut nothing. For each that cut only part, it gives the share of its volume that was cut. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a hole with its thread as data (threaded, no modelThread) and the thread on the drawing. Model a thread only for a printed thread. modelThread makes nothing when reversed or not through.",
+   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. Put the sketch on the face that the holes go into. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: true makes the tap-drill size; cosmetic unless modelThread. threaded: false (FreeCAD's default) makes a clearance hole. fit: close|normal|loose is FreeCAD's ThreadFit Fine|Medium|Coarse for ISO metric (default Medium). depth: mm | \"through\" (FreeCAD's default: 25 mm). drillPoint: flat|angled (FreeCAD's default: angled, 118 deg). cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes (the number it drilled), diameter, thread, cut. For two or more circles, profiles names each circle that cut nothing. For each that cut only part, it gives the share of its volume that was cut. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. With modelThread, the answer adds threadVolumeChange: the volume with the thread less the volume without it.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6948,16 +6952,16 @@
     {"do": "=tip_shape(b)"},
     {"let": {"before": "=volume(b)", "thread": "=a.thread", "d": "=a.diameter"}},
     {"refuse": "diameter: mm, over 0 — or thread: \"M5\" for a standard size.", "when": "=not thread and (not is_num(d) or d <= 0)"},
-    {"let": {"depth": "=a.get('depth', 'through')"}},
-    {"refuse": "depth: mm, over 0, or \"through\".", "when": "=depth != 'through' and (not is_num(depth) or depth <= 0)"},
-    {"let": {"point": "=a.get('drillPoint', 'flat')"}},
-    {"refuse": "drillPoint: flat or angled (118°).", "when": "=point not in ('flat', 'angled')"},
+    {"let": {"depth": "=a.depth"}},
+    {"refuse": "depth: mm, over 0, or \"through\".", "when": "=depth is not None and depth != 'through' and (not is_num(depth) or depth <= 0)"},
+    {"let": {"point": "=a.drillPoint"}},
+    {"refuse": "drillPoint: flat or angled (118°).", "when": "=point is not None and point not in ('flat', 'angled')"},
     {"let": {"fit": "=a.fit", "fit_names": "={'close': ('Fine', 'Close'), 'normal': ('Medium', 'Normal'), 'loose': ('Coarse', 'Loose', 'Wide')}"}},
-    {"refuse": "fit: close, normal or loose (a clearance hole's: with thread and threaded: false).", "when": "=fit is not None and fit not in fit_names"},
+    {"refuse": "fit: close, normal or loose (FreeCAD's ThreadFit Fine, Medium or Coarse; with thread and threaded: false).", "when": "=fit is not None and fit not in fit_names"},
     {"let": {"f": "=new(b, 'PartDesign::Hole', 'Hole')"}},
     {"set": {"f.Profile": "=sk"}},
     {"let": {"spots, points": "=hole_spots(sk, f)"}},
-    {"refuse": {"fmt": "{sk.Label} has no circles{' or points' if points else ''}: a hole is drilled at each circle's centre{' and at each point' if points else ''} — sketch_add them (not as construction) on the face the holes enter."}, "when": "=not spots"},
+    {"refuse": {"fmt": "{sk.Label} has no circles{' or points' if points else ''} that are not construction geometry: FreeCAD's Hole drills at each circle's centre{' and at each point' if points else ''}."}, "when": "=not spots"},
     {
      "when": "=thread",
      "then": [
@@ -6978,7 +6982,7 @@
         }
        ]
       },
-      {"set": {"f.ThreadSize": "=pick", "f.Threaded": "=bool(a.get('threaded', True))"}},
+      {"set": {"f.ThreadSize": "=pick", "f.Threaded": "=bool(a.get('threaded', False))"}},
       {"set": {"f.ModelThread": "=bool(a.get('modelThread', False))"}, "when": "=f.Threaded and has_prop(f, 'ModelThread')"},
       {
        "when": "=not f.Threaded and fit and has_prop(f, 'ThreadFit')",
@@ -6992,16 +6996,9 @@
       {"set": {"f.Diameter": "=float(d)"}}
      ]
     },
-    {
-     "when": "=depth == 'through'",
-     "then": [
-      {"set": {"f.DepthType": "ThroughAll"}}
-     ],
-     "else": [
-      {"set": {"f.DepthType": "Dimension", "f.Depth": "=float(depth)"}}
-     ]
-    },
-    {"set": {"f.DrillPoint": "='Angled' if point == 'angled' else 'Flat'"}},
+    {"set": {"f.DepthType": "ThroughAll"}, "when": "=depth == 'through'"},
+    {"set": {"f.DepthType": "Dimension", "f.Depth": "=float(depth)"}, "when": "=depth is not None and depth != 'through'"},
+    {"set": {"f.DrillPoint": "='Angled' if point == 'angled' else 'Flat'"}, "when": "=point is not None"},
     {"let": {"cut": "=a.cut"}},
     {
      "when": "=cut",
@@ -7025,11 +7022,13 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_hole", "=before", "cut", "The hole goes against the sketch's normal: put the sketch on the face it enters, or reversed: true."],
+    "with": ["=b", "=f", "pd_hole", "=before"],
     "then": [
      {"put": {"holes": "=holes_cut(spots, out)", "diameter": "=num_json(f.Diameter)"}},
      {"put": {"thread": "=f.ThreadSize + (' (cosmetic)' if f.Threaded and not get(f, 'ModelThread', False) else '' if f.Threaded else ' clearance')"}, "when": "=thread"},
-     {"put": {"cut": "={'type': f.HoleCutType, 'diameter': num_json(f.HoleCutDiameter), 'depth': num_json(f.HoleCutDepth)}"}, "when": "=cut"}
+     {"put": {"cut": "={'type': f.HoleCutType, 'diameter': num_json(f.HoleCutDiameter), 'depth': num_json(f.HoleCutDepth)}"}, "when": "=cut"},
+     {"put": {"threadVolumeChange": "=thread_change(b, f)"}, "when": "=get(f, 'ModelThread', False)"},
+     {"do": "=not_given(out, a, {'threaded': False if thread else None, 'modelThread': False if thread and f.Threaded else None, 'fit': 'normal' if thread and not f.Threaded else None, 'depth': num_json(f.Depth), 'drillPoint': 'angled', 'reversed': False})"}
     ]
    }
   },
@@ -7084,11 +7083,11 @@
     {"let": {"f": "=new(b, 'PartDesign::Fillet', 'Fillet')"}},
     {"set": {"f.Base": "=(tip, subs)", "f.Radius": "=float(v)"}}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_fillet", "=before", "changed", "A radius larger than a face beside the edge fails, and edges that are already smooth (tangent) cannot be rounded: try smaller, or fewer edges.", "=seen"], "then": [{"put": {"on": "=seen"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_fillet", "=before", null, "", "=seen"], "then": [{"put": {"on": "=seen"}}, {"do": "=not_given(out, a, {'radius': 1})"}]}
   },
   "pd_chamfer": {
    "group": "feature",
-   "description": "Bevel edges of the body. edges: as pd_fillet: one selector, or a list of references. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. outside: true keeps the outside edges, false the inside edges. The tool refuses only a chamfer that changes nothing. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Bevel edges of the body. edges: as pd_fillet: one selector, or a list of references. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7146,7 +7145,7 @@
     {"set": {"f.ChamferType": "Two distances", "f.Size2": "=float(a.size2)"}, "when": "='size2' in a"},
     {"set": {"f.ChamferType": "Distance and Angle", "f.Angle": "=float(a.angle)"}, "when": "='size2' not in a and 'angle' in a"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_chamfer", "=before", "changed", "A chamfer wider than a face beside the edge fails: try smaller.", "=seen"], "then": [{"put": {"on": "=seen"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_chamfer", "=before", null, "", "=seen"], "then": [{"put": {"on": "=seen"}}, {"do": "=not_given(out, a, {'size': 1})"}]}
   },
   "pd_draft": {
    "group": "feature",
@@ -7196,9 +7195,10 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_draft", "=before", null, "Draft takes flat or cylindrical faces that meet the neutral plane and stand along the pull direction; reversed: true tilts them the other way."],
+    "with": ["=b", "=f", "pd_draft", "=before"],
     "then": [
-     {"put": {"on": "=subs"}}
+     {"put": {"on": "=subs"}},
+     {"do": "=not_given(out, a, {'angle': 1.5, 'neutral': 'XY', 'pull': 'z', 'reversed': False})"}
     ]
    }
   },
@@ -7246,15 +7246,16 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_thickness", "=before", "=None if a.outward else 'cut'", "A wall thicker than an inside fillet's radius or than a thin feature fails: thinner, or join: intersection; shell before filleting."],
+    "with": ["=b", "=f", "pd_thickness", "=before"],
     "then": [
-     {"put": {"on": "=subs"}}
+     {"put": {"on": "=subs"}},
+     {"do": "=not_given(out, a, {'thickness': 1, 'outward': False, 'join': 'arc'})"}
     ]
    }
   },
   "pd_mirrored": {
    "group": "feature",
-   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default) or a datum plane. Or face: a flat face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a mirror to a second set of features made by hand. A mirrored modelled thread changes its hand.",
+   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default) or a datum plane. Or face: a flat face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. A mirrored modelled thread changes its hand.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7321,15 +7322,16 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_mirrored", "=before", null, "A copy of a pocket or hole must land on material; a copy of a pad that does not touch the body makes a second solid."],
+    "with": ["=b", "=f", "pd_mirrored", "=before"],
     "then": [
-     {"put": {"repeated": "=took"}, "when": "=whole"}
+     {"put": {"repeated": "=took"}, "when": "=whole"},
+     {"do": "=not_given(out, a, {'plane': None if 'face' in a else 'YZ'})"}
     ]
    }
   },
   "pd_linear_pattern": {
    "group": "feature",
-   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. count: 2 or more, with the original. spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. For a grid: pd_multitransform. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count and the spacing.",
+   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. count: 1 or more, with the original (FreeCAD's default: 2). spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. This tool sets one direction. FreeCAD 1.1's LinearPattern also has Direction2 and Occurrences2. This tool does not set them. pd_multitransform with two linear steps also makes a grid. spacing and length left out: FreeCAD's default length, 100 mm. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7397,27 +7399,28 @@
       {"set": {"f.Originals": "=orig"}}
      ]
     },
-    {"let": {"n": "=a.get('count', 2)"}},
-    {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
-    {"refuse": "count: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
-    {"set": {"f.Occurrences": "=n"}},
+    {"let": {"n": "=a.count"}},
+    {"let": {"n": "=int(n)"}, "when": "=n is not None and is_float(n) and n.is_integer()"},
+    {"refuse": "count: a whole number, 1 or more, the original counted.", "when": "=n is not None and (not is_int(n) or n < 1)"},
+    {"set": {"f.Occurrences": "=n"}, "when": "=n is not None"},
     {"set": {"f.Direction": "=ref"}},
     {"let": {"step": "=a.get('spacing', a.get('length'))"}},
-    {"refuse": "spacing (mm between copies) or length (mm, first to last): one of them, over 0 — reversed: true goes the other way.", "when": "=not is_num(step) or step <= 0"},
-    {"set": {"f.Length": "=float(step) * (n - 1) if 'spacing' in a else float(step)"}},
+    {"refuse": "spacing (mm between copies) or length (mm, first to last): over 0.", "when": "=step is not None and (not is_num(step) or step <= 0)"},
+    {"set": {"f.Length": "=float(step) * (f.Occurrences - 1) if 'spacing' in a else float(step)"}, "when": "=step is not None"},
     {"set": {"f.Reversed": true}, "when": "=a.reversed"}
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_linear_pattern", "=before", null, "A copy of a pocket or hole must land on material; a copy of a pad that does not touch the body makes a second solid."],
+    "with": ["=b", "=f", "pd_linear_pattern", "=before"],
     "then": [
-     {"put": {"repeated": "=took"}, "when": "=whole"}
+     {"put": {"repeated": "=took"}, "when": "=whole"},
+     {"do": "=not_given(out, a, {'direction': 'x', 'count': f.Occurrences, 'length': None if 'spacing' in a else num_json(f.Length), 'reversed': False})"}
     ]
    }
   },
   "pd_polar_pattern": {
    "group": "feature",
-   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). count: with the original. angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count. Copies of a whole part go in the assembly as links.",
+   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). count: 1 or more, with the original (FreeCAD's default: 3). angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7482,10 +7485,10 @@
       {"set": {"f.Originals": "=orig"}}
      ]
     },
-    {"let": {"n": "=a.get('count', 2)"}},
-    {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
-    {"refuse": "count: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
-    {"set": {"f.Occurrences": "=n"}},
+    {"let": {"n": "=a.count"}},
+    {"let": {"n": "=int(n)"}, "when": "=n is not None and is_float(n) and n.is_integer()"},
+    {"refuse": "count: a whole number, 1 or more, the original counted.", "when": "=n is not None and (not is_int(n) or n < 1)"},
+    {"set": {"f.Occurrences": "=n"}, "when": "=n is not None"},
     {"set": {"f.Axis": "=ref"}},
     {"let": {"ang": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360 (360 spaces the copies evenly all round; less is first to last; reversed: true turns the other way).", "when": "=not is_num(ang) or not (0 < ang <= 360)"},
@@ -7494,9 +7497,10 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_polar_pattern", "=before", null, "A copy of a pocket or hole must land on material; a copy of a pad that does not touch the body makes a second solid."],
+    "with": ["=b", "=f", "pd_polar_pattern", "=before"],
     "then": [
-     {"put": {"repeated": "=took"}, "when": "=whole"}
+     {"put": {"repeated": "=took"}, "when": "=whole"},
+     {"do": "=not_given(out, a, {'axis': 'z', 'count': f.Occurrences, 'angle': 360, 'reversed': False})"}
     ]
    }
   },
@@ -7551,11 +7555,11 @@
     {"refuse": "sections: [sketch names] — the sketches after the first (sketch), in order; each on its own plane (pd_datum_plane, or sketch_new with offset).", "when": "=not secs or sk in secs"},
     {"set": {"f.Sections": "=secs", "f.Ruled": "=bool(a.get('ruled', False))", "f.Closed": "=bool(a.get('closed', False))"}}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_loft", "=before", "='cut' if sub else 'add'", "Sections must each be one closed wire and should have the same number of edges, started at matching corners; ruled: true for straight sides."]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_loft", "=before"]}
   },
   "pd_pipe": {
    "group": "feature",
-   "description": "Sweep a closed sketch along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. sketch: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: result (a one-line summary first), feature, sketch, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a path from the skeleton (a pd_binder) to an edge of a made solid. Keep each member of a weldment unrefined.",
+   "description": "Sweep a closed sketch along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. sketch: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: left out, FreeCAD's own value (its preference RefineModel; true when that is not set). Answer: result (a one-line summary first), feature, sketch, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7584,7 +7588,7 @@
      },
      "refine": {
       "type": "boolean",
-      "description": "FreeCAD's Refine on the pipe; false by default."
+      "description": "FreeCAD's Refine on the pipe; left out: FreeCAD's own value."
      }
     },
     "required": [
@@ -7614,7 +7618,7 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The sketch should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the sketch fails."],
+    "with": ["=b", "=f", "pd_pipe", "=before"],
     "then": [
      {"put": {"sketch": "=sk.Label", "path": "=path.Label", "edges": "=names"}, "when": "=made or a.edges is not None or not path.isDerivedFrom('Sketcher::SketchObject')"},
      {"put": {"sketchIs": "=held"}, "when": "=held"}
@@ -7858,7 +7862,7 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", null, "feature_remove", "=before", null, "A later feature was built on what this one made: feature_remove that one first, or feature_suppress this one instead."],
+    "with": ["=b", null, "feature_remove", "=before"],
     "then": [
      {"put": {"removed": "=removed", "tip": "=b.Tip.Label if b.Tip else None"}}
     ]
@@ -7898,7 +7902,7 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "feature_suppress", "=before", null, "A later feature needs what this one makes (its faces or edges): suppress or remove that one first."],
+    "with": ["=b", "=f", "feature_suppress", "=before"],
     "then": [
      {"put": {"suppressed": "=bool(f.Suppressed)"}}
     ]
@@ -8253,7 +8257,7 @@
   },
   "sketch_add": {
    "group": "sketch",
-   "description": "Add one shape to a sketch: rectangle, circle, line, arc, slot, polygon, ellipse, point and more. Its x/y are the sketch's own, in mm. Angles are deg, counter-clockwise from +x. One call adds one shape: a rectangle or a circle is one call, not four lines. Several shapes are several calls: in a batch, or with each. kind is the shape, and its own inputs stand beside it. The kinds follow. line {from, to}. polyline {points, closed}. arc {center, radius, start, end}. arc3 {points}. circle {center, radius|diameter}. circle3 {points}. ellipse {center, major, minor, rotation}. parabola {vertex, focal, rotation, from, to}. hyperbola {center, major, minor, rotation, from, to}. bspline {points, closed}. Or bspline {interpolate: false, points, degree}. rectangle {center|corner, size}. rounded_rectangle {…, radius}. polygon {center, radius, sides, rotation}. slot {from, to, radius}. arc_slot {center, radius, width, start, end}. point {at}. Example: a plate on XY is centred: { \"tool\": \"sketch_add\", \"kind\": \"rectangle\", \"center\": [0, 0], \"size\": [50, 40] }, padded 4. On its top, sketch_new { face: { side: \"+z\" } } answers bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }. A block on one corner takes corner [x min, y min]: kind rectangle, corner [-25, -20], size [10, 10]. Then pd_pad { length: 6 } makes the block. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints. The tool does not join separate shapes to each other; sketch_constrain coincident or tangent does that. Round ends joined by straight sides: draw arcs, not full circles. A full circle is a closed loop of its own. Join each line to an arc with sketch_constrain tangent on their two end points [[line, v], [arc, v]]. That makes them coincident and smooth. slot does this for two equal ends. With dims and name, param_bind binds the sizes. Answer: result (a one-line summary first), added [{ ids, constraints, dims }] and state. ids: the geometry ids of the shape, in the order made. The first shape of a sketch has ids from 0, and each next shape takes the next ids. The last id of a polygon is its construction circle. constraints: [first, last] ids. state: dof, closedWires, openVertices, readyForFeature. Vertices: 1 start, 2 end, 3 centre.",
+   "description": "Add one shape to a sketch: rectangle, circle, line, arc, slot, polygon, ellipse, point and more. Its x/y are the sketch's own, in mm. Angles are deg, counter-clockwise from +x. One call adds one shape: a rectangle or a circle is one call, not four lines. Several shapes are several calls: in a batch, or with each. kind is the shape, and its own inputs stand beside it. The kinds follow. line {from, to}. polyline {points, closed}. arc {center, radius, start, end}. arc3 {points}. circle {center, radius|diameter}. circle3 {points}. ellipse {center, major, minor, rotation}. parabola {vertex, focal, rotation, from, to}. hyperbola {center, major, minor, rotation, from, to}. bspline {points, closed}. Or bspline {interpolate: false, points, degree}. rectangle {center|corner, size}. rounded_rectangle {…, radius}. polygon {center, radius, sides, rotation}. slot {from, to, radius}. arc_slot {center, radius, width, start, end}. point {at}. Example: a plate on XY is centred: { \"tool\": \"sketch_add\", \"kind\": \"rectangle\", \"center\": [0, 0], \"size\": [50, 40] }, padded 4. On its top, sketch_new { face: { side: \"+z\" } } answers bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }. A block on one corner takes corner [x min, y min]: kind rectangle, corner [-25, -20], size [10, 10]. Then pd_pad { length: 6 } makes the block. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints. The tool does not join separate shapes to each other; sketch_constrain coincident or tangent does that. A full circle is a closed wire of its own. sketch_constrain tangent on two end points [[line, v], [arc, v]] makes them coincident and smooth. With dims and name, param_bind binds the sizes. Answer: result (a one-line summary first), added [{ ids, constraints, dims }] and state. ids: the geometry ids of the shape, in the order made. The first shape of a sketch has ids from 0, and each next shape takes the next ids. The last id of a polygon is its construction circle. constraints: [first, last] ids. state: dof, wires, closedWires, openVertices, points, wiresMeet. Vertices: 1 start, 2 end, 3 centre.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8633,7 +8637,7 @@
   },
   "sketch_state": {
    "group": "sketch",
-   "description": "Read the solver's state of a sketch. Check it before a feature. dof: 0 is fully constrained. Also conflicting / redundant / malformed constraint ids, closed wires and open vertices. readyForFeature, with todo when it is false. It is false for an open wire, a branch, or closed loops that cross or touch. Its frame in the world, as vectors (frame) and in words (axes). detail (default true): lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool. A pad on a sketch with dof > 0 works, but it moves when you edit the sketch.",
+   "description": "Read the solver's state of a sketch. dof: 0 is fully constrained. Also conflicting / redundant / malformed constraint ids, wires, closedWires and openVertices. openVertices lists 12 at most; openVerticesCount gives the count when there are more. points: the points that are not construction geometry. wiresMeet: how many pairs of closed wires cross or touch; the test runs for 40 closed wires at most. The test does not compare a wire with itself (selfCrossing: \"not tested\"). todo: each open end, each branch and each pair of wires that meet, as measured. Its frame in the world, as vectors (frame) and in words (axes). detail (default true): lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20293,7 +20297,7 @@
     {"do": "=attach_origin(b, f, place(a))"},
     {"set": {"b.Tip": "=f"}, "when": "=b.Tip != f"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_primitive", "=before", "='cut' if sub else 'add'", "at and rotate place it from the body's origin; a subtractive one must overlap the body."]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_primitive", "=before"]}
   },
   "pd_gear": {
    "group": "feature",
@@ -20473,11 +20477,11 @@
     {"set": {"f.Reversed": true}, "when": "=a.reversed"},
     {"set": {"b.Tip": "=f"}, "when": "=b.Tip != f"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_helix", "=before", "='cut' if sub else 'add'", "='The sketch is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the sketch\\'s height makes the turns run into one another.' + (' A cut must pass through the body.' if sub else ' An added helix must touch the body\\'s solid, if it has one, or it is a second solid.')"], "then": [{"put": {"helix": "={k: num_json(getprop(f, p)) for k, p in (('pitch', 'Pitch'), ('height', 'Height'), ('turns', 'Turns'))}"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_helix", "=before"], "then": [{"put": {"helix": "={k: num_json(getprop(f, p)) for k, p in (('pitch', 'Pitch'), ('height', 'Height'), ('turns', 'Turns'))}"}}]}
   },
   "pd_multitransform": {
    "group": "feature",
-   "description": "Repeat features through a chain of steps. Each step works on what the steps before it made. steps: [{ kind: mirror, plane } | { kind: linear, direction, occurrences, spacing } | { kind: polar, axis, angle, occurrences } | { kind: scale, factor, occurrences }]. A grid is two linear steps. A mirrored bolt circle is polar, then mirror. The steps stay in the body (feature_list: stepOf) and go with it. As FreeCAD's own command does, the tool hides the steps and lists them after the MultiTransform. The MultiTransform is the tip and the one shown. Prefer one multitransform to a chain of patterns of patterns.",
+   "description": "Repeat features through a chain of steps. Each step works on what the steps before it made. steps: [{ kind: mirror, plane } | { kind: linear, direction, occurrences, spacing } | { kind: polar, axis, angle, occurrences } | { kind: scale, factor, occurrences }]. Two linear steps make a grid (LinearPattern's Direction2 is another way). polar, then mirror, makes a mirrored bolt circle. The steps stay in the body (feature_list: stepOf) and go with it. As FreeCAD's own command does, the tool hides the steps and lists them after the MultiTransform. The MultiTransform is the tip and the one shown.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20527,7 +20531,7 @@
     {"set": {"b.Tip": "=mt"}, "when": "=b.Tip != mt"},
     {"set": {"mt.Visibility": true}}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=mt", "pd_multitransform", "=before", null, "A copy of a pocket must land on material; a scale step grows the copies about the originals' centre and comes after a pattern step with the same occurrences."], "then": [{"put": {"steps": "=[t.Label for t in subs]"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=mt", "pd_multitransform", "=before"], "then": [{"put": {"steps": "=[t.Label for t in subs]"}}]}
   },
   "pd_datum": {
    "group": "feature",
@@ -20734,7 +20738,7 @@
     {"do": "=f.addObjects(others)"},
     {"set": {"b.Tip": "=f"}, "when": "=b.Tip != f"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_boolean", "=before", "={'Fuse': 'add', 'Cut': 'cut'}.get(op)", "The bodies must overlap this one as they stand in the document; they move inside the boolean and follow their own edits."], "then": [{"put": {"bodies": "=[o.Label for o in others]"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_boolean", "=before"], "then": [{"put": {"bodies": "=[o.Label for o in others]"}}]}
   },
   "sketch_copy": {
    "group": "sketch",
@@ -21516,7 +21520,7 @@
   },
   "doc_new": {
    "group": "doc",
-   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). In the window, the new document comes to the front (front: true in the answer). You cannot undo this. A batch's rollback does not include it. Save it with doc_save when the part is built and measured. After a change, doc_save saves only after body_check, measure or get of a body. A file that other files link to needs its name first: an empty new document saves at once. For a project of several parts: one file for each part, in one folder, with a parameter file.",
+   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). In the window, the new document comes to the front (front: true in the answer). You cannot undo this. A batch's rollback does not include it. doc_save saves it.",
    "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
@@ -21581,7 +21585,7 @@
   },
   "doc_save": {
    "group": "doc",
-   "description": "Save the current document as .FCStd. path: a relative path goes in the session's folder; the tool adds .FCStd. Without path: where it was saved before, else <label>.FCStd in the session's folder. If that file exists: \"<label> 2.FCStd\" …. When you save under a new file name, FreeCAD changes the document's label to the file name (answer: label, labelWas). Its internal name stays. The tool never saves over the file of another document unless overwrite: true; ask the person first. An agent's own document may save over a file that this session saved from an agent's document. The materials, setups and notes that the tools recorded are saved with it. An agent's own document is saved only after its geometry is measured since the last change (body_check, measure or get of a body). Answer: path, bytes, touched / modified.",
+   "description": "Save the current document as .FCStd. path: a relative path goes in the session's folder; the tool adds .FCStd. Without path: where it was saved before, else <label>.FCStd in the session's folder. If that file exists: \"<label> 2.FCStd\" …. When you save under a new file name, FreeCAD changes the document's label to the file name (answer: label, labelWas). Its internal name stays. The tool never saves over the file of another document unless overwrite: true; ask the person first. An agent's own document may save over a file that this session saved from an agent's document. The materials, setups and notes that the tools recorded are saved with it. Answer: path, bytes.",
    "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "overwrite": {"type": "boolean"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
@@ -21593,7 +21597,7 @@
     {"when": "=a.get('path')", "then": [{"let": {"p": "=where(a.path, '.FCStd')", "mine": "=abspath(d.FileName) if d.FileName else None"}}, {"refuse": {"fmt": "{p} is another FreeCAD document already there: another name, or overwrite: true once the person says to replace it."}, "when": "=exists(p) and abspath(p) != mine and not a.get('overwrite') and not agent_file(d, p)"}, {"do": ["=makedirs(dirname(p))", "=d.saveAs(p)"]}], "else": [{"when": "=d.FileName", "then": [{"do": "=d.save()"}, {"let": {"p": "=d.FileName"}}], "else": [{"let": {"p": "=free_name(where((d.Label or d.Name) + '.FCStd'), a.get('overwrite'))"}}, {"do": "=d.saveAs(p)"}]}]},
     {"do": ["=saved(d)", "=note_agent_file(d, p)"]}
    ],
-   "answer": {"fields": {"document": "=d.Name", "label": "=d.Label", "path": "=p", "bytes": "=filesize(p)", "...": "=modified_state(d)", "labelWas": {"when": "=d.Label != label_was", "value": "=label_was"}, "linkWarning": {"when": "=lost_links(p)", "value": {"fmt": "Links in the saved file point to no file: {lost_links(p)}. A FreeCAD bug (issue 33468) can save a link path from the home folder. Make each link again with link_make {{ file, to }}, save, and check again."}}, "note": {"when": "=d.Label != label_was", "value": {"fmt": "Saved under a new file name, so FreeCAD relabelled the document {d.Label!r} (it was {label_was!r}); its name {d.Name!r} stays."}}}}
+   "answer": {"fields": {"document": "=d.Name", "label": "=d.Label", "path": "=p", "bytes": "=filesize(p)", "labelWas": {"when": "=d.Label != label_was", "value": "=label_was"}, "linkWarning": {"when": "=lost_links(p)", "value": {"fmt": "Links in the saved file point to no file: {lost_links(p)}. A FreeCAD bug (issue 33468) can save a link path from the home folder. Make each link again with link_make {{ file, to }}, save, and check again."}}, "note": {"when": "=d.Label != label_was", "value": {"fmt": "Saved under a new file name, so FreeCAD relabelled the document {d.Label!r} (it was {label_was!r}); its name {d.Name!r} stays."}}}}
   },
   "object_list": {
    "group": "doc",

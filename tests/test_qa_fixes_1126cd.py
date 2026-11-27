@@ -34,7 +34,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 sys.path.insert(0, HERE)
 
-from agentlink import measured, nexthint, protocol  # noqa: E402
+from agentlink import nexthint, protocol  # noqa: E402
 from agentlink.protocol import ToolError, check_input  # noqa: E402
 from test_hubfix2 import in_a_process  # noqa: E402
 from test_qa_sketch_1124 import SETUP  # noqa: E402
@@ -61,10 +61,10 @@ class StateIsFresh(unittest.TestCase):
     sk.Shape.Wires = [lines_wire(geo, [0, 1])]
     sk.Document.RecomputesFrozen = True
     held = sketch.state_of(sk)
-    print(json.dumps([len(built), fresh["readyForFeature"], fresh.get("openVertices"), held["readyForFeature"]]))
+    print(json.dumps([len(built), fresh["closedWires"], fresh.get("openVertices"), held["closedWires"], "readyForFeature" in fresh]))
 ''')
         # built once (not while a batch holds the recompute); the closed loop read at once
-        self.assertEqual(got, [1, True, None, False])
+        self.assertEqual(got, [1, 1, None, 0, False])
 
 
 class FarJoins(unittest.TestCase):
@@ -150,47 +150,6 @@ class Fillet(unittest.TestCase):
         self.assertEqual(entries("examples.json")["pd_fillet"]["forms"]["edges"], {"type": "line", "axis": "z", "outside": True})
 
 
-class SaveGate(unittest.TestCase):
-    def test_the_refusal_names_readings_get_gives(self):
-        rec = {"changed": 3, "measured": 1, "step": 9, "sigs": {"LidBody": [1.0]}}
-        w = measured.gate_words(rec, "Lid", {"LidBody": [2.0]}, True)
-        self.assertIn('get { what: "LidBody.volume" } (or .size, .area) measures it too.', w)
-        self.assertIn('body_check { body: "LidBody" } measures it: its answer gives volume, box and solids.', w)
-        self.assertNotIn(".solids", w)
-        # get really reads them (agentlink/fastpath.py SHAPE), and is a measure of them
-        from agentlink import fastpath
-
-        for k in ("volume", "size", "area"):
-            self.assertIn(k, fastpath.SHAPE)
-            self.assertTrue(measured.is_get_measure(f"LidBody.{k}", ["LidBody"]))
-
-    def test_a_feature_answer_counts_as_a_measure(self):
-        s = types.SimpleNamespace()
-        rec = {"changed": 0, "measured": 0, "sigs": {"LidBody": [1.0], "Other": [5.0]}}
-        measured.changed(s, rec, 9)
-        measured.answered(s, rec, {"LidBody": [2.0], "Other": [5.0]}, ["LidBody"])
-        self.assertIsNone(measured.gate_words(rec, "Lid", {"LidBody": [2.0], "Other": [5.0]}, True))
-        # a body the answer did not read still holds the save
-        measured.changed(s, rec, 10)
-        measured.answered(s, rec, {"LidBody": [3.0], "Other": [6.0]}, ["LidBody"])
-        self.assertIn("Changed: Other.", measured.gate_words(rec, "Lid", {"LidBody": [3.0], "Other": [6.0]}, True))
-
-
-class Answered(unittest.TestCase):
-    def test_a_feature_answer_notes_its_body(self):
-        got = in_a_process(SETUP + '''
-    from agentlink.families import pd_common as pc
-    class Ses:
-        pass
-    s = Ses()
-    pc.note_answered(s, types.SimpleNamespace(Label="LidBody"))   # no call open: nothing kept
-    s.__dict__["_answered"] = []
-    pc.note_answered(s, types.SimpleNamespace(Label="LidBody"))
-    print(json.dumps(s.__dict__["_answered"]))
-''')
-        self.assertEqual(got, ["LidBody"])
-
-
 class Box:
     def __init__(self, x0, x1):
         self.x0, self.x1 = x0, x1
@@ -251,29 +210,11 @@ class OnePointOneMessage(unittest.TestCase):
         # line 3 is an open end, said once, with the measured distance to the nearest other open end. No words of one
         # are held back for the other, and no constraint is named.
         self.assertIn("the end of line 3 [3, 2] (10, -0.003) is an open end; the nearest other open end is the end of line 0 [0, 2] (10, 0), 0.003 mm away"
-                      ". A closed outline has no open end", gaps)
+                      "", gaps)
         self.assertFalse([w for w in gaps if w.startswith("the end of line 0")], gaps)
         self.assertEqual(branches, before)
         self.assertTrue(before and "meets line 3" in before[0], before)
         self.assertNotIn("sketch_constrain", " ".join(gaps + branches))
-
-
-class CutSentence(unittest.TestCase):
-    def test_no_sentence_is_left_cut(self):
-        got = in_a_process(SETUP + '''
-    from agentlink.families import pd_common as pc
-    hs = ["The hole goes against the sketch's normal: put the sketch on the face it enters, or reversed: true.",
-          "Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way into the body.",
-          "The profile must be closed and lie wholly on one side of the axis (sketch_state): reversed: true turns a part-turn groove the other way.",
-          "reversed: true goes the other way. Then check it.",
-          "Nothing of it here."]
-    print(json.dumps([pc.drop_phrase(h, "reversed: true") for h in hs]))
-''')
-        self.assertEqual(got, ["The hole goes against the sketch's normal: put the sketch on the face it enters.",
-                               "Check the sketch with sketch_state (closed wires, no open vertices).",
-                               "The profile must be closed and lie wholly on one side of the axis (sketch_state).",
-                               "Then check it.",
-                               "Nothing of it here."])
 
 
 SCHEMA = {"type": "object", "properties": {"card": {"type": "string"}, "words": {"type": "string"}}, "additionalProperties": False}
@@ -315,7 +256,7 @@ class RoundEndsAndGaps(unittest.TestCase):
 ''')
         # 27 Nov (owner): the measured distance, by the same words as any two open ends; the hole decides nothing
         self.assertEqual(got, ["the end of line 1 [1, 2] (170.707, 12.48) and the start of line 2 [2, 1] (170.708, 12.48) are open ends, 0.001 mm apart"
-                               ". A closed outline has no open end"])
+                               ""])
 
     def test_one_end_near_a_hole_is_not_a_round_end(self):
         got = in_a_process(GEO + '''
@@ -324,7 +265,7 @@ class RoundEndsAndGaps(unittest.TestCase):
     print(json.dumps(sketch.open_end_words(ends, [1, 8], 110.0, dist_of(geo), [8])))
 ''')
         self.assertEqual(got, ["the start of line 1 [1, 1] (0, 0) and the end of line 1 [1, 2] (100, 8) are open ends, 100.319 mm apart"
-                               ". A closed outline has no open end"])
+                               ""])
         self.assertNotIn("an outline uses an arc there", got[0])
 
 

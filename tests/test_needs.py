@@ -47,7 +47,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 24 Nov, blind QA: + item_error (sketch_add's failed item by its index), body_extent (sketch_new's bodyExtent), sketch readers.
 # 24 Nov QA, edges by direction: + edge_words (feature reader: each edge given, in a short line).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch readers), axes (sketch_more reader).
-PIN = "b4dfefb9efe5c6d884b805c8d347c526c39fc503a3839dedcf10fe097b61f196"  # 27 Nov QA fixes: + by_default, face_said (scripts/tool_needs.py --why face_said: a reader)
+# 27 Nov, facts only: optimalBoundingBox is a read (the exact box), so box_of, stats, body_reading and their users read; + thread_change (a changer).
+PIN = "087fbf7c2730205583e5570ebbfb91b01304a00f99a9e10f3550811874e192d2"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -59,7 +60,7 @@ PIN = "b4dfefb9efe5c6d884b805c8d347c526c39fc503a3839dedcf10fe097b61f196"  # 27 N
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
 # 22 Nov, face selectors: + face_pick (a sketch reader).
 # 25 Nov orientation: + axes, on_words, face_pick_said (sketch), axes (sketch_more); up_frame is not a reader (it makes a placement).
-COUNTS = {"readers": 943, "changers": 160, "families": 37}
+COUNTS = {"readers": 954, "changers": 161, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -74,7 +75,7 @@ SUITES = {
 # 22 Nov, face selectors: pd 214 false, 305 true. sketch_new reads its face (face_pick) before it makes the sketch,
 # so "a face not found" and "a face on an empty body" are now told as the call's refusal.
 # 27 Nov: pd 211 false: sketch_add and sketch_constrain take one shape and one constraint, so three cases of a list that is not a list are gone.
-AT_LEAST = {"pd": (211, 305), "mesh": (133, 48), "td": (61, 73), "cam": (6, 2), "bim": (144, 155)}
+AT_LEAST = {"pd": (207, 305), "mesh": (133, 48), "td": (61, 73), "cam": (6, 2), "bim": (144, 155)}
 
 NUMPY = ("mesh", "td", "cam")
 CHARS_PER_TOKEN = 3.5
@@ -402,7 +403,7 @@ class Census(unittest.TestCase):
 # 784: object_set's three property/value refusals went with { property, value } (rename set 10, 24 Nov).
 # 782: sketch_add and sketch_constrain take one shape and one constraint: the refusals for a list that is not a list, or an item that is not an object, are gone (27 Nov).
 # 784: pd_binder refuses a faces list of objects, and a reference that is no face of the object, before it makes the binder (27 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 784, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 784, "noArgument": 38, "blocked": 108, "needsArguments": 196, "complete": 74, "noCheck": 64}
 
 
 class Agreement(unittest.TestCase):
@@ -900,7 +901,7 @@ def _states():
     calls += 1
     lead = {o: n for o, n in m.counts["notChecked"].items() if n}
     refused_outcome = "refusedLeading" if err and m.counts["notChecked"]["refusedLeading"] == 1 else f"{refused} {lead}"
-    fc.state["flags"] = {"effect": {"Pad": 0.0}}  # the pad adds nothing: refused after it was made
+    fc.state["flags"] = {"invalid": {"Pad 3": "Wire is not closed."}}  # FreeCAD fails the pad: refused after it was made
     later, err, _p = call("pd_pad", {"sketch": "Sketch", "length": 4})  # not 5 again: the same changing call again is refused before it runs
     fc.state["flags"] = {}
     calls += 1

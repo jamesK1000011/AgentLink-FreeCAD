@@ -575,26 +575,19 @@ class OnStandIns(unittest.TestCase):
             vol[0] = 97.0    # an outside corner: taken away
             res["convex"] = pc.settle(sess, None, fil, "pd_fillet", 100.0, "changed")["volumeChange"]
             vol[0] = 100.0
-            try:
-                pc.settle(sess, None, fil, "pd_fillet", 100.0, "changed")
-            except Exception as e:
-                res["same"] = str(e)
+            # 27 Nov, facts only: what FreeCAD kept is kept; the answer gives the measured change
+            res["same"] = pc.settle(sess, None, fil, "pd_fillet", 100.0, "changed")["volumeChange"]
             th = Obj("Thickness", "PartDesign::Thickness")
-            try:
-                pc.settle(sess, None, th, "pd_thickness", 100.0, "cut")
-            except Exception as e:
-                res["shell"] = str(e)
+            res["shell"] = pc.settle(sess, None, th, "pd_thickness", 100.0, "cut")["volumeChange"]
             print(json.dumps(res))
         """)
         self.assertEqual(out["concave"], 4.0)
         self.assertEqual(out["convex"], -3.0)
-        self.assertIn("as it was", out["same"])
-        self.assertNotIn("profile", out["same"])
-        self.assertNotIn("profile", out["shell"])
-        # The two tools ask for "changed" (either sign), not "cut": they are data now (agentlink/data/tools.json).
+        self.assertEqual((out["same"], out["shell"]), (0.0, 0.0))
+        # No tool asks settle to refuse a result (agentlink/data/tools.json): must_change is not given.
         from agentlink import runners
         for name in ("pd_fillet", "pd_chamfer"):
-            self.assertEqual(runners.entries()[name]["answer"]["with"][4], "changed", name)
+            self.assertIsNone(runners.entries()[name]["answer"]["with"][4], name)
 
     def test_extra_polyline_holds_its_axis_sides(self):
         out = run_stub("""

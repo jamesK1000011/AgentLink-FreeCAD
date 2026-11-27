@@ -94,12 +94,12 @@ class Pure(unittest.TestCase):
         got = rl.feature_result("Pad", "pd_pad", 5, old_box=OLD, body_box=OLD, note="Not worked out: the body has more than 2000 faces.", solids=1, solids_was=1)
         self.assertIn("The body before is x 0..60", got)
         self.assertIn("Not worked out", got)
-        self.assertEqual(rl.feature_head("Cut", "pd_pocket", 0.001), "Cut left the volume as it was.")
+        self.assertEqual(rl.feature_head("Cut", "pd_pocket", 0.001), "Cut: volume change 0 mm³.")
 
     def test_a_fillet_says_its_edges_and_its_radius(self):
         got = rl.dressup_result("Fillet", "pd_fillet", -214.6, 4, "radius 5 mm", ["Edge1: line along z, 10 mm, mid [-40, -30, 5], outside"], 1, 1)
-        self.assertEqual(got, "Fillet rounded 4 edges, radius 5 mm, volume change -214.6 mm³. Edges: Edge1: line along z, 10 mm, mid [-40, -30, 5], outside. The body is 1 solid (was 1).")
-        self.assertIn("Chamfer bevelled 1 edge, sizes 2 and 3 mm", rl.dressup_result("Chamfer", "pd_chamfer", 5, 1, "sizes 2 and 3 mm", [], 1, 1))
+        self.assertEqual(got, "Fillet: FreeCAD was given 4 edges, radius 5 mm, volume change -214.6 mm³. Edges: Edge1: line along z, 10 mm, mid [-40, -30, 5], outside. The body is 1 solid (was 1).")
+        self.assertIn("Chamfer: FreeCAD was given 1 edge, sizes 2 and 3 mm", rl.dressup_result("Chamfer", "pd_chamfer", 5, 1, "sizes 2 and 3 mm", [], 1, 1))
 
     def test_sketch_new_says_the_normal_range_and_the_face(self):
         axes = "x runs +X; y runs +Y; the normal points +Z. [0, 0] is at world (0, 0, 0)."
@@ -248,7 +248,7 @@ class OnStandIns(unittest.TestCase):
         f = Feat(old); f.TypeId = "PartDesign::Fillet"; f.Label = "Fillet"; f.Radius = types.SimpleNamespace(Value=5.0); f.Base = (None, ["Edge1", "Edge2"])
         print(json.dumps(pc.result_line(f, types.SimpleNamespace(Shape=Shp((0, 60, 0, 30, 0, 5))), "pd_fillet", -12.5, {}, ["2 edges: 2 outside (lose material)", "Edge1: line along z"])))
         ''')
-        self.assertEqual(got, "Fillet rounded 2 edges, radius 5 mm, volume change -12.5 mm³. Edges: 2 edges: 2 outside (lose material); Edge1: line along z. The body is 1 solid (was 1).")
+        self.assertEqual(got, "Fillet: FreeCAD was given 2 edges, radius 5 mm, volume change -12.5 mm³. Edges: 2 edges: 2 outside (lose material); Edge1: line along z. The body now is x 0..60, y 0..30, z 0..5. The body is 1 solid (was 1).")
 
     def test_the_answer_of_each_kind_starts_with_result(self):
         got = child('''
@@ -274,7 +274,7 @@ class OnStandIns(unittest.TestCase):
             self.assertIsInstance(line, str, kind)
             # the axes words are orient.axes_line's own (they name what a pocket does); the rest is the line's
             self.assertIsNone(BANNED.search(line.replace(axes, "") if axes else line), line)
-        self.assertTrue(got["sketch_add"][1].startswith("rectangle, ids 0-3: sketch x"))
+        self.assertTrue(got["sketch_add"][1].startswith("rectangle, ids 0-3: construction not given, so construction is false; sketch x"), got["sketch_add"][1])
         self.assertTrue(got["sketch_constrain"][1].startswith("Added "))
         self.assertIn("Degrees of freedom:", got["sketch_constrain"][1])
         self.assertTrue(got["sketch_new"][1].startswith("Sketch S2 is on XY."))

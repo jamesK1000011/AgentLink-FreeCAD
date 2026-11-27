@@ -226,18 +226,20 @@ class Defaults(unittest.TestCase):
         out["others"] = [k for k in ("line", "polyline", "arc", "arc3", "circle3", "bspline", "slot", "point") if sketch.by_default({"kind": k})]
         print(json.dumps(out))
         ''')
-        self.assertTrue(got["none"][0].startswith("rectangle, ids 0-3: center not given, so center is [0, 0]; sketch x -3.5..3.5, y -4.5..4.5"), got["none"][0])
-        self.assertEqual(got["none"][1], {"center": [0, 0]})
-        for k in ("center", "corner"):  # the place was given: nothing is said
-            self.assertNotIn("not given", got[k][0])
-            self.assertIsNone(got[k][1])
+        self.assertTrue(got["none"][0].startswith("rectangle, ids 0-3: center not given, so center is [0, 0]; construction not given, so construction is false; sketch x -3.5..3.5, y -4.5..4.5"), got["none"][0])
+        self.assertEqual(got["none"][1], {"center": [0, 0], "construction": False})
+        for k in ("center", "corner"):  # the place was given: only what was not given is said (27 Nov: every such value)
+            self.assertNotIn("center not given", got[k][0])
+            self.assertEqual(got[k][1], {"construction": False})
         self.assertIn("center not given, so center is [0, 0]", got["circle"][0])
         self.assertEqual(got["arc"], "center: an arc needs its centre [x, y].")
-        self.assertNotIn("not given", got["arcOk"])
+        self.assertNotIn("center not given", got["arcOk"])
+        self.assertNotIn("start not given", got["arcOk"])
         for k, (missing, given) in got["table"].items():
-            self.assertEqual(list(missing.values()), [[0, 0]], k)
-            self.assertIsNone(given, k)
-        self.assertEqual(got["others"], [])
+            self.assertEqual(list(missing.values())[0], [0, 0], k)
+            self.assertNotIn([0, 0], list(given.values()), k)
+        # every kind says the values it filled: at least construction false
+        self.assertEqual(got["others"], ["line", "polyline", "arc", "arc3", "circle3", "bspline", "slot", "point"])
 
 
 # ---- F5: the agent's own document ------------------------------------------------------------
@@ -419,7 +421,7 @@ class UsedSketch(unittest.TestCase):
     def test_the_sentences(self):
         box = (0, 9, 0, 4, 0, 2)
         self.assertEqual(rl.body_change_text("Body", 72.0, 65.75, box, box, 1, 1), "This call changed Body: volume change -6.25 mm³, now 65.75 mm³.")
-        self.assertEqual(rl.body_change_text("Body", 72.0, 72.004, box, box, 1, 1), "This call left the volume of Body as it was (72 mm³).")
+        self.assertEqual(rl.body_change_text("Body", 72.0, 72.004, box, box, 1, 1), "After this call the volume of Body is 72 mm³: volume change 0 mm³.")
         got = rl.body_change_text("Body", 72.0, 80.0, box, (0, 10, 0, 4, 0, 2), 1, 2)
         self.assertEqual(got, "This call changed Body: volume change +8 mm³, now 80 mm³. The body before is x 0..9, y 0..4, z 0..2. "
                               "The body now is x 0..10, y 0..4, z 0..2. The body is 2 solids (was 1).")
@@ -472,10 +474,10 @@ class UsedSketch(unittest.TestCase):
         self.assertTrue(got["noteFree"].startswith("Base is used by Pad. This call changed Body: volume change -6.25 mm³, now 65.75 mm³. Body also has a sketch that is not used: Free."), got["noteFree"])
         for k in ("held", "touched", "noMark", "otherSketch"):  # not measured: not said
             self.assertIsNone(got[k], k)
-        self.assertEqual(got["same"], "This call left the volume of Body as it was (72 mm³).")
+        self.assertEqual(got["same"], "After this call the volume of Body is 72 mm³: volume change 0 mm³.")
         self.assertEqual(got["kept"], 72.0)
         self.assertIsNone(got["sameOnlyChanged"])  # a constraint that changed nothing of the body: no note
-        self.assertEqual(got["boxOnlyChanged"], "This call left the volume of Body as it was (72 mm³). The body before is x 0..9, y 0..4, z 0..2. The body now is x 0..9.5, y 0..4, z 0..2.")
+        self.assertEqual(got["boxOnlyChanged"], "After this call the volume of Body is 72 mm³: volume change 0 mm³. The body before is x 0..9, y 0..4, z 0..2. The body now is x 0..9.5, y 0..4, z 0..2.")
 
     def test_a_constraint_is_a_change_to_a_used_sketch_too(self):
         self.assertIn("sketch_constrain", protocol.SKETCH_CHANGE_TOOLS)
@@ -618,7 +620,7 @@ class BodyExample(unittest.TestCase):
 # ---- Group C: open ends are facts ------------------------------------------------------------
 
 class OpenEndFacts(unittest.TestCase):
-    TAIL = ". A closed outline has no open end"
+    TAIL = ""
 
     def words(self, ends, curves=(0, 1), size=100.0, on=()):
         """open_end_words for ends; on: the (gid, pos) of the ends that lie on another curve."""
@@ -662,7 +664,7 @@ class OpenEndFacts(unittest.TestCase):
         text = " ".join(got)
         for banned in ("probably", "meant", "should", "remove it", "joins them", "sketch_constrain", "near ", "close to", "not a full circle"):
             self.assertNotIn(banned, text)
-        self.assertEqual(text.count("A closed outline has no open end"), 1)
+        self.assertNotIn("A closed outline has no open end", text)  # facts only (27 Nov)
 
     def test_a_cap_says_how_many_are_not_shown(self):
         ends = [(g, "line", 1, (g * 100.0, 0)) for g in range(7)]  # no two are each other's nearest but the first two

@@ -159,8 +159,7 @@ class Placed(unittest.TestCase):
     def test_the_guide_has_the_link_recipe_once_and_the_card_numbers(self):
         with open(os.path.join(HERE, "..", "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
             g = f.read()
-        self.assertEqual(g.count("Recipe for ends"), 1)
-        self.assertIn("ends at x 0 (radius 10) and x 80 (radius 6), in one batch", g)
+        self.assertEqual(g.count("arcs at x 0 (radius 10) and x 80 (radius 6)"), 1)
         for call in ("arc { center: [0, 0], radius: 10, start: 90, end: 270 }", "arc { center: [80, 0], radius: 6, start: -90, end: 90 }",
                      "line { from: [0, -10], to: [80, -6] }", "line { from: [80, 6], to: [0, 10] }"):
             self.assertIn(call, g)

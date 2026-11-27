@@ -62,12 +62,6 @@ HEALTH_TODOS = {
     "failing": "recompute lists them with FreeCAD's reasons",
 }
 STANDING = re.compile(r"^\d+ objects? still failing from before this call: ")
-# A sketch reading's note (agentlink/families/sketch.py) when it is ready for
-# a feature but not fully constrained: its count is the reading's dof, the
-# rest is standing. Inside any answer's state (sketch_add, sketch_edit,
-# sketch_constrain …), and sketch_state's own answer.
-DOF_NOTE = "it pads as drawn, but edits may move it — dimension and fix it for a parametric part."
-DOF_LINE = re.compile(r"^\d+ degrees of freedom: " + re.escape(DOF_NOTE) + "$")
 
 # Left-out words that are not named in saidBefore: they say how Agent Link
 # itself works (a batch's own notes), or their reading stays in
@@ -178,9 +172,6 @@ def thin(st, tool, out, rule=None):
         out["saidBefore"] = sorted(set(out.get("saidBefore") or []) | set(named))
     if isinstance(out.get("health"), dict) and not quiet_health(st, tool, out):
         thin_health(st, out["health"])
-    for reading in (out.get("state"), out):
-        if isinstance(reading, dict) and "dof" in reading:
-            thin_dof(st, reading)
     return out
 
 
@@ -220,17 +211,6 @@ def quiet_health(st, tool, out):
         if k in h and k not in out:
             out[k] = h[k]
     return True
-
-
-def thin_dof(st, reading):
-    """A sketch reading's DoF note left out once said: its count is dof."""
-    note = reading.get("note")
-    if not (isinstance(note, str) and DOF_LINE.match(note)):
-        return
-    if "dof" in st["todo"]:
-        del reading["note"]  # its count stays, as dof: nothing to name in saidBefore
-    else:
-        st["todo"].add("dof")
 
 
 def thin_health(st, h):
@@ -306,8 +286,6 @@ def health_said(session):
     if not isinstance(st, dict):
         return {}
     out = {tag: HEALTH_TODOS[tag] for tag in sorted(st["todo"]) if tag in HEALTH_TODOS}
-    if "dof" in st["todo"]:
-        out["sketchNote"] = "N degrees of freedom (the reading's dof): " + DOF_NOTE
     if st.get("failing"):
         out["failingNow"] = st["failing"]
     return out
