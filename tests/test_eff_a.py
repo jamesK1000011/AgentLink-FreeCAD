@@ -112,24 +112,24 @@ class Aliases(unittest.TestCase):
 
 class Flatten(unittest.TestCase):
     def test_inner_calls_in_place(self):
-        calls = [{"tool": "a", "arguments": {}},
-                 {"tool": "batch", "arguments": {"calls": [{"tool": "b", "arguments": {}}, {"tool": "c", "arguments": {"x": {"$from": 0}}}]}},
-                 {"tool": "d", "arguments": {"y": {"$from": 1}, "z": {"$from": 0}}}]
+        calls = [{"tool": "a"},
+                 {"tool": "batch", "calls": [{"tool": "b"}, {"tool": "c", "x": {"$from": 0}}]},
+                 {"tool": "d", "y": {"$from": 1}, "z": {"$from": 0}}]
         out, n = flatten(calls)
         self.assertEqual(n, 1)
         self.assertEqual([c["tool"] for c in out], ["a", "b", "c", "d"])
-        self.assertEqual(out[2]["arguments"], {"x": {"$from": 1}})  # b, now call 1
-        self.assertEqual(out[3]["arguments"], {"y": {"$from": 2}, "z": {"$from": 0}})  # the inner batch's last call, and a
+        self.assertEqual(out[2]["x"], {"$from": 1})  # b, now call 1
+        self.assertEqual((out[3]["y"], out[3]["z"]), ({"$from": 2}, {"$from": 0}))  # the inner batch's last call, and a
 
     def test_two_deep_and_strings(self):
-        inner = json.dumps([{"tool": "c", "arguments": {}}])
-        calls = [{"tool": "batch", "arguments": {"calls": [{"tool": "b", "arguments": {}}, {"tool": "batch", "arguments": {"calls": inner}}]}}]
+        inner = json.dumps([{"tool": "c"}])
+        calls = [{"tool": "batch", "calls": [{"tool": "b"}, {"tool": "batch", "calls": inner}]}]
         out, n = flatten(calls)
         self.assertEqual([c["tool"] for c in out], ["b", "c"])
         self.assertEqual(n, 2)
 
     def test_a_file_batch_stays(self):
-        calls = [{"tool": "batch", "arguments": {"file": "x.json"}}]
+        calls = [{"tool": "batch", "file": "x.json"}]
         out, n = flatten(calls)
         self.assertEqual((out, n), (calls, 0))
 
@@ -148,10 +148,10 @@ class OnFreeCAD(unittest.TestCase):
         self.call("doc_new", {"name": "EffA"})
 
     def box(self, name):
-        return {"tool": "part_primitive", "arguments": {"kind": "box", "size": [5, 5, 5], "name": name}}
+        return {"tool": "part_primitive", "kind": "box", "size": [5, 5, 5], "name": name}
 
     def test_a_batch_in_a_batch(self):
-        err, b = self.call("batch", {"calls": [self.box("A"), {"tool": "batch", "arguments": {"calls": [self.box("B"), self.box("C")]}}]})
+        err, b = self.call("batch", {"calls": [self.box("A"), {"tool": "batch", "calls": [self.box("B"), self.box("C")]}]})
         self.assertFalse(err, b)
         self.assertIn("flattened", b)
         self.assertEqual(len(self.call("session_state")[1]["bodies"]), 3)

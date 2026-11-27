@@ -55,7 +55,7 @@ def _jobs(doc):
 
 
 def _job(doc, ref):
-    return picks.one_of(_jobs(doc), ref, "job: say which — {labels}.", "job {ref}: the jobs are {labels}.", none="No CAM job: cam_job { body, tool } makes one.")
+    return picks.one_of(_jobs(doc), ref, "job: say which — {labels}.", "job {ref}: the jobs are {labels}.", none="No CAM job: cam_job { body, toolbit } makes one.")
 
 
 def _q(v, unit):

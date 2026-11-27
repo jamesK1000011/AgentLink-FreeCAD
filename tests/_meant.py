@@ -150,6 +150,13 @@ RENAMES = {
     "pd_polar_pattern": {"inputs": {"occurrences": "count"}},
     "pd_boolean": {"inputs": {"with": "bodies"}},
     "part_boolean": {"inputs": {"base": "body", "tools": "bodies"}},
+    # Set 12 (26 Nov): no input is named like a step key (tool, each, writeTo). tool -> cutter, toolbit, endTool.
+    # Whole phrases in "words", not the word tool: the descriptions use it in its plain sense too.
+    "part_join": {"inputs": {"tool": "cutter"}, "words": [("base and tool:", "base and cutter:"), ("tool:", "cutter:")]},
+    "cam_job": {"inputs": {"tool": "toolbit"}, "words": [("tool: {", "toolbit: {")]},
+    "cam_op": {"inputs": {"tool": "toolbit"}, "words": [("tool {", "toolbit {"), ("cam_tool_add and tool)", "cam_tool_add and toolbit)")]},
+    "robot_new": {"inputs": {"tool": "endTool"}},
+    "robot_tool": {"inputs": {"tool": "endTool"}},
 }
 
 

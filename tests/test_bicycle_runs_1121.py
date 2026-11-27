@@ -324,7 +324,7 @@ class BatchFileTo(unittest.TestCase):
             raise AssertionError(r.stderr[-3000:])
         return json.loads(r.stdout.strip().splitlines()[-1])
 
-    CALLS = [{"tool": "probe_state", "arguments": {"n": 1}}]
+    CALLS = [{"tool": "probe_state", "n": 1}]
 
     def test_to_and_full_in_the_file(self):
         got = self.run_batch({"path": "calls.json"}, {"calls": self.CALLS, "writeTo": "out.json", "lines": "full"})

@@ -34,7 +34,7 @@ class Cam(unittest.TestCase):
         err, r = self.call("cam_job", {"body": "Plate"})
         self.assertTrue(err)
         self.assertIn("tool", r["error"]["message"])
-        err, j = self.call("cam_job", {"body": "Plate", "tool": {"diameter": 6, "feed": 800, "plunge": 250, "rpm": 15000}, "stock": {"margin": 3, "top": 1}})
+        err, j = self.call("cam_job", {"body": "Plate", "toolbit": {"diameter": 6, "feed": 800, "plunge": 250, "rpm": 15000}, "stock": {"margin": 3, "top": 1}})
         self.assertFalse(err, j)
         print("\njob:", json.dumps(j))
         self.assertAlmostEqual(j["stock"]["size"][0], 66, delta=0.01)
@@ -123,7 +123,7 @@ class CamHardening(unittest.TestCase):
         cls.session.switch(FreeCAD.ActiveDocument)
         block = Part.makeBox(60, 40, 20).cut(Part.makeBox(30, 20, 8, FreeCAD.Vector(15, 10, 12)))
         add_body(cls.session, "HPlate", block)
-        err, j = cls.call("cam_job", {"body": "HPlate", "tool": {"diameter": 6, "feed": 800, "plunge": 250, "rpm": 15000}, "stock": {"margin": 3, "top": 1}, "name": "HJob"})
+        err, j = cls.call("cam_job", {"body": "HPlate", "toolbit": {"diameter": 6, "feed": 800, "plunge": 250, "rpm": 15000}, "stock": {"margin": 3, "top": 1}, "name": "HJob"})
         assert not err, j
         err, p = cls.call("cam_op", {"kind": "profile", "side": "outside", "name": "HOutline"})
         assert not err, p

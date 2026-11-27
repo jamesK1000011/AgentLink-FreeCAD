@@ -29,7 +29,7 @@ class CamMore(unittest.TestCase):
         cls.session.switch(FreeCAD.ActiveDocument)
         block = Part.makeBox(60, 40, 20).cut(Part.makeBox(30, 20, 8, FreeCAD.Vector(15, 10, 12)))
         add_body(cls.session, "Plate", block)
-        err, j = cls.call("cam_job", {"body": "Plate", "tool": {"diameter": 6, "feed": 800, "plunge": 250, "rpm": 15000}, "stock": {"margin": 3, "top": 1}})
+        err, j = cls.call("cam_job", {"body": "Plate", "toolbit": {"diameter": 6, "feed": 800, "plunge": 250, "rpm": 15000}, "stock": {"margin": 3, "top": 1}})
         assert not err, j
         err, p = cls.call("cam_op", {"kind": "profile", "side": "outside", "name": "Outline"})
         assert not err, p

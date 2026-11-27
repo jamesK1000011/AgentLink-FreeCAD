@@ -147,6 +147,7 @@ SETUP = """
     tools = [Tool("grow", "Grow the body.", obj, grow), Tool("relabel", "Relabel.", obj, relabel),
              Tool("doc_save", "Save.", obj, save), Tool("measure", "Measure.", obj, measure),
              Tool("body_check", "Check.", obj, lambda a: {"valid": True}),
+             Tool("get", "Get.", obj, lambda a: {"values": {a.get("what"): body.Shape.Volume}}),
              Tool("fast", "Fast.", obj, lambda a: fastpath.fast_tool(srv, s, a))]
     srv = protocol.Server("standin", "0", tools, "")
     srv.session, s.server = s, srv
@@ -207,10 +208,10 @@ class OnStandIns(unittest.TestCase):
     def test_fast_block(self):
         out = stub("""
             r = {}
-            r["withGet"] = call("fast", {"do": [{"tool": "grow", "arguments": {}}, {"get": "Bracket.volume", "as": "v"}, {"tool": "doc_save", "arguments": {}}]})
+            r["withGet"] = call("fast", {"calls": [{"tool": "grow"}, {"tool": "get", "what": "Bracket.volume"}, {"tool": "doc_save"}]})
             r["saved"] = len(saved)
-            r["without"] = call("fast", {"do": [{"tool": "grow", "arguments": {"by": 3}}, {"tool": "doc_save", "arguments": {}}]})
-            r["getFirst"] = call("fast", {"do": [{"get": "Bracket.volume"}, {"tool": "grow", "arguments": {"by": 4}}, {"tool": "doc_save", "arguments": {}}]})
+            r["without"] = call("fast", {"calls": [{"tool": "grow", "by": 3}, {"tool": "doc_save"}]})
+            r["getFirst"] = call("fast", {"calls": [{"tool": "get", "what": "Bracket.volume"}, {"tool": "grow", "by": 4}, {"tool": "doc_save"}]})
             print(json.dumps(r, default=repr))
         """)
         self.assertNotIn("isError", out["withGet"], out["withGet"])

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # The fast path (efficiency design C6, A6) and targeted reads (22 Nov),
-# agentlink/fastpath.py: one call runs a block of steps in the hub's step
-# language, each call through the server's normal path, with one short answer;
+# agentlink/fastpath.py: one call runs a list of flat steps ({ tool, inputs }),
+# each call through the server's normal path, with one short answer;
 # a block that is refused is taken back whole (batch's rollback, which stops at
 # the person's undo step); a dry run checks every step first; get reads one
 # value with its unit; the preference FastPath (and AGENTLINK_FASTPATH=off)
@@ -224,11 +224,10 @@ def _child(case):
     def labels():
         return [o.Label for o in doc.Objects]
 
-    design = {"do": [
-        {"let": {"xs": [10, 30, 50]}},
-        {"tool": "sketch_new", "arguments": {"plane": "XY"}},
-        {"each": "x", "in": "=xs", "steps": [{"tool": "sketch_add", "arguments": {"items": [{"circle": {"at": ["=x", 0], "radius": 3}}]}}]},
-        {"tool": "pd_pad", "arguments": {"length": 4}}]}
+    design = {"calls": [
+        {"tool": "sketch_new", "plane": "XY"},
+        {"tool": "sketch_add", "each": {"x": [10, 30, 50]}, "items": [{"circle": {"at": ["$x", 0], "radius": 3}}]},
+        {"tool": "pd_pad", "length": 4}]}
     out = {}
     if case == "design":
         out["got"] = fast(design)
@@ -245,76 +244,113 @@ def _child(case):
         n += one("pd_pad", {"sketch": "Sketch", "length": 4})["chars"]
         out["chars"] = n
         out["fastChars"] = None
-    elif case == "flow":
-        out["got"] = fast({"do": [
-            {"let": {"k": 2, "names": []}},
-            {"when": "=k > 1", "then": [{"tool": "probe_change", "arguments": {"n": "=k * 10"}, "as": "r"}], "else": [{"tool": "probe_fail", "arguments": {}}]},
-            {"push": {"names": "=r.n"}},
-            {"choose": "=str(k)", "of": {"2": [{"tool": "probe_change", "arguments": {"n": 22}}]}, "else": [{"tool": "probe_fail", "arguments": {}}]},
-            {"tool": "probe_change", "arguments": {"n": 99}, "when": "=k == 3"},
-            {"try": [{"tool": "probe_fail", "arguments": {}}], "on": "refusal", "except": [{"get": "=error.code", "as": "caught"}]},
-            {"get": "=names", "as": "names"}]})
+    elif case in ("old_a", "old_b", "old_c"):
+        # Every old form is refused with the new form in the words, and nothing runs.
+        # (Four calls in a case: the server stops a fifth refusal of the same tool.)
+        steps = {"arguments": {"tool": "probe_change", "arguments": {"n": 1}}, "call": {"call": "probe_change", "n": 1},
+                 "as": {"tool": "probe_change", "n": 1, "as": "r"}, "when": {"tool": "probe_change", "n": 1, "when": "=True"},
+                 "let": {"let": {"x": 1}}, "try": {"try": [], "except": []}, "choose": {"choose": "=1", "of": {}},
+                 "each": {"each": "x", "in": [1, 2], "steps": [{"tool": "probe_change", "n": "=x"}]}, "get": {"get": "Body.volume"}}
+        for k in {"old_a": ("arguments", "call", "as", "when"), "old_b": ("let", "try", "choose", "each"), "old_c": ("get",)}[case]:
+            out[k] = fast({"calls": [steps[k]]})
+        if case == "old_c":
+            out["do"] = fast({"do": [{"tool": "probe_change", "n": 1}]})
         out["labels"] = labels()
         out["seen"] = [t for t, _a in seen]
     elif case == "required":
-        out["first"] = fast({"do": [{"tool": "sketch_new", "arguments": {"plane": "XY"}}]})
-        out["got"] = fast({"do": [{"tool": "probe_req", "arguments": {}, "as": "r"}, {"get": "=r.sketch", "as": "sk"}]})
+        out["first"] = fast({"calls": [{"tool": "sketch_new", "plane": "XY"}]})
+        out["got"] = fast({"calls": [{"tool": "probe_req"}]})
         out["seen"] = seen
     elif case == "rollback":
-        out["got"] = fast({"rollback": True, "do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "arguments": {"n": 2}}, {"tool": "probe_fail", "arguments": {}}, {"tool": "probe_change", "arguments": {"n": 3}}]})
+        out["got"] = fast({"rollback": True, "calls": [{"tool": "probe_change", "n": 1}, {"tool": "probe_change", "n": 2}, {"tool": "probe_fail"}, {"tool": "probe_change", "n": 3}]})
         out["labels"] = labels()
         out["undone"] = doc.undone
         out["seen"] = [t for t, _a in seen]
     elif case == "keep":
         # The default since 23 Nov (owner): what ran before a refusal stays.
-        out["got"] = fast({"do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "arguments": {"n": 2}}, {"tool": "probe_fail", "arguments": {}}]})
+        out["got"] = fast({"calls": [{"tool": "probe_change", "n": 1}, {"tool": "probe_change", "n": 2}, {"tool": "probe_fail"}]})
         out["labels"] = labels()
         out["undone"] = doc.undone
     elif case == "person":
-        out["got"] = fast({"rollback": True, "do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_person", "arguments": {}}, {"tool": "probe_change", "arguments": {"n": 2}}, {"tool": "probe_fail", "arguments": {}}]})
+        out["got"] = fast({"rollback": True, "calls": [{"tool": "probe_change", "n": 1}, {"tool": "probe_person"}, {"tool": "probe_change", "n": 2}, {"tool": "probe_fail"}]})
         out["labels"] = labels()
         out["undoNames"] = list(doc.UndoNames)
     elif case == "dry":
-        out["bad"] = fast({"check": True, "do": [{"let": {"xs": [1, 2]}}, {"each": "x", "in": "=xs", "steps": [{"tool": "sketch_add", "arguments": {"items": [], "bogus": 1}}]}]})
+        out["bad"] = fast({"check": True, "calls": [{"tool": "sketch_add", "each": {"x": [1, 2]}, "items": [], "bogus": 1}]})
         out["good"] = fast({"check": True, **design})
         out["seen"] = seen
         out["labels"] = labels()
     elif case == "a6":
-        out["fast"] = fast({"do": [{"tool": "probe_change", "arguments": {"n": 1}, "when": "=False"}, {"tool": "probe_person", "arguments": {}, "as": "p"}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
+        out["fast"] = fast({"calls": [{"tool": "probe_person"}, {"tool": "probe_lead", "n": 0}]})
         out["seenFast"] = [t for t, _a in seen]
-        out["late"] = fast({"rollback": True, "do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
+        out["late"] = fast({"rollback": True, "calls": [{"tool": "probe_change", "n": 1}, {"tool": "probe_lead", "n": 0}]})
         out["labelsAfterLate"] = labels()
         del seen[:]
-        out["batch"] = one("batch", {"check": True, "calls": [{"tool": "probe_person", "arguments": {}}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
+        out["batch"] = one("batch", {"check": True, "calls": [{"tool": "probe_person"}, {"tool": "probe_lead", "n": 0}]})
         out["seenBatch"] = [t for t, _a in seen]
-        out["batchPlain"] = one("batch", {"calls": [{"tool": "probe_person", "arguments": {}}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
-        out["batchOk"] = one("batch", {"check": True, "calls": [{"tool": "probe_lead", "arguments": {"n": 1}}]})
+        out["batchPlain"] = one("batch", {"calls": [{"tool": "probe_person"}, {"tool": "probe_lead", "n": 0}]})
+        out["batchOk"] = one("batch", {"check": True, "calls": [{"tool": "probe_lead", "n": 1}]})
     elif case == "get":
-        fast({"do": [{"tool": "sketch_new", "arguments": {"plane": "XY"}}, {"tool": "pd_pad", "arguments": {"length": 4}}]})
+        fast({"calls": [{"tool": "sketch_new", "plane": "XY"}, {"tool": "pd_pad", "length": 4}]})
         out["one"] = one("get", {"what": ["Pad.Length", "Body.volume", "Body.Edge7.length", "sketch.dof", "active.body", "active.sketch",
                                           "Body.mass", "bodies", "selection", "Sketch.closedWires"]})
         out["missing"] = one("get", {"what": "Nope.Length"})
         out["listMiss"] = one("get", {"what": ["Pad.Length", "Nope.Length"]})
         out["badform"] = one("get", {"what": "Pad"})
         out["noprop"] = one("get", {"what": "Pad.Width"})
-        out["inBlock"] = fast({"do": [{"get": "Body.volume", "as": "v"}, {"get": "=v * 2", "as": "twice"}, {"get": "Pad.Length"}]})
+        out["inBlock"] = fast({"calls": [{"tool": "get", "what": "Body.volume"}, {"tool": "get", "what": ["Pad.Length", "Nope.Length"]}]})
     elif case in ("env_off", "pref_off"):
         out["fast"] = fast(design)
         out["get"] = one("get", {"what": "active.body"})
         out["labels"] = labels()
     elif case == "names":
         # Live, 22 Nov: a local model put the client's prefixed name inside a batch.
-        out["prefixed"] = one("batch", {"calls": [{"tool": "agentlink_tool_find", "arguments": {"words": "pad"}}]})
-        out["unknown"] = one("batch", {"calls": [{"tool": "agentlink_pd_pad_create", "arguments": {}}]})
-        out["toolread"] = fast({"do": [{"get": "body_check"}]})
+        out["prefixed"] = one("batch", {"calls": [{"tool": "agentlink_tool_find", "words": "pad"}]})
+        out["unknown"] = one("batch", {"calls": [{"tool": "agentlink_pd_pad_create"}]})
+        out["toolread"] = fast({"calls": [{"tool": "get", "what": "body_check"}]})
     elif case == "safety":
-        out["maker"] = fast({"do": [{"let": {"f": "=maker('os.system')"}}]})
-        out["fmt"] = fast({"do": [{"let": {"f": "='{0.__class__}'.format(1)"}}]})
-        out["make"] = fast({"do": [{"make": "Part.show"}]})
-        out["batch"] = fast({"do": [{"tool": "batch", "arguments": {"calls": []}}]})
-        out["private"] = fast({"do": [{"let": {"f": "=a.__class__"}}]})
-        out["unknown"] = fast({"do": [{"tool": "no_such_tool", "arguments": {}}]})
+        # No Python, no other runner: a step is a tool step and nothing else.
+        out["maker"] = fast({"calls": [{"tool": "probe_change", "n": "=maker('os.system')"}]})
+        out["make"] = fast({"calls": [{"make": "Part.show"}]})
+        out["batch"] = fast({"calls": [{"tool": "batch", "calls": []}]})
+        out["run"] = fast({"calls": [{"tool": "run", "tool_": "x"}]})
+        out["unknown"] = fast({"calls": [{"tool": "no_such_tool"}]})
         out["labels"] = labels()
+    elif case == "flat":
+        # One flat step everywhere (26 Nov): run, batch and fast take the same steps.
+        calls = [{"tool": "probe_change", "n": 1}, {"tool": "probe_change", "n": 2}]
+        out["run"] = one("run", {"tool": "probe_change", "n": 7})
+        out["direct"] = one("probe_change", {"n": 8})
+        out["approve"] = [one("run", {"tool": t, "path": "x"}) for t in ("approve_file", "approve_code")]
+        out["runInRun"] = one("run", {"tool": "run", "x": 1})
+        out["batchSame"] = one("batch", {"calls": calls})
+        out["labelsBatch"] = labels()
+        out["fastSame"] = fast({"calls": calls})
+        out["do"] = fast({"do": calls})
+        out["batchDo"] = one("batch", {"do": calls})
+        del seen[:]
+        out["eachRun"] = one("run", {"tool": "probe_change", "each": {"x": [15, 45]}, "n": "$x"})
+        one("sketch_new", {"plane": "XY"})
+        out["eachBatch"] = one("batch", {"calls": [{"tool": "sketch_add", "each": {"x": [15, 45]}, "sketch": "Sketch", "items": [{"circle": {"at": ["$x", 15], "radius": 5}}]}]})
+        out["eachFast"] = fast({"calls": [{"tool": "sketch_add", "each": {"x": [3, 4, 5]}, "sketch": "Sketch", "items": [{"circle": {"at": ["$x", 0], "radius": 1}}]}]})
+        out["seenEach"] = [[t, a] for t, a in seen if t in ("probe_change", "sketch_add")]
+        del seen[:]
+        out["twoVars"] = one("batch", {"calls": [{"tool": "probe_change", "each": {"x": [1], "y": [2]}, "n": "$x"}]})
+        out["badLoop"] = one("batch", {"calls": [{"tool": "probe_change", "n": 11}, {"tool": "probe_change", "each": {"s": ["A", 5]}, "sketch": "$s", "n": 12}, {"tool": "probe_change", "n": 13}]})
+        out["labelsLoop"] = labels()
+        out["from"] = one("batch", {"calls": [{"tool": "sketch_new", "name": "FromSk", "plane": "XY"}, {"tool": "probe_req", "sketch": {"$from": 0, "$at": "sketch"}}]})
+        out["writeFast"] = fast({"calls": [{"tool": "probe_change", "n": 20, "writeTo": "a.json"}]})
+        out["writeEach"] = one("batch", {"calls": [{"tool": "probe_change", "each": {"x": [1, 2]}, "n": "$x", "writeTo": "a.json"}]})
+        out["writeBatch"] = one("batch", {"calls": [{"tool": "probe_change", "n": 21, "writeTo": "w.json"}]})
+        out["writeFile"] = os.path.exists(os.path.join(s.out_dir, "w.json"))
+        out["oldBatch"] = {k: one("batch", {"calls": [v]}) for k, v in {"arguments": {"tool": "probe_change", "arguments": {"n": 1}}, "as": {"tool": "probe_change", "n": 1, "as": "r"},
+                                                                         "when": {"tool": "probe_change", "n": 1, "when": "=True"}, "let": {"let": {"x": 1}}}.items()}
+        out["oldRun"] = [one("run", v) for v in ({"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "n": 1, "try": []})]
+        out["labelsEnd"] = labels()
+        from agentlink import callshape as _cs
+        out["collide"] = sorted(f"{n}.{k}" for n, t in srv.tools.items() for k in (t.schema or {}).get("properties", {}) if k in _cs.RESERVED)
+        out["reserved"] = sorted(_cs.RESERVED)
+        out["listed"] = [t["name"] for t in srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]]
     print(json.dumps(out, default=str))
 
 
@@ -340,7 +376,7 @@ class FastPath(unittest.TestCase):
         self.assertEqual(got["unknown"]["body"]["refused"]["code"], "not_found")
         msg = got["unknown"]["body"]["results"][0]["error"]["message"]
         self.assertIn("near: pd_pad", msg)
-        self.assertIn('{ "tool": "body_check", "arguments": {} }', got["toolread"]["body"]["error"]["message"])
+        self.assertIn('{ "tool": "body_check" }', got["toolread"]["body"]["error"]["message"])
 
     def test_design_block_runs_each_call_through_the_server(self):
         got = run_case("design")
@@ -356,12 +392,13 @@ class FastPath(unittest.TestCase):
         tools = [t for t, _a in got["seen"]]
         self.assertEqual(tools, ["fast", "sketch_new", "sketch_add", "sketch_add", "sketch_add", "pd_pad"])
         self.assertEqual([a.get("sketch") for t, a in got["seen"] if t in ("sketch_add", "pd_pad")], ["Sketch"] * 4)
-        self.assertEqual([a["items"][0]["circle"]["at"][0] for t, a in got["seen"] if t == "sketch_add"], [10, 30, 50])
+        # The loop: one call for each value, "$x" put in a list.
+        self.assertEqual([a["items"][0]["circle"]["at"] for t, a in got["seen"] if t == "sketch_add"], [[10, 0], [30, 0], [50, 0]])
         self.assertIn("pd_pad.sketch=Sketch", body["filled"])
         # The record holds each call's whole answer, by its step.
         rec = got["record"]
         self.assertTrue(rec["fast"])
-        self.assertEqual([r["step"] for r in rec["results"]], ["do.1", "do.2.steps.0", "do.2.steps.0", "do.2.steps.0", "do.3"])
+        self.assertEqual([r["step"] for r in rec["results"]], ["calls.0", "calls.1", "calls.2", "calls.3", "calls.4"])
         self.assertEqual(rec["results"][-1]["result"]["pad"], "Pad")
 
     def test_terse_answer_is_shorter_than_single_calls(self):
@@ -369,22 +406,26 @@ class FastPath(unittest.TestCase):
         single = run_case("single")["chars"]
         self.assertLess(fast, single, (fast, single))
 
-    def test_let_when_choose_try_push_with_calls(self):
-        got = run_case("flow")
-        self.assertFalse(got["got"]["isError"], got["got"])
-        body = got["got"]["body"]
-        self.assertEqual(body["values"]["names"], [20])
-        self.assertEqual(body["values"]["caught"], "invalid_state")
-        self.assertEqual(got["seen"], ["fast", "probe_change", "probe_change", "probe_fail"])
-        self.assertIn("P20", got["labels"])
-        self.assertIn("P22", got["labels"])
-        self.assertNotIn("P99", got["labels"])
-        self.assertTrue(any("(caught)" in w for w in body.get("warnings", [])), body)
+    def test_old_forms_are_refused_with_the_new_form(self):
+        got = {}
+        for c in ("old_a", "old_b", "old_c"):
+            r = run_case(c)
+            got.update({k: v for k, v in r.items() if k not in ("labels", "seen")})
+            self.assertEqual(r["labels"], ["Body"], c)
+            self.assertEqual(set(r["seen"]), {"fast"}, c)
+        words = {"arguments": "beside tool", "call": "old form", "as": "$from", "when": "not part of a step", "let": "use each",
+                 "try": "not part of a step", "choose": "not part of a step", "each": "each is now a key of the step", "get": '"tool": "get"'}
+        for k, w in words.items():
+            self.assertTrue(got[k]["isError"], k)
+            msg = got[k]["body"]["error"]["message"]
+            self.assertIn(w, msg, (k, msg))
+            self.assertIn("Nothing was run", msg, k)
+        self.assertTrue(got["do"]["isError"])
+        self.assertIn("do is now calls", got["do"]["body"]["error"]["message"])
 
     def test_required_field_fills_from_the_session(self):
         got = run_case("required")
         self.assertFalse(got["got"]["isError"], got["got"])
-        self.assertEqual(got["got"]["body"]["values"]["sk"], "Sketch")
         self.assertIn("probe_req.sketch=Sketch", got["got"]["body"]["filled"])
         self.assertEqual([a for t, a in got["seen"] if t == "probe_req"], [{"sketch": "Sketch"}])
 
@@ -396,14 +437,14 @@ class FastPath(unittest.TestCase):
 
     def test_refusal_names_what_ran(self):
         err = run_case("rollback")["got"]["body"]["error"]
-        self.assertIn("Ran before it: do.0 probe_change, do.1 probe_change.", err["message"])
+        self.assertIn("Ran before it: calls.0 probe_change, calls.1 probe_change.", err["message"])
 
     def test_keep_keeps_what_ran(self):
         got = run_case("keep")
         err = got["got"]["body"]["error"]
         self.assertEqual(err["status"], "kept")
-        self.assertIn("Ran before it: do.0 probe_change, do.1 probe_change.", err["message"])
-        self.assertIn("Go on from step do.2", err["message"])
+        self.assertIn("Ran before it: calls.0 probe_change, calls.1 probe_change.", err["message"])
+        self.assertIn("Go on from step calls.2", err["message"])
         self.assertEqual(got["undone"], 0)
         self.assertIn("P1", got["labels"])
 
@@ -413,7 +454,7 @@ class FastPath(unittest.TestCase):
         err = got["got"]["body"]["error"]
         self.assertEqual(err["code"], "invalid_state")
         self.assertEqual(err["status"], "rolled_back")
-        self.assertIn("step do.2 (probe_fail)", err["message"])
+        self.assertIn("step calls.2 (probe_fail)", err["message"])
         self.assertIn("2 undo steps", err["message"])
         self.assertEqual(got["undone"], 2)
         self.assertNotIn("P1", got["labels"])
@@ -434,7 +475,7 @@ class FastPath(unittest.TestCase):
         got = run_case("dry")
         self.assertTrue(got["bad"]["isError"])
         msg = got["bad"]["body"]["error"]["message"]
-        self.assertIn("step do.1.steps.0 (sketch_add)", msg)
+        self.assertIn("step calls.0 (sketch_add)", msg)
         self.assertIn("bogus", msg)
         self.assertIn("Nothing was run", msg)
         self.assertEqual(got["bad"]["body"]["error"]["status"], "not_started")
@@ -447,7 +488,7 @@ class FastPath(unittest.TestCase):
         got = run_case("a6")
         # Fast: the leading check of step 2 refuses before step 1; nothing ran.
         self.assertTrue(got["fast"]["isError"])
-        self.assertIn("step do.2 (probe_lead): probe_lead: n is 0", got["fast"]["body"]["error"]["message"])
+        self.assertIn("step calls.1 (probe_lead): probe_lead: n is 0", got["fast"]["body"]["error"]["message"])
         self.assertEqual(got["fast"]["body"]["error"]["code"], "invalid_state")
         self.assertEqual(got["seenFast"], ["fast"])
         # After a change the document is not known before the run: the step runs, is refused, and the block is taken back.
@@ -485,7 +526,7 @@ class FastPath(unittest.TestCase):
         self.assertIn("no property Width", got["noprop"]["body"]["error"]["message"])
         blk = got["inBlock"]
         self.assertFalse(blk["isError"], blk)
-        self.assertEqual(blk["body"]["values"], {"v": "1520 mm³", "twice": 3040.0, "Pad.Length": "4 mm"})
+        self.assertEqual(blk["body"]["values"], {"Body.volume": "1520 mm³", "Pad.Length": "4 mm"})
 
     def test_switch_off(self):
         for case in ("env_off", "pref_off"):
@@ -496,29 +537,34 @@ class FastPath(unittest.TestCase):
             self.assertEqual(got["get"]["body"]["error"]["code"], "not_allowed")
             self.assertEqual(got["labels"], ["Body"])
 
-    def test_no_python_and_no_other_runner(self):
+    def test_a_step_is_a_tool_step_and_nothing_else(self):
         got = run_case("safety")
-        for k in ("maker", "fmt", "make", "batch", "private", "unknown"):
+        for k in ("make", "batch", "run", "unknown"):
             self.assertTrue(got[k]["isError"], k)
-            self.assertIn("Nothing was run", got[k]["body"]["error"]["message"], k)
-        self.assertIn("maker()", got["maker"]["body"]["error"]["message"])
+        self.assertIn("Nothing was run", got["make"]["body"]["error"]["message"])
+        self.assertIn("a step has no \"tool\"", got["make"]["body"]["error"]["message"])
         self.assertIn("does not run in a fast block", got["batch"]["body"]["error"]["message"])
-        self.assertEqual(got["labels"], ["Body"])
+        self.assertIn("does not run in a fast block", got["run"]["body"]["error"]["message"])
+        # "=maker(...)" is only text now: no expression is read. The tool gets it as it is.
+        self.assertFalse(got["maker"]["isError"], got["maker"])
+        self.assertEqual(got["labels"], ["Body", "P=maker('os.system')"])
 
 
 class Shape(unittest.TestCase):
     """The block's shape and a get's form, read without a server."""
 
-    def test_shape_words(self):
-        from agentlink import fastpath
+    def test_steps_of(self):
+        from agentlink import callshape
 
-        self.assertEqual(fastpath.shape_words([{"let": {"x": 1}}, {"tool": "pd_pad", "arguments": {"length": "=x * 4"}}]), [])
-        self.assertTrue(fastpath.shape_words([{"set": {"o.Label": "x"}}]))
-        self.assertTrue(fastpath.shape_words([{"do": "=x"}]))
-        self.assertTrue(fastpath.shape_words([{"let": {"_x": 1}}]))
-        self.assertTrue(fastpath.shape_words([{"let": {"x": "=__import__('os')"}}]))
-        self.assertTrue(fastpath.shape_words([{"try": [], "on": "ValueError"}]))
-        self.assertEqual(fastpath.shape_words([{"when": "=1", "then": [{"get": "active.body"}]}]), [])
+        class Srv:
+            tools = {}
+
+        got = callshape.steps_of(Srv, {"tool": "pd_pad", "length": 4, "each": {"x": [1, 2]}, "sketch": "S"}, "calls.0", "fast")
+        self.assertEqual([p["inputs"] for p in got], [{"length": 4, "sketch": "S"}] * 2)
+        for bad in ({"let": {"x": 1}}, {"set": 1}, {"tool": "x", "as": "r"}, {"tool": "x", "arguments": {}}, {"tool": "x", "each": {"a": [1], "b": [2]}},
+                    {"tool": "x", "each": {"a": []}}, {"tool": "x", "each": {"a": [1]}, "n": "$b"}, {"tool": "x", "writeTo": "a.json"}):
+            with self.assertRaises(callshape.Refused, msg=str(bad)):
+                callshape.steps_of(Srv, bad, "calls.0", "fast")
 
     def test_with_unit(self):
         from agentlink import fastpath

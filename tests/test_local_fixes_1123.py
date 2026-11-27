@@ -50,7 +50,7 @@ SERVER = SETUP + '''
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
         return [r.get("isError", False), json.loads(r["content"][0]["text"]), r["content"][0]["text"]]
     def mk(n, **kw):
-        return {"tool": "probe_make", "arguments": {"name": n, **kw}}
+        return {"tool": "probe_make", "name": n, **kw}
     def labels():
         return [o.Label for o in s.doc.Objects]
     if "sketch_add" not in srv.tools:
@@ -106,12 +106,12 @@ class SketchKindNames(unittest.TestCase):
     out["kinds"] = protocol.sketch_kinds(srv)
     out["examples"] = {k: protocol.kind_example(srv, k) for k in out["kinds"]}
     out["does"] = call("tool_find", {"words": "rectangle sketch"})[1]
-    out["batch"] = call("batch", {"calls": [{"tool": "sketch_circle", "arguments": {}}]})[1]
+    out["batch"] = call("batch", {"calls": [{"tool": "sketch_circle"}]})[1]
     print(json.dumps(out))
 ''')
         m = got["sketch_rectangle"]
         self.assertIn('use sketch_add with items [{ kind: "rectangle", … }]', m)
-        self.assertIn('{"tool": "sketch_add", "arguments": {"items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]}}', m)
+        self.assertIn('{"tool": "sketch_add", "items": [{"kind": "rectangle", "center": [0, 0], "size": [40, 20]}]}', m)
         self.assertIn('kind: "circle"', got["circle"])
         self.assertIn('"radius": 10', got["circle"])
         self.assertIn('kind: "circle"', got["Sketcher_CreateCircle"])
@@ -180,7 +180,7 @@ class PickExample(unittest.TestCase):
         self.assertEqual(got, 'pick { option: 1, fill: { name: "Part" } } runs option 1; the text "1, Part" also works')
         pad = {"step": 3, "list": [{"n": 1, "tool": "pd_pad", "arguments": {"sketch": "Sketch 2"}, "ask": [{"arg": "length", "unit": "mm", "sample": 10}]}]}
         self.assertEqual(options.pick_how(pad, static=False), 'pick { option: 1, fill: { length: 10 } } runs option 1; the text "1, 10mm" also works')
-        none = {"step": 3, "list": [{"n": 1, "tool": "body_check", "arguments": {}}]}
+        none = {"step": 3, "list": [{"n": 1, "tool": "body_check"}]}
         self.assertEqual(options.pick_how(none, static=False), "pick { option: 1 } runs option 1")
         # A label with a space stays one value in the option line.
         self.assertEqual(options.option_words(pad["list"][0]), '1 pd_pad sketch="Sketch 2" ask length mm')
@@ -194,7 +194,7 @@ class ConnectText(unittest.TestCase):
     print(json.dumps([tools.instructions(True, False, static=True), tools.instructions(True, True, static=False)]))
 ''')
         for text in texts:
-            self.assertIn("batch { calls: [{ tool, arguments }] }", text)
+            self.assertIn("batch { calls: [{ tool, inputs }] }", text)
             self.assertIn('guide_read { topic: "batch" }', text)
             for field in ("$from", "$file", "build: ", "(writeTo)", "lines", "record_read"):
                 self.assertNotIn(field, text, field)
@@ -210,7 +210,7 @@ class ConnectText(unittest.TestCase):
         err, body, _text = got["read"]
         self.assertTrue(err)
         self.assertIn("Nothing was run.", body["error"]["message"])
-        self.assertIn("The basic form: batch { calls: [{ tool, arguments }] }.", body["error"]["message"])
+        self.assertIn('The basic form: batch { calls: [{ "tool": "sketch_new", "plane": "XY" }] }.', body["error"]["message"])
         self.assertNotIn("A", got["labels"])
 
 
@@ -302,11 +302,11 @@ class BatchKeepsWhatRan(unittest.TestCase):
     def test_a_form_error_refuses_only_its_call(self):
         got = run('''
     out = {}
-    out["field"] = call("batch", {"calls": [mk("A"), {"tool": "probe_make", "arguments": {"name": "B", "bogus": 1}}, mk("C")]})
-    out["shape"] = call("batch", {"calls": [mk("D"), {"arguments": {"name": "E"}}, mk("F")]})
-    out["tool"] = call("batch", {"calls": [mk("G"), {"tool": "no_such_tool", "arguments": {}}]})
+    out["field"] = call("batch", {"calls": [mk("A"), {"tool": "probe_make", "name": "B", "bogus": 1}, mk("C")]})
+    out["shape"] = call("batch", {"calls": [mk("D"), {"name": "E"}, mk("F")]})
+    out["tool"] = call("batch", {"calls": [mk("G"), {"tool": "no_such_tool"}]})
     out["labels"] = labels()
-    out["on"] = call("batch", {"stopOnError": False, "calls": [{"tool": "no_such_tool", "arguments": {}}, mk("H")]})
+    out["on"] = call("batch", {"stopOnError": False, "calls": [{"tool": "no_such_tool"}, mk("H")]})
     print(json.dumps(out))
 ''')
         b = got["field"][1]
@@ -314,7 +314,7 @@ class BatchKeepsWhatRan(unittest.TestCase):
         self.assertIn("input.bogus", b["refused"]["error"])
         b = got["shape"][1]
         self.assertEqual((b["done"], b["refused"]["call"], b["notRun"]), ([0], 1, [2]))
-        self.assertIn("calls.1 has no \"tool\": every call names its tool beside arguments.", b["refused"]["error"])
+        self.assertIn("calls.1 has no \"tool\"", b["refused"]["error"])
         b = got["tool"][1]
         self.assertEqual((b["done"], b["refused"]["call"], b["refused"]["code"]), ([0], 1, "not_found"))
         self.assertEqual([x for x in got["labels"] if len(x) == 1], ["A", "D", "G"])
@@ -324,7 +324,7 @@ class BatchKeepsWhatRan(unittest.TestCase):
     def test_rollback_true_is_all_or_nothing_as_before(self):
         got = run('''
     out = {}
-    out["form"] = call("batch", {"rollback": True, "calls": [mk("A"), {"tool": "no_such_tool", "arguments": {}}]})
+    out["form"] = call("batch", {"rollback": True, "calls": [mk("A"), {"tool": "no_such_tool"}]})
     out["labelsForm"] = labels()
     out["refused"] = call("batch", {"rollback": True, "calls": [mk("B"), mk("C", fail=True)]})
     print(json.dumps(out))
@@ -332,7 +332,7 @@ class BatchKeepsWhatRan(unittest.TestCase):
         err, e, _ = got["form"]
         self.assertTrue(err)
         self.assertIn("nothing was run", e["error"]["message"].lower())
-        self.assertIn("The basic form: batch { calls: [{ tool, arguments }] }.", e["error"]["message"])
+        self.assertIn('The basic form: batch { calls: [{ "tool": "sketch_new", "plane": "XY" }] }.', e["error"]["message"])
         self.assertNotIn("A", got["labelsForm"])
         err, b, _ = got["refused"]
         self.assertFalse(err)

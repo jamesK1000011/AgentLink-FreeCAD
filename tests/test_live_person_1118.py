@@ -167,7 +167,7 @@ class DialogWords(unittest.TestCase):
 
 
 def batch(*calls):
-    return call("batch", {"calls": [{"tool": t, "arguments": a} for t, a in calls]})
+    return call("batch", {"calls": [{"tool": t, **a} for t, a in calls]})
 
 
 class DeclaredReads(unittest.TestCase):

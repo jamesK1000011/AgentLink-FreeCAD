@@ -252,7 +252,7 @@ class LightBatch(unittest.TestCase):
         def call(args):
             return json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "batch", "arguments": args}})
 
-        calls = [{"tool": "job_status", "arguments": {}}]
+        calls = [{"tool": "job_status"}]
         self.assertIsNotNone(gui_link._thread_batch(call({"calls": calls}), {"job_status"}))
         self.assertIsNone(gui_link._thread_batch(call({"calls": calls, "to": "x.json", "lines": "counts"}), {"job_status"}))
         self.assertIsNone(gui_link._thread_batch(call({"calls": calls, "lines": "counts"}), {"job_status"}))

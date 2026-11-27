@@ -773,7 +773,7 @@
   ]
  },
  "hubTools": {
-  "total": 420,
+  "total": 421,
   "groups": [
    {
     "group": "core",
@@ -937,7 +937,7 @@
    },
    {
     "group": "fast",
-    "tools": 2,
+    "tools": 3,
     "lean": false
    }
   ]
@@ -949,8 +949,8 @@
     "style": "ste",
     "default": true,
     "tools": 6,
-    "chars": 5984,
-    "tokens": 1710,
+    "chars": 6313,
+    "tokens": 1804,
     "estimatedCards": 6
    },
    {
@@ -958,8 +958,8 @@
     "style": "full",
     "default": false,
     "tools": 6,
-    "chars": 15576,
-    "tokens": 4450,
+    "chars": 16038,
+    "tokens": 4582,
     "estimatedCards": 6
    },
    {
@@ -967,8 +967,8 @@
     "style": "ste",
     "default": false,
     "tools": 24,
-    "chars": 23025,
-    "tokens": 6579,
+    "chars": 23354,
+    "tokens": 6673,
     "estimatedCards": 18
    },
    {
@@ -976,16 +976,16 @@
     "style": "full",
     "default": false,
     "tools": 24,
-    "chars": 32298,
-    "tokens": 9228,
+    "chars": 32763,
+    "tokens": 9361,
     "estimatedCards": 18
    }
   ],
   "allHubListed": {
-   "tools": 420,
-   "chars": 362436,
-   "estimatedCards": 26,
-   "tokens": 103553
+   "tools": 421,
+   "chars": 363582,
+   "estimatedCards": 28,
+   "tokens": 103881
   },
   "base": [
    "session_state",
@@ -1001,7 +1001,9 @@
   ],
   "steEntries": [
    "batch",
+   "fast",
    "guide_read",
+   "run",
    "session_state",
    "tool_find"
   ],
@@ -1015,6 +1017,7 @@
    "batch",
    "body_check",
    "export_file",
+   "fast",
    "gui_input",
    "guide_read",
    "history_diff",
@@ -1028,6 +1031,7 @@
    "pref_import",
    "record_read",
    "report_read",
+   "run",
    "session_state",
    "tool_find",
    "tool_groups",
@@ -1115,7 +1119,7 @@
    }
   ],
   "addonToolsLoaded": 212,
-  "totalAllInstalled": 632
+  "totalAllInstalled": 633
  },
  "timings": {
   "note": "no timing data in the repo yet"

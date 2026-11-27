@@ -20,6 +20,7 @@ DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_s
 DATES.update({t: "2026-11-18" for t in ("approve_file", "approve_code")})
 DATES["pick"] = "2026-11-22"
 DATES.update({t: "2026-11-22" for t in ("fast", "get")})
+DATES["run"] = "2026-11-26"
 
 # Tool or prefix → workbench, where the echo's WORKBENCH table says nothing
 # (the echo brings no bench up for these; the index still files them).
@@ -194,6 +195,7 @@ TOOLS = {
     "export": (["Std_Export"], "step stl iges brep 3mf obj dxf svg save write file"),
     "export_file": (["Std_Export"], "step stl save write"),
     "fast": ([], "fast path block steps loop chain quick terse many calls one answer"),
+    "run": ([], "run one step call single tool full answer flat step each loop"),
     "fea_buckle": ([], "buckling stability column"),
     "fea_chart": ([], "histogram plot graph"),
     "fea_clear": ([], "reset remove study"),

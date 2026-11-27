@@ -122,8 +122,8 @@ class FileRefs(unittest.TestCase):
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
         return [r.get("isError", False), json.loads(r["content"][0]["text"])]
     ref = {"$file": "~/Library/Application Support/Claude/claude_desktop_config.json", "$at": "mcpServers"}
-    a = call("batch", {"calls": [{"tool": "tool_find", "arguments": {"words": ref}}], "rollback": False})
-    b = call("batch", {"calls": [{"tool": "tool_find", "arguments": {"words": {"$file": "~/Library/Safari/nothere.json"}}}], "rollback": False})
+    a = call("batch", {"calls": [{"tool": "tool_find", "words": ref}], "rollback": False})
+    b = call("batch", {"calls": [{"tool": "tool_find", "words": {"$file": "~/Library/Safari/nothere.json"}}], "rollback": False})
     c = call("tool_find", {"listing": True, "to": "~/Library/Application Support/Claude/x.json"})
     d = call("tool_find", {"listing": True, "to": "listing.json"})
     print(json.dumps({"a": a, "b": b, "c": c, "d": d}))

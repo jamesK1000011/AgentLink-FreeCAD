@@ -173,7 +173,7 @@ class FilledInTheAnswer(unittest.TestCase):
     pc.note_made_sketch(s, sk3)
     out["made"] = call("probe_take", {})
     out["named"] = call("probe_take", {"sketch": "Sketch 4"})
-    out["batch"] = call("batch", {"calls": [{"tool": "probe_take", "arguments": {}}]})
+    out["batch"] = call("batch", {"calls": [{"tool": "probe_take"}]})
     print(json.dumps(out))
 ''')
         err, r = got["refused"]

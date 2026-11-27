@@ -191,7 +191,7 @@ def _unstick_call(line):
         return ("alone", bool((args or {}).get("all")))
     calls = (args or {}).get("calls") if tool == "batch" else None
     if calls and all(isinstance(c, dict) and c.get("tool") == "gui_unstick" for c in calls):
-        return ("batch", any(bool((c.get("arguments") or {}).get("all")) for c in calls if isinstance(c.get("arguments"), dict)))
+        return ("batch", any(bool(c.get("all")) for c in calls))
     return None
 
 

@@ -637,7 +637,7 @@ class UnstickThroughBatch(unittest.TestCase):
         from test_gui_link_dialog import call
 
         self.assertTrue(gui_link._dialog_call(call("gui_unstick")))
-        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_unstick", "arguments": {}}]})))
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_unstick"}]})))
         self.assertIsNotNone(gui_link._thread_batch(call("batch", {"calls": [{"tool": "gui_unstick"}]}), {"gui_unstick"}))
         self.assertIsNone(gui_link._thread_batch(call("batch", {"calls": [{"tool": "gui_unstick"}, {"tool": "doc_new"}]}), {"gui_unstick"}))
         self.assertIsNone(gui_link._thread_batch(call("gui_unstick"), {"gui_unstick"}))
@@ -655,7 +655,7 @@ class UnstickThroughBatch(unittest.TestCase):
         link = gui_link.Link.__new__(gui_link.Link)
         link.server = types.SimpleNamespace(handle_light=light)
         f = io.StringIO()
-        line = json.dumps({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "batch", "arguments": {"calls": [{"tool": "gui_unstick", "arguments": {}}]}}})
+        line = json.dumps({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "batch", "arguments": {"calls": [{"tool": "gui_unstick"}]}}})
         self.assertTrue(link._thread_call(line, f))
         for _ in range(100):
             if f.getvalue():

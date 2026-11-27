@@ -324,6 +324,7 @@
   "robot_run": {"workbench": "RobotWorkbench", "commands": ["Robot_Simulate"], "words": ["simulate", "reach", "check"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "robot_tool": {"workbench": "RobotWorkbench", "commands": ["Robot_AddToolShape"], "words": ["gripper", "end", "effector", "flange"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "robot_trajectory": {"workbench": "RobotWorkbench", "commands": ["Robot_TrajectoryCompound", "Robot_TrajectoryDressUp"], "words": ["join", "dressup", "speed"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
+  "run": {"workbench": null, "commands": [], "words": ["one", "step", "call", "single", "tool", "full", "answer", "flat", "each", "loop"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-26"},
   "scad_code": {"workbench": "OpenSCADWorkbench", "commands": ["OpenSCAD_AddOpenSCADElement"], "words": ["openscad", "script", "csg", "run"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "scad_export": {"workbench": "OpenSCADWorkbench", "commands": ["Std_Export"], "words": ["openscad", "csg", "write"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "scad_import": {"workbench": "OpenSCADWorkbench", "commands": ["Std_Import"], "words": ["openscad", "csg", "read", "load"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},

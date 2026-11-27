@@ -144,10 +144,10 @@ def _child(case):
     srv.tools["probe_change"] = Tool("probe_change", "A change.", obj, change, changes=True)
     srv.tools["probe_person"] = Tool("probe_person", "The person acts.", obj, person)
     srv.tools["probe_fail"] = Tool("probe_fail", "A refusal.", obj, fail)
-    ch = {"tool": "probe_change", "arguments": {}}
+    ch = {"tool": "probe_change"}
     calls = {
-        "interleaved": [ch, {"tool": "probe_person", "arguments": {}}, ch, {"tool": "probe_fail", "arguments": {}}],
-        "clean": [ch, ch, {"tool": "probe_fail", "arguments": {}}],
+        "interleaved": [ch, {"tool": "probe_person"}, ch, {"tool": "probe_fail"}],
+        "clean": [ch, ch, {"tool": "probe_fail"}],
     }[case]
     r = srv.handle({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "batch", "arguments": {"calls": calls, "rollback": True}}})
     return {"body": json.loads(r["result"]["content"][0]["text"]), "stack": s.doc.UndoNames}

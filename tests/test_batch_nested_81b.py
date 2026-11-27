@@ -147,20 +147,20 @@ def _child(case):
     link.calls.append(call)
 
     def gi(*steps):
-        return {"tool": "gui_input", "arguments": {"steps": list(steps)}}
+        return {"tool": "gui_input", "steps": list(steps)}
 
     def pr(n, **kw):
-        return {"tool": "probe_state", "arguments": {"n": n, **kw}}
+        return {"tool": "probe_state", "n": n, **kw}
 
     args = {
         "menu_read_escape": {"calls": [gi({"click": 1, "open": "Part"}), pr(1), gi({"key": "Escape"})]},
-        "escape_then_more": {"calls": [gi({"click": 1, "open": "Part"}), gi({"key": "Escape"}), pr(2), {"tool": "probe_change", "arguments": {"n": 3}}]},
+        "escape_then_more": {"calls": [gi({"click": 1, "open": "Part"}), gi({"key": "Escape"}), pr(2), {"tool": "probe_change", "n": 3}]},
         "menu_left_open": {"calls": [gi({"click": 1, "open": "Part"}), pr(1)]},
         "submenu": {"calls": [gi({"click": 1, "open": "Part"}), gi({"click": 2, "open": "Sub"}), pr(1), gi({"key": "Escape"})]},
-        "refused_inside": {"calls": [{"tool": "probe_change", "arguments": {"n": 0}}, gi({"click": 1, "open": "Part"}),
-                                     {"tool": "probe_change", "arguments": {"n": 1}}, pr(2, fail=True), pr(3)]},
-        "refused_outside": {"calls": [{"tool": "probe_change", "arguments": {"n": 0}}, gi({"click": 1, "open": "Part"}), gi({"key": "Escape"}),
-                                      {"tool": "probe_change", "arguments": {"n": 1}}, pr(2, fail=True)]},
+        "refused_inside": {"calls": [{"tool": "probe_change", "n": 0}, gi({"click": 1, "open": "Part"}),
+                                     {"tool": "probe_change", "n": 1}, pr(2, fail=True), pr(3)]},
+        "refused_outside": {"calls": [{"tool": "probe_change", "n": 0}, gi({"click": 1, "open": "Part"}), gi({"key": "Escape"}),
+                                      {"tool": "probe_change", "n": 1}, pr(2, fail=True)]},
         "no_menu": {"calls": [gi({"click": 1}), pr(1)]},
     }[case]
     args.setdefault("rollback", True)

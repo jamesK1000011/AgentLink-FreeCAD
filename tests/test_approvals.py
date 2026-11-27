@@ -46,7 +46,7 @@ def _server(extra=()):
     def batch(a):
         out = []
         for c in a.get("calls") or []:
-            r = srv.call({"name": c["tool"], "arguments": c.get("arguments") or {}})
+            r = srv.call({"name": c["tool"], "arguments": {k: v for k, v in c.items() if k != "tool"}})
             out.append(json.loads(r["content"][0]["text"]))
         return {"results": out}
 
@@ -105,7 +105,7 @@ class ClientApproval(unittest.TestCase):
     def test_a_batch_a_job_or_a_direct_call_cannot_approve(self):
         srv = _server()
         args = self.pending()["approve"]["arguments"]
-        err, out = client(srv, "batch", {"calls": [{"tool": "approve_code", "arguments": args}]})
+        err, out = client(srv, "batch", {"calls": [{"tool": "approve_code", **args}]})
         self.assertEqual(out["results"][0]["error"]["code"], "not_allowed")
         # A nested call (Server.call, as batch, cookbooks, lessons and the panel use).
         r = srv.call({"name": "approve_code", "arguments": args})

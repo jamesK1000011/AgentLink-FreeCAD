@@ -94,7 +94,7 @@ class TheSameCallAgain(unittest.TestCase):
     out["add"] = call("sketch_add", {"x": 5})
     out["addAgain"] = msg(call("sketch_add", {"x": 5}))
     out["geometry"] = len(sk.Geometry)
-    b = call("batch", {"calls": [{"tool": "sketch_add", "arguments": {"x": 6}}, {"tool": "sketch_add", "arguments": {"x": 6}}]})
+    b = call("batch", {"calls": [{"tool": "sketch_add", "x": 6}, {"tool": "sketch_add", "x": 6}]})
     out["batch"] = [[r["ok"], (r.get("error") or {}).get("message")] for r in b[1]["results"]]
     # what is never refused: a read, a tool where a repeat is normal, a call that made nothing
     out["read"] = [call("probe_read", {"x": 1})[0] for _ in range(3)]

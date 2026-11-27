@@ -4,34 +4,26 @@
 The full answers and the guided workflow stay as they are. This is one more
 way in, for an agent that already knows what it does:
 
-  fast { do: [steps] }   one call runs a block of steps in the hub's step
-                         language, calls tools through the server's normal
-                         path, and answers with one short line, not a full
-                         answer per call.
-  get { what }           one value, with its unit: "Pad.Length",
-                         "Body.volume", "Body.Edge7.length", "sketch.dof",
-                         "active.body". Also a step of a block.
+  fast { calls: [steps] }   one call runs a list of steps, calls the tools
+                            through the server's normal path, and answers
+                            with one short line, not a full answer per call.
+  get { what }              one value, with its unit: "Pad.Length",
+                            "Body.volume", "Body.Edge7.length", "sketch.dof",
+                            "active.body". A tool: a step of calls too.
 
-The block's steps (a subset of agentlink/runners.py's steps runner; never
-make, add, set or do, which reach FreeCAD's objects directly):
+A step is the same flat step as batch's (agentlink/callshape.py):
 
-  {"let": {"name": e, …}}                     values, in order
-  {"tool": "name", "arguments": {…}, "as": "x"}  one tool call, the same
-                                              shape as a batch call; its
-                                              answer is "x" (and "last").
-                                              The old {"call": …} is refused.
-  {"get": "Body.volume" | "=e", "as": "v"}    a targeted read; its value
-                                              goes in the answer's values
-  {"each": "x", "in": e, "index": "i", "steps": [steps]}
-  {"when": e, "then": [steps], "else": [steps]}  ("when" on any step too)
-  {"choose": e, "of": {"value": [steps]}, "else": [steps]}
-  {"try": [steps], "on": "refusal" | "error", "except": [steps]}
-  {"refuse": "words", "code": "invalid_input"} ends the block
-  {"push": {"list": e}}                       one more on a list
+  { "tool": "pd_pad", "sketch": "Sketch", "length": 6 }
+  { "tool": "sketch_add", "each": { "x": [15, 45] }, "items": [...  "$x" ...] }
+  { "tool": "pd_pad", "length": { "$from": 2, "$at": "height" } }
 
-e: a value, or "=expression" (agentlink/expr.py: parsed with Python's own
-parser, walked by the hub's evaluator, an allow-list; never eval or exec).
-"==text" is the text "=text". No Python is run that the agent wrote.
+The tool's inputs stand beside tool. each runs the step once for each
+value, in order ("$x" is the value). $from takes a value from the answer of
+an earlier call (calls count from 0, each pass is one call). The only
+difference to batch is the answer: one short answer here, a full answer
+for each call there. There are no other kinds of step: no variables, no
+conditions, no expressions. Old forms ({ tool, arguments }, do, as, when,
+let, try, choose) are refused with the new form in the words.
 
 Safety of a block (the same as batch's where batch has it): every call goes
 through the server's own path (input checks, field aliases, path guards,
@@ -46,14 +38,13 @@ refused by its number before anything changes.
 
 Plain Python: FreeCAD is reached through the tools and the session only.
 """
-import ast
 import copy
 import json
 import os
 import re
 import time
 
-from . import expr
+from . import callshape, chain
 from .protocol import ToolError, check_input, compact, kinded, strip_kind
 
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
@@ -66,7 +57,7 @@ FAST, GET = "fast", "get"
 # settings, input to the window and its dialogs, jobs, the history (a block
 # rolls back by undo), a restart. The same list as a cookbook script's
 # (agentlink/cookbook.py SCRIPT_BLOCKED), and more.
-BLOCKED = {"batch", FAST, "job_start", "live_run", "app_restart", "app_force_restart", "agentlink_update", "pref_set", "pref_reset",
+BLOCKED = {"batch", FAST, "run", "job_start", "live_run", "app_restart", "app_force_restart", "agentlink_update", "pref_set", "pref_reset",
            "pref_import", "pref_pack", "app_extensions", "addon", "port_scaffold", "approve_file", "approve_code", "gui_input",
            "dialog_answer", "gui_unstick", "addon_test", "cookbook_run"}
 # The history tools (by their prefix, the add-ons' too) do not run in a block:
@@ -76,11 +67,6 @@ MAX_STEPS = 2000      # steps a block may take (a loop's steps each count)
 MAX_CALLS = 200       # tool calls a block may make
 MAX_DRY_CALLS = 400   # calls a check reads before it stops reading
 WORDS = 240           # a warning's or refusal's words in the answer
-
-STEPS = ("tool", "get", "let", "each", "choose", "try", "refuse", "push")
-EXTRA = {"tool": ("as", "arguments"), "get": ("as",), "let": (), "each": ("in", "index", "steps"), "choose": ("of", "else"),
-         "try": ("on", "except"), "refuse": ("code",), "push": (), "then": ("else",)}
-CATCH = ("refusal", "error")
 
 # A left-out field a tool requires, filled from what the session holds now
 # (the current body, sketch and last result): field → what fills it.
@@ -108,150 +94,6 @@ def enabled():
 def off(tool):
     return ToolError(OFF_CODE, f"fast path off: {tool} does not run here (the person's preference FastPath in Mod/AgentLink, "
                                f"or {ENV}=off). Call the tools one by one, or use batch.")
-
-
-# ---- the block's shape and its expressions ---------------------------------------------------
-
-_NO_CALL = {"maker"}
-_NO_METHOD = {"format", "format_map"}
-
-
-def _expr_words(text):
-    """What is wrong with an expression of a block, or None."""
-    w = expr.check(text)
-    if w:
-        return w
-    for n in ast.walk(expr.parse(text)):
-        if isinstance(n, ast.Call):
-            f = n.func
-            if isinstance(f, ast.Name) and f.id in _NO_CALL:
-                return f"{text!r}: {f.id}() is not part of a block's expressions"
-            if isinstance(f, ast.Attribute) and f.attr in _NO_METHOD:
-                return f"{text!r}: .{f.attr}() is not part of a block's expressions"
-    return None
-
-
-def _values_words(x, where):
-    if isinstance(x, str):
-        if x.startswith("=") and not x.startswith("=="):
-            w = _expr_words(x[1:])
-            return [(where, w)] if w else []
-        return []
-    if isinstance(x, list):
-        return [w for i, v in enumerate(x) for w in _values_words(v, f"{where}.{i}")]
-    if isinstance(x, dict):
-        return [w for k, v in x.items() for w in _values_words(v, f"{where}.{k}")]
-    return []
-
-
-def action(st):
-    """A step's action: tool when it has one (a call: { tool, arguments,
-    as, when }), else the one of STEPS it has, else then (a when step)."""
-    if "tool" in st:
-        return "tool"
-    acts = [k for k in STEPS if k in st]
-    if len(acts) == 1:
-        return acts[0]
-    if not acts and "then" in st:
-        return "then"
-    return None
-
-
-def shape_words(steps, where="do"):
-    """[(where, what is wrong)] with a block's steps, before anything runs."""
-    if not isinstance(steps, list):
-        return [(where, "a list of steps")]
-    out = []
-    for i, st in enumerate(steps):
-        at = f"{where}.{i}"
-        if not isinstance(st, dict):
-            out.append((at, "a step is an object"))
-            continue
-        act = action(st)
-        if act is None and "call" in st:
-            out.append((at, f"{{ call, … }} is the old form of a fast step. A tool step is {{ \"tool\": \"{st['call'] if isinstance(st['call'], str) else 'sketch_new'}\", "
-                            "\"arguments\": { … }, \"as\": \"name\" }, the same as a batch call, with every input inside arguments"))
-            continue
-        if act is None:
-            have = [k for k in STEPS if k in st]
-            out.append((at, f"one of {', '.join(STEPS)}, or when with then (has {', '.join(sorted(st)) or 'nothing'})" if not have
-                        else f"one action a step: {', '.join(have)}"))
-            continue
-        if act != "tool":
-            extra = set(st) - {act, "when"} - set(EXTRA[act])
-            if extra:
-                out.append((at, f"{act} does not take {', '.join(sorted(extra))}"))
-                continue
-        if "when" in st:
-            out += _values_words(st["when"], f"{at}.when")
-        if act == "tool":
-            if not isinstance(st["tool"], str) or not st["tool"]:
-                out.append((at, "tool: a tool's name"))
-            if "arguments" in st and not isinstance(st["arguments"], (dict, str)):
-                out.append((f"{at}.arguments", "the call's inputs as an object, {} for none"))
-            if "as" in st and not _name_ok(st["as"]):
-                out.append((f"{at}.as", "a plain name (letters, digits, _; not first)"))
-            out += _values_words({k: v for k, v in st.items() if k not in ("tool", "as", "when")}, at)
-        elif act == "get":
-            if not isinstance(st["get"], str) or not st["get"].strip():
-                out.append((at, "get: what to read (\"Pad.Length\", \"Body.volume\", \"=expression\")"))
-            elif st["get"].startswith("="):
-                out += _values_words(st["get"], f"{at}.get")
-            else:
-                w = what_words(st["get"])
-                if w:
-                    out.append((f"{at}.get", w))
-            if "as" in st and not _name_ok(st["as"]):
-                out.append((f"{at}.as", "a plain name"))
-        elif act in ("let", "push"):
-            if not isinstance(st[act], dict) or not st[act]:
-                out.append((at, f"{act}: an object of names and values"))
-            else:
-                for k in st[act]:
-                    if not all(_name_ok(n.strip()) for n in str(k).split(",")):
-                        out.append((f"{at}.{act}", f"{k!r}: a plain name (or \"p, q\" to unpack)"))
-                out += _values_words(st[act], f"{at}.{act}")
-        elif act == "each":
-            if not _name_ok(st["each"]) or "in" not in st or not isinstance(st.get("steps"), list):
-                out.append((at, "each (a name), in and steps"))
-            else:
-                out += _values_words(st["in"], f"{at}.in")
-                out += shape_words(st["steps"], f"{at}.steps")
-            if "index" in st and not _name_ok(st["index"]):
-                out.append((f"{at}.index", "a plain name"))
-        elif act == "then":
-            if "when" not in st:
-                out.append((at, "then goes with when"))
-            out += shape_words(st["then"], f"{at}.then")
-            if "else" in st:
-                out += shape_words(st["else"], f"{at}.else")
-        elif act == "choose":
-            out += _values_words(st["choose"], f"{at}.choose")
-            if not isinstance(st.get("of"), dict):
-                out.append((f"{at}.of", "an object of steps by value"))
-            else:
-                for k, v in st["of"].items():
-                    out += shape_words(v, f"{at}.of.{k}")
-            if "else" in st:
-                out += shape_words(st["else"], f"{at}.else")
-        elif act == "try":
-            if st.get("on", "refusal") not in CATCH:
-                out.append((f"{at}.on", "refusal (a tool's refusal) or error (any)"))
-            out += shape_words(st["try"], f"{at}.try")
-            out += shape_words(st.get("except", []), f"{at}.except")
-        elif act == "refuse":
-            if not isinstance(st["refuse"], str):
-                out.append((at, "refuse: the words"))
-            else:
-                out += _values_words(st["refuse"], f"{at}.refuse")
-    return out
-
-
-_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
-
-
-def _name_ok(n):
-    return isinstance(n, str) and bool(_NAME.match(n))
 
 
 # ---- targeted reads ----------------------------------------------------------------------------
@@ -284,7 +126,7 @@ def what_words(what):
     if len(parts) < 2 or not all(parts):
         # A tool's name here (live, 22 Nov: a local model read "body_check"):
         # a tool runs as a step of its own.
-        tool = f" If {w} is a tool, run it as a step: {{ \"tool\": \"{w}\", \"arguments\": {{}} }}." if len(parts) == 1 and "_" in w else ""
+        tool = f" If {w} is a tool, run it as a step: {{ \"tool\": \"{w}\" }}." if len(parts) == 1 and "_" in w else ""
         return f"what {w!r}: an object and what to read of it, \"Object.Property\" (\"Pad.Length\", \"Body.volume\"), or one of {', '.join(ACTIVE)}.{tool}"
     return None
 
@@ -586,13 +428,6 @@ class Stop(Exception):
         self.kind = None  # the step's own refusal kind (protocol.refusal_kind), when it had one
 
 
-def _no_maker(*_a, **_k):
-    raise expr.ExprError("maker() is not part of a block's expressions")
-
-
-SAFE = {"maker": _no_maker}
-
-
 # ---- the run ------------------------------------------------------------------------------------
 
 class Run:
@@ -602,20 +437,18 @@ class Run:
 
     def __init__(self, server, session, dry=False, budget=None):
         self.server, self.s, self.dry = server, session, dry
-        self.env = {"last": UNKNOWN if dry else None}
         self.steps_taken = 0
-        self.calls = 0
+        self.calls = 0           # the calls so far: also the number of the next one
         self.rows = []           # each call: {step, tool, ok, result | error}
+        self.answers = {}        # call index -> { ok, tool, answer, size }: what $from takes from
         self.values = {}
         self.warnings = []
         self.filled = []
-        self.read_as = []        # fields moved from beside tool into arguments
         self.made = []           # labels of what the block made
         self.made_rows = []      # {name, label, type} of the same: the names later calls take
         self.checks = []         # the key results of check, save and close steps
         self.health_bad = 0
         self.changed = False     # a changing call came before (dry: leading checks stop counting)
-        self.guarded = 0         # inside a try that catches refusals
         self.notes = []          # dry: what was not read
         self.read_checks = 0
         self.mine = None         # the run's batch_now (set by the caller of a real run)
@@ -624,160 +457,30 @@ class Run:
         self.t0 = time.time()
         self.budget = budget
 
-    # values
-    def val(self, e, where):
-        if isinstance(e, str):
-            if e.startswith("=="):
-                return e[1:]
-            if e.startswith("="):
-                try:
-                    return expr.evaluate(e[1:], self.env, SAFE)
-                except Exception as x:  # noqa: BLE001
-                    if self.dry and self._unknown_in(e[1:]):
-                        return UNKNOWN
-                    raise Stop(where, None, "invalid_input", f"{e[:80]}: {type(x).__name__}: {str(x)[:120]}") from None
-            return e
-        if isinstance(e, list):
-            return [self.val(x, f"{where}.{i}") for i, x in enumerate(e)]
-        if isinstance(e, dict):
-            return {k: self.val(v, f"{where}.{k}") for k, v in e.items()}
-        return e
-
-    def _unknown_in(self, text):
-        try:
-            names = {n.id for n in ast.walk(expr.parse(text)) if isinstance(n, ast.Name)}
-        except Exception:  # noqa: BLE001
-            return False
-        return any(_has_unknown(self.env.get(n)) for n in names)
-
-    def truth(self, e, where):
-        v = self.val(e, where)
-        return v if v is UNKNOWN else bool(v)
-
     # steps
-    def block(self, steps, where):
-        for i, st in enumerate(steps):
-            self.step(st, f"{where}.{i}")
+    def block(self, steps):
+        for st in steps:
+            self.step(st)
 
-    def step(self, st, where):
+    def step(self, st):
+        """One step of calls: its calls are made in order (each: once for
+        each value). A step with a wrong form stops the block."""
         self.steps_taken += 1
+        where = f"calls.{self.calls}"
         if self.steps_taken > MAX_STEPS:
-            raise Stop(where, None, "invalid_input", f"the block took more than {MAX_STEPS} steps: split it, or loop over less.")
-        act = action(st)
-        if "when" in st and act != "then":
-            c = self.truth(st["when"], f"{where}.when")
-            if c is not UNKNOWN and not c:
+            raise Stop(where, None, "invalid_input", f"the block took more than {MAX_STEPS} steps: split it.")
+        try:
+            parts = callshape.steps_of(self.server, st, where, runner="fast")
+        except callshape.Refused as e:
+            name = st.get("tool") if isinstance(st, dict) and isinstance(st.get("tool"), str) else None
+            raise Stop(where, name, "invalid_input", e.words) from None
+        for p in parts:
+            self.call(p["tool"], p["inputs"], f"calls.{self.calls}")
+            if self.dry and self.calls > MAX_DRY_CALLS:
                 return
-        if act == "let":
-            for k, x in st["let"].items():
-                self._assign(k, self.val(x, f"{where}.let.{k}"), where)
-        elif act == "tool":
-            self.call(st, where)
-        elif act == "get":
-            self.get(st, where)
-        elif act == "each":
-            xs = self.val(st["in"], f"{where}.in")
-            if xs is UNKNOWN:
-                self._assign(st["each"], UNKNOWN, where)
-                if "index" in st:
-                    self.env[st["index"]] = UNKNOWN
-                self.notes.append(f"{where}: what it loops over is known only when the block runs; its steps were read once")
-                self.block(st["steps"], f"{where}.steps")
-                return
-            try:
-                xs = list(xs)
-            except TypeError:
-                raise Stop(f"{where}.in", None, "invalid_input", f"in: a list to loop over, not {type(xs).__name__}") from None
-            for i, x in enumerate(xs):
-                self._assign(st["each"], x, where)
-                if "index" in st:
-                    self.env[st["index"]] = i
-                self.block(st["steps"], f"{where}.steps")
-                if self.dry and self.calls > MAX_DRY_CALLS:
-                    return
-        elif act == "then":
-            c = self.truth(st["when"], f"{where}.when")
-            if c is UNKNOWN:
-                self.block(st["then"], f"{where}.then")
-                self.block(st.get("else", []), f"{where}.else")
-            elif c:
-                self.block(st["then"], f"{where}.then")
-            else:
-                self.block(st.get("else", []), f"{where}.else")
-        elif act == "choose":
-            v = self.val(st["choose"], f"{where}.choose")
-            if v is UNKNOWN:
-                for k, steps in st["of"].items():
-                    self.block(steps, f"{where}.of.{k}")
-                self.block(st.get("else", []), f"{where}.else")
-            else:
-                key = v if isinstance(v, str) else json.dumps(v)
-                if key in st["of"]:
-                    self.block(st["of"][key], f"{where}.of.{key}")
-                else:
-                    self.block(st.get("else", []), f"{where}.else")
-        elif act == "try":
-            on = st.get("on", "refusal")
-            self.guarded += 1
-            try:
-                self.block(st["try"], f"{where}.try")
-            except Stop as e:
-                self.guarded -= 1
-                if on == "refusal" and e.tool is None:
-                    raise  # not a tool's refusal: an error of the block itself
-                self.env["error"] = {"step": e.where, "tool": e.tool, "code": e.code, "message": e.words}
-                if not self.dry:
-                    self.warnings.append(_cut(f"{e.where}{' (' + e.tool + ')' if e.tool else ''}: {e.words} (caught)"))
-                self.block(st.get("except", []), f"{where}.except")
-                return
-            self.guarded -= 1
-            if self.dry:
-                self.env["error"] = UNKNOWN
-                self.block(st.get("except", []), f"{where}.except")
-        elif act == "refuse":
-            if self.dry:
-                return  # the block's own refusal: only when it runs
-            words = self.val(st["refuse"], f"{where}.refuse")
-            raise Stop(where, None, st.get("code", "invalid_input") if st.get("code") in _CODES else "invalid_input", str(words))
-        elif act == "push":
-            for k, x in st["push"].items():
-                lst = self.env.get(k)
-                if lst is None:
-                    lst = self.env[k] = []
-                if lst is UNKNOWN:
-                    continue
-                if not isinstance(lst, list):
-                    raise Stop(where, None, "invalid_input", f"push {k}: {k} is not a list")
-                lst.append(self.val(x, f"{where}.push.{k}"))
-
-    def _assign(self, names, v, where):
-        if "," not in names:
-            self.env[names] = v
-            return
-        keys = [k.strip() for k in names.split(",")]
-        if v is UNKNOWN:
-            for k in keys:
-                self.env[k] = UNKNOWN
-            return
-        vals = list(v) if isinstance(v, (list, tuple)) else None
-        if vals is None or len(vals) != len(keys):
-            raise Stop(where, None, "invalid_input", f"{names}: {len(keys)} names for {'one value' if vals is None else len(vals)}")
-        self.env.update(zip(keys, vals))
 
     # a call
-    def call(self, st, where):
-        from . import callshape
-
-        try:
-            _n, _a, read_as = callshape.split(self.server, st, where, extra=("as", "when"), runner="fast")
-        except callshape.Refused as e:
-            raise Stop(where, st.get("tool") if isinstance(st.get("tool"), str) else None, "invalid_input", e.words) from None
-        if read_as:
-            st = {k: v for k, v in st.items() if k in ("tool", "as", "when")}
-            st["arguments"] = _a
-            if read_as not in self.read_as:
-                self.read_as.append(read_as)
-        name = st["tool"]
+    def call(self, name, args, where):
         server = self.server
         tool = server.tools.get(name)
         if tool is None:
@@ -788,21 +491,13 @@ class Run:
         if name in BLOCKED or getattr(tool, "alias_of", None) in BLOCKED or (name.startswith("history_") and name not in READ_HISTORY):
             raise Stop(where, name, "refused", f"{name} does not run in a fast block (another runner, the person's OK or settings, the window's "
                                                "input and dialogs, jobs, the history or a restart): call it on its own.")
-        args = self.val(st.get("arguments", {}), f"{where}.arguments")
-        if isinstance(args, str):
-            try:
-                args = json.loads(args) if args.strip() else {}
-            except ValueError:
-                args = None
-        if args is None:
-            args = {}
-        if args is not UNKNOWN and not isinstance(args, dict):
-            raise Stop(where, name, "invalid_input", "arguments: the call's inputs as an object, {} for none")
+        idx = self.calls
+        args = self.refs(args, where, name, idx)
         self.calls += 1
         if self.calls > MAX_CALLS and not self.dry:
             raise Stop(where, name, "invalid_input", f"more than {MAX_CALLS} calls in one block: split it.")
         if self.dry:
-            self._dry_call(tool, args, where, st)
+            self._dry_call(tool, args, where)
             return
         if self.budget is not None and self.calls > 1 and time.time() - self.t0 > self.budget:
             raise Stop(where, name, "invalid_input", f"out of time: no call starts after {self.budget:g} s (a client waits about 80 s). "
@@ -817,10 +512,20 @@ class Run:
             raise
         except Exception:  # noqa: BLE001
             pass
-        body = self.on_call(where, tool, args)
-        if "as" in st:
-            self.env[st["as"]] = body
-        self.env["last"] = body
+        self.on_call(where, tool, args)
+
+    def refs(self, args, where, name, idx):
+        """args with each { "$from": n, "$at": path } put at the answer of
+        call n (the same code as batch's). A check cannot know the answer:
+        it reads the form and gives UNKNOWN. $file is batch's only."""
+        if not chain.has_refs(args):
+            return args
+        try:
+            if self.dry:
+                return _unknown_refs(args, idx)
+            return chain.resolve(args, _no_file, self.answers, idx, 0)
+        except chain.Miss as e:
+            raise Stop(where, name, e.code, e.message) from None
 
     def fill(self, tool, args, where):
         """Left-out fields from the context: a required one from the
@@ -882,15 +587,12 @@ class Run:
             if self.block_ctx.get(k):
                 ctx[k] = self.block_ctx[k]
 
-    def _dry_call(self, tool, args, where, st):
+    def _dry_call(self, tool, args, where):
         name = tool.name
         if self.calls > MAX_DRY_CALLS:
             if len(self.notes) < 40:
                 self.notes.append(f"{where}: past {MAX_DRY_CALLS} calls the check reads no more")
             return
-        if args is UNKNOWN:
-            args = {}
-            self.notes.append(f"{where} ({name}): its fields are known only when the block runs")
         self.fill(tool, args, where)
         known = {k: v for k, v in args.items() if not _has_unknown(v)}
         unknown = [k for k in args if k not in known]
@@ -902,7 +604,7 @@ class Run:
         try:
             check_input(schema, a, name)
         except ToolError as e:
-            self._dry_refusal(where, name, e.code, e.message)
+            raise Stop(where, name, e.code, e.message) from None
         changing = True
         try:
             changing = bool(t.changes_for(a))
@@ -916,46 +618,43 @@ class Run:
                 self.read_checks += 1
                 if r.get("applies") is False and r.get("wouldRefuse"):
                     x = r["wouldRefuse"][0]
-                    self._dry_refusal(where, name, x.get("code", "invalid_input"), _said(x.get("words")) + " That is its leading check.")
+                    raise Stop(where, name, x.get("code", "invalid_input"), _said(x.get("words")) + " That is its leading check.")
             except Stop:
                 raise
             except Exception:  # noqa: BLE001 - a reading is advice; it never stops a block by failing
                 pass
         if changing:
             self.changed = True
-        body = UNKNOWN
-        if "as" in st:
-            self.env[st["as"]] = body
-        self.env["last"] = body
         if changing and name in ("sketch_new", "pd_body_new"):
             # Made by the block: its name is known only when it runs.
             self.block_ctx["sketch" if name == "sketch_new" else "body"] = UNKNOWN
 
-    def _dry_refusal(self, where, name, code, words):
-        if self.guarded:
-            self.notes.append(_cut(f"{where} ({name}) would be refused, inside a try that catches it: {words}"))
-            return
-        raise Stop(where, name, code, words)
 
-    # a targeted read
-    def get(self, st, where):
-        what = st["get"]
-        key = st.get("as") or what
-        if what.startswith("="):
-            v = self.val(what, f"{where}.get")
-            self.env[st.get("as") or "got"] = v
-            if not self.dry:
-                self.values[key] = _plain(v)
-            return
-        if self.dry:
-            self.env[st.get("as") or "got"] = UNKNOWN
-            return
-        try:
-            v, unit = read(self.server, self.s, what)
-        except ToolError as e:
-            raise Stop(where, GET, e.code, e.message) from None
-        self.env[st.get("as") or "got"] = v
-        self.values[key] = with_unit(_plain(v), unit)
+def _no_file(name):
+    raise chain.Miss("invalid_input", "$file: a file is read in batch only. fast takes { \"$from\": n, \"$at\": path }, "
+                                      "the answer of an earlier call of this block.")
+
+
+def _unknown_refs(v, idx):
+    """v with each reference put at UNKNOWN, after its form is read (a
+    check knows no answers): { "$from": n } with n an earlier call."""
+    if chain.is_ref(v):
+        if chain.FILE in v:
+            _no_file(v[chain.FILE])
+        extra = sorted(k for k in v if k not in (chain.FROM, chain.AT))
+        if extra:
+            raise chain.Miss("invalid_input", f"{{ $from }} takes only $at beside it, not {', '.join(extra)}.")
+        n = v[chain.FROM]
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise chain.Miss("invalid_input", f"$from: the index of an earlier call of this block (calls are numbered from 0), not {n!r}.")
+        if n >= idx:
+            raise chain.Miss("invalid_input", f"$from: {n} is not before this call (calls.{idx}): a call takes only an earlier call's answer.")
+        return UNKNOWN
+    if isinstance(v, dict):
+        return {k: _unknown_refs(x, idx) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_unknown_refs(x, idx) for x in v]
+    return v
 
 
 _CODES = {"invalid_input", "not_found", "invalid_state", "unavailable", "failed", "not_allowed", "refused"}
@@ -1050,13 +749,9 @@ def _health_words(body):
 def check(server, session, steps):
     """The dry run: (the run, None) when every step reads as fine, or
     (the run, Stop) at the first that would be refused."""
-    shape = shape_words(steps)
     run = Run(server, session, dry=True)
-    if shape:
-        where, words = shape[0]
-        return run, Stop(where, None, "invalid_input", words)
     try:
-        run.block(steps, "do")
+        run.block(steps)
     except Stop as e:
         return run, e
     return run, None
@@ -1115,19 +810,19 @@ def _summary(run, ok, secs, v0, v1, cp=None):
 
 
 def fast_tool(server, session, a):
-    """fast { do: [steps], check }: the block's answer (module docstring)."""
+    """fast { calls: [steps], check }: the block's answer (module docstring)."""
     if not enabled():
         raise off(FAST)
-    steps = a.get("do")
+    steps = a.get("calls")
+    if "do" in a and steps is None:
+        raise ToolError("invalid_input", callshape.old_words("do", "calls"))
     if isinstance(steps, str):
         try:
             steps = json.loads(steps)
         except ValueError:
-            raise ToolError("invalid_input", "do came as a string that is not JSON: give a list of steps. Nothing was run.") from None
-    if isinstance(steps, dict) and "do" in steps:
-        steps = steps["do"]
+            raise ToolError("invalid_input", "calls came as a string that is not JSON: give a list of steps. Nothing was run.") from None
     if not isinstance(steps, list) or not steps:
-        raise ToolError("invalid_input", "do: a list of steps ({ tool, arguments, as }, { let }, { each }, { when }, { get } …). Nothing was run.")
+        raise ToolError("invalid_input", f"calls: a list of steps, {callshape.EXAMPLE}. Nothing was run.")
     dry, stop = check(server, session, steps)
     if stop is not None:
         err = ToolError(stop.code, f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)} Read before step 1. Nothing was run.")
@@ -1226,6 +921,13 @@ def _run(server, session, steps, a):
             st = Stop(where, name, err.get("code", "failed"), strip_kind(err.get("message")) or f"{name} was refused", body)
             st.kind = err.get("kind")
             raise st
+        run.answers[run.calls - 1] = {"ok": True, "tool": name, "answer": body, "size": len(r["content"][0]["text"])}
+        if name == "get" and isinstance(body, dict):
+            # get's values are in the answer's values (a read of one value).
+            what = args.get("what")
+            for w in [what] if isinstance(what, str) else (what if isinstance(what, list) else []):
+                if isinstance(w, str) and w.strip() in body:
+                    run.values[w.strip()] = body[w.strip()]
         cr = check_row(where, name, body)
         if cr:
             run.checks.append(cr)
@@ -1244,7 +946,7 @@ def _run(server, session, steps, a):
     run.on_call = on_call
     stop = None
     try:
-        run.block(steps, "do")
+        run.block(steps)
     except Stop as e:
         stop = e
     finally:
@@ -1274,8 +976,6 @@ def _run(server, session, steps, a):
             out["warnings"] = run.warnings[:12]
         if run.filled:
             out["filled"] = list(dict.fromkeys(run.filled))[:12]
-        if run.read_as:
-            out["readAs"] = "; ".join(run.read_as[:6])
         if state["cp"]:
             out["checkpoint"] = state["cp"]
         if rel:

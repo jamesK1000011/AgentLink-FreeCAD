@@ -1020,7 +1020,7 @@ def _hub():
     out["now"] = call("tool_groups", {"now": True})
     out["study"] = state["study"]
     out["refused"] = call("fea_hold", {"object": "A"})
-    out["batch"] = call("batch", {"calls": [{"tool": "fea_setup", "arguments": {"object": "A"}}, {"tool": "fea_solve", "arguments": {}}], "rollback": False})
+    out["batch"] = call("batch", {"calls": [{"tool": "fea_setup", "object": "A"}, {"tool": "fea_solve"}], "rollback": False})
     out["again"] = call("fea_hold", {"object": "A"})
     out["usage"] = call("usage_report", {"session": True})
     with open(os.path.join(s.out_dir, appliesnow.FILE), encoding="utf-8") as f:

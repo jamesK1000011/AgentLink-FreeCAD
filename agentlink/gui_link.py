@@ -166,6 +166,12 @@ def _thread_batch(line, tools):
             return None
     if not isinstance(calls, list) or not calls or not all(isinstance(c, dict) and c.get("tool") in tools for c in calls):
         return None
+    # A step with a loop, a file, or an old key goes the whole batch's way,
+    # which reads it (and refuses an old form with the new form in its words).
+    from .callshape import OLD_KEYS
+
+    if any(k in ("each", "writeTo") or k in OLD_KEYS for c in calls for k in c):
+        return None
     return calls
 
 
@@ -1720,7 +1726,7 @@ class Link:
         first refusal."""
         results = []
         for i, c in enumerate(calls):
-            r = srv.handle_light({"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {"name": c["tool"], "arguments": c.get("arguments") or {}}})
+            r = srv.handle_light({"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {"name": c["tool"], "arguments": {k: v for k, v in c.items() if k != "tool"}}})
             res = (r or {}).get("result") or {}
             try:
                 body = json.loads(res["content"][0]["text"])

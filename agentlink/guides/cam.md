@@ -5,7 +5,7 @@ FreeCAD's CAM workbench makes the paths; these tools set it up, read each path b
 
 ## The workflow
 1. Ask the person: the machine's controller (grbl, linuxcnc …), the end mill (diameter), feeds and speeds for the material, how the stock is held and where it is zeroed.
-2. `cam_job { body, tool, stock }` — the stock round the part with a margin and a little on top; the end mill. FreeCAD works on a clone of the body inside the job (`model` in the reply); face names are the same as on the body.
+2. `cam_job { body, toolbit, stock }` — the stock round the part with a margin and a little on top; the end mill. FreeCAD works on a clone of the body inside the job (`model` in the reply); face names are the same as on the body.
 3. Operations, roughest first, each computed as it is added — read its `cutZ` and `minutes`:
    - `face` — the top flat, when the stock has some on top.
    - `adaptive` — clearing a lot of material steadily (inside a pocket, or outside round the part).
@@ -29,7 +29,7 @@ FreeCAD's CAM workbench makes the paths; these tools set it up, read each path b
 
 ## More operations, tools and dressups
 - More kinds of `cam_op`: `engrave` and `vcarve` follow `base` (letters from `draft_text`, a sketch); `helix` mills holes; `slot`; `deburr`; `thread` mills a thread (`props` for its size). `surface` and `waterline` are 3D finishing, and need OpenCamLib.
-- More than one tool: `cam_tool_add { shape: "v-bit", diameter, angle }`, then `cam_op { tool }` per operation. Ask the person what is in their tool rack; never assume. `skipped` in the reply names a size that shape does not have. `cam_library` keeps the set in a JSON file between documents.
+- More than one tool: `cam_tool_add { shape: "v-bit", diameter, angle }`, then `cam_op { toolbit }` per operation. Ask the person what is in their tool rack; never assume. `skipped` in the reply names a size that shape does not have. `cam_library` keeps the set in a JSON file between documents.
 - `cam_dressup { op, kind: "tags", count, width, height }` adds holding tabs, so a profiled part stays in the stock. `dogbone` clears inside corners so a square part fits; `boundary` keeps moves inside the stock. Adaptive ops enter helically without a ramp dressup.
 - `cam_setup` sets work offsets (`fixtures`: the job is posted once in each), coolant, safe heights (mm above the stock's top) and the order the ops run in.
 - `cam_edit` copies an op (props on the copy), turns one off, drops a comment or a stop (M0/M1) into the G-code after an op, or sets an op's start point. `cam_remove` takes an op out with its dressups.

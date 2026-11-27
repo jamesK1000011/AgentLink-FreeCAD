@@ -224,8 +224,8 @@ def _as_json(v):
 
 
 def batch_calls(args):
-    """The (tool, arguments) of a batch's calls, read as batch reads them
-    (calls, a call or the arguments as a string of JSON); None when they
+    """The (tool, inputs) of a batch's calls, read as batch reads them
+    (calls, or a call as a string of JSON); None when they
     cannot be read, or for a batch from a file."""
     args = _as_json(args)
     if not isinstance(args, dict) or args.get("file") is not None:
@@ -240,8 +240,7 @@ def batch_calls(args):
         c = _as_json(c)
         if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
             return None
-        a = _as_json(c.get("arguments"))
-        out.append((c["tool"], a if isinstance(a, dict) else {}))
+        out.append((c["tool"], {k: v for k, v in c.items() if k not in ("tool", "each", "writeTo")}))
     return out
 
 
@@ -389,6 +388,8 @@ FIELD_ALIASES = {
 # { body }). Not an alias: the call is still refused, and these words come
 # after the fields.
 WRONG_FIELD_WORDS = {
+    "batch": {"do": "do is the old name of a list of steps, and batch takes calls: batch { calls: [{ \"tool\": \"sketch_new\", \"plane\": \"XY\" }] }."},
+    "fast": {"do": "do is now calls: fast { calls: [{ \"tool\": \"sketch_new\", \"plane\": \"XY\" }] }. Nothing was run."},
     "sketch_add": {"body": 'sketch_add takes sketch, not body: a sketch is already in a body. '
                            'Example: { "sketch": "Sketch", "items": [{ "kind": "rectangle", "center": [0, 0], "size": [40, 20] }] }.'},
 }
@@ -634,7 +635,7 @@ def kind_hint(server, n):
     words = f'In a sketch, a {kind} is one item of sketch_add: use sketch_add with items [{{ kind: "{kind}", … }}]'
     if ex is None:
         return words + ". Its fields are in sketch_add's card: tool_find { tool: \"sketch_add\" }"
-    return words + ". Example: " + json.dumps({"tool": "sketch_add", "arguments": {"items": [ex]}}, separators=(", ", ": "))
+    return words + ". Example: " + json.dumps({"tool": "sketch_add", "items": [ex]}, separators=(", ", ": "))
 
 
 def close_names(server, n, k=4):
@@ -743,7 +744,7 @@ def check_input(schema, args, tool=None):
             first = next(iter(inner), None)
             form = f"{tool} {{ {first}: … }}" if tool and first else "{ field: … }"
             raise ToolError("invalid_input", f"inputs go at the top level of a direct call: {form}, not inside arguments. "
-                                             "Only a batch step takes { tool, arguments }.")
+                                             "A batch step is { tool, <its inputs> }: the inputs stand beside tool.")
     required = set(schema.get("required", []))
     empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
     for k in empty:
@@ -1229,6 +1230,11 @@ class Server:
             from . import options
 
             return options.pick_call(self, params)
+        if params.get("name") == "run" and "run" in self.tools:
+            # One step run as the tool's own call (agentlink/callshape.py).
+            from . import callshape
+
+            return callshape.run_call(self, params)
         t0 = time.time()
         s = self.session
         prior = None

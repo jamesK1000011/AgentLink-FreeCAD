@@ -6205,7 +6205,7 @@
   },
   "part_join": {
    "group": "std_more",
-   "description": "Join objects with walls (Part join features); the tool hides the inputs. kind connect { objects }: fuses walls and keeps the insides. kind embed { base, tool }: puts tool into base. kind cutout { base, tool }: cuts base to fit the wall of tool. Use it for pipes and tanks. Answer: valid, solids, volume.",
+   "description": "Join objects with walls (Part join features); the tool hides the inputs. kind connect { objects }: fuses walls and keeps the insides. kind embed { base, cutter }: puts cutter into base. kind cutout { base, cutter }: cuts base to fit the wall of cutter. Use it for pipes and tanks. Answer: valid, solids, volume.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6226,7 +6226,7 @@
      "base": {
       "type": "string"
      },
-     "tool": {
+     "cutter": {
       "type": "string"
      },
      "name": {
@@ -6245,7 +6245,7 @@
    "steps": [
     {"let": {"J": "=tool_module('BOPTools.JoinFeatures')"}},
     {"let": {"kind": "=a.kind"}},
-    {"choose": "=kind", "of": {"connect": [{"let": {"refs": "=ref_list(a.objects)"}}, {"refuse": "objects: two or more walled objects (pipes, shells) by name.", "when": "=not refs"}, {"let": {"members": "=[shaped(r, 'objects') for r in refs]"}}, {"refuse": "objects: two or more walled objects (pipes, shells) by name.", "when": "=len(members) < 2"}, {"let": {"j": "=join_feature(J.FeatureConnect, J.ViewProviderConnect, 'Connect', a.name)"}}, {"set": {"j.Objects": "=members"}}], "embed": [{"let": {"base": "=shaped(a.base, 'base')"}}, {"let": {"cutter": "=shaped(a.get('tool'), 'tool')"}}, {"refuse": "base and tool: two different objects.", "when": "=base is cutter"}, {"let": {"j": "=join_feature(J.FeatureEmbed, J.ViewProviderEmbed, 'Embed', a.name)"}}, {"set": {"j.Base": "=base", "j.Tool": "=cutter"}}, {"let": {"members": "=[base, cutter]"}}], "cutout": [{"let": {"base": "=shaped(a.base, 'base')"}}, {"let": {"cutter": "=shaped(a.get('tool'), 'tool')"}}, {"refuse": "base and tool: two different objects.", "when": "=base is cutter"}, {"let": {"j": "=join_feature(J.FeatureCutout, J.ViewProviderCutout, 'Cutout', a.name)"}}, {"set": {"j.Base": "=base", "j.Tool": "=cutter"}}, {"let": {"members": "=[base, cutter]"}}]}, "else": [{"refuse": "kind: connect { objects } (walls fused, insides kept) | embed { base, tool } (tool's wall set into base) | cutout { base, tool } (base cut to fit tool's wall)."}]},
+    {"choose": "=kind", "of": {"connect": [{"let": {"refs": "=ref_list(a.objects)"}}, {"refuse": "objects: two or more walled objects (pipes, shells) by name.", "when": "=not refs"}, {"let": {"members": "=[shaped(r, 'objects') for r in refs]"}}, {"refuse": "objects: two or more walled objects (pipes, shells) by name.", "when": "=len(members) < 2"}, {"let": {"j": "=join_feature(J.FeatureConnect, J.ViewProviderConnect, 'Connect', a.name)"}}, {"set": {"j.Objects": "=members"}}], "embed": [{"let": {"base": "=shaped(a.base, 'base')"}}, {"let": {"cutter": "=shaped(a.get('cutter'), 'cutter')"}}, {"refuse": "base and cutter: two different objects.", "when": "=base is cutter"}, {"let": {"j": "=join_feature(J.FeatureEmbed, J.ViewProviderEmbed, 'Embed', a.name)"}}, {"set": {"j.Base": "=base", "j.Tool": "=cutter"}}, {"let": {"members": "=[base, cutter]"}}], "cutout": [{"let": {"base": "=shaped(a.base, 'base')"}}, {"let": {"cutter": "=shaped(a.get('cutter'), 'cutter')"}}, {"refuse": "base and cutter: two different objects.", "when": "=base is cutter"}, {"let": {"j": "=join_feature(J.FeatureCutout, J.ViewProviderCutout, 'Cutout', a.name)"}}, {"set": {"j.Base": "=base", "j.Tool": "=cutter"}}, {"let": {"members": "=[base, cutter]"}}]}, "else": [{"refuse": "kind: connect { objects } (walls fused, insides kept) | embed { base, cutter } (cutter's wall set into base) | cutout { base, cutter } (base cut to fit the wall of cutter)."}]},
     {"do": "=doc().recompute()"},
     {"let": {"sh": "=j.Shape"}},
     {"refuse": {"fmt": "The {kind} failed: {j.getStatusString()} — nothing was made. The objects' walls must cross one another (part_section {{ body, with }} shows whether they meet)."}, "code": "failed", "when": "=sh.isNull() or 'Invalid' in (get(j, 'State', None) or [])"},
@@ -12561,14 +12561,14 @@
   },
   "cam_job": {
    "group": "cam",
-   "description": "Start a CAM job for a body. FreeCAD works on a clone of it (model). stock { margin, top, bottom }: the stock around the part, in mm. margin: each side (2). top: 1. bottom: 0. tool { diameter, feed, plunge, rpm, number }: the first end mill of the job. diameter: mm. feed and plunge: mm/min (600, 200). rpm: 12000. Ask the person for the tool; the defaults are gentle. The top of the stock is stock.max[2]. Then use cam_op.",
+   "description": "Start a CAM job for a body. FreeCAD works on a clone of it (model). stock { margin, top, bottom }: the stock around the part, in mm. margin: each side (2). top: 1. bottom: 0. toolbit { diameter, feed, plunge, rpm, number }: the first end mill of the job. diameter: mm. feed and plunge: mm/min (600, 200). rpm: 12000. Ask the person for the toolbit; the defaults are gentle. The top of the stock is stock.max[2]. Then use cam_op.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "body": {
       "type": "string"
      },
-     "tool": {
+     "toolbit": {
       "type": "object"
      },
      "stock": {
@@ -12579,7 +12579,7 @@
      }
     },
     "required": [
-     "tool"
+     "toolbit"
     ],
     "additionalProperties": false
    },
@@ -12590,8 +12590,8 @@
    "steps": [
     {"do": "=doc()"},
     {"let": {"o": "=body(a.body)"}},
-    {"let": {"mill": "=a.tool or {}"}},
-    {"refuse": "tool: { diameter (mm), feed and plunge (mm/min), rpm } — the end mill the person will use; ask if not said.", "when": "=not is_dict(mill) or mill.get('diameter') is None"},
+    {"let": {"mill": "=a.toolbit or {}"}},
+    {"refuse": "toolbit: { diameter (mm), feed and plunge (mm/min), rpm } — the end mill the person will use; ask if not said.", "when": "=not is_dict(mill) or mill.get('diameter') is None"},
     {"let": {"st": "=a.stock or {}"}},
     {"refuse": "stock: { margin, top, bottom } in mm, each 0 or more.", "when": "=not is_dict(st)"},
     {"let": {"margin": "=num(st.get('margin', 2.0), 'stock.margin')"}},
@@ -12637,7 +12637,7 @@
   },
   "cam_op": {
    "group": "cam",
-   "description": "Add an operation to the job and calculate it. kind profile: the outline or the faces given (side outside | inside). kind pocket: down to the faces given (the floor of a pocket). kind adaptive: side inside | outside; finish: true adds a profile pass. kind face. kind drill: with faces omitted, every hole that the tool fits. kind helix. kind engrave, vcarve: follow base (letters, a sketch). kind slot | deburr | thread. kind surface, waterline: these need OpenCamLib. kind pocket3d, tapping, probe, custom (props.Gcode). kind mill_facing, flute: where this FreeCAD has them. faces: [\"Face6\"] or shape_query filters. tool: one of the job's tools, by label. stepDown: mm. stepOver: %. finalDepth: mm, a Z height, not a depth. stockToLeave: mm. props { Property: value }: any other property (object_get lists them). Answer: cutMm, minutes, cutZ [low, high], cutBox, depths. A warning shows when it cuts below the stock. When the operation makes no cutting moves, the tool refuses and nothing is kept. A big adaptive or 3D operation can take a minute.",
+   "description": "Add an operation to the job and calculate it. kind profile: the outline or the faces given (side outside | inside). kind pocket: down to the faces given (the floor of a pocket). kind adaptive: side inside | outside; finish: true adds a profile pass. kind face. kind drill: with faces omitted, every hole that the tool fits. kind helix. kind engrave, vcarve: follow base (letters, a sketch). kind slot | deburr | thread. kind surface, waterline: these need OpenCamLib. kind pocket3d, tapping, probe, custom (props.Gcode). kind mill_facing, flute: where this FreeCAD has them. faces: [\"Face6\"] or shape_query filters. toolbit: one of the job's tools, by label. stepDown: mm. stepOver: %. finalDepth: mm, a Z height, not a depth. stockToLeave: mm. props { Property: value }: any other property (object_get lists them). Answer: cutMm, minutes, cutZ [low, high], cutBox, depths. A warning shows when it cuts below the stock. When the operation makes no cutting moves, the tool refuses and nothing is kept. A big adaptive or 3D operation can take a minute.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -12672,7 +12672,7 @@
      "faces": {
       "description": "The faces to work: [\"Face6\"] or queries [{ normal: [0,0,1], z: 12 }] as shape_query takes; left out, the whole part (profile: its outline; drill: every hole)."
      },
-     "tool": {
+     "toolbit": {
       "type": "string"
      },
      "base": {
@@ -12744,10 +12744,10 @@
       {"let": {"model": "=job.Model.Group[0]", "src": "=body(a.body) if a.body else None", "want_tc": null}},
       {"let": {"src": "=src or model"}},
       {
-       "when": "=a.tool",
+       "when": "=a.toolbit",
        "then": [
-        {"let": {"want_tc": "=first([x for x in job.Tools.Group if a.tool in (x.Label, x.Name, get(get(x, 'Tool'), 'Label'))])"}},
-        {"refuse": {"fmt": "tool {a.tool!r}: the job's tools are {', '.join(x.Label for x in job.Tools.Group)} (cam_tool_add adds one)."}, "code": "not_found", "when": "=want_tc is None"}
+        {"let": {"want_tc": "=first([x for x in job.Tools.Group if a.toolbit in (x.Label, x.Name, get(get(x, 'Tool'), 'Label'))])"}},
+        {"refuse": {"fmt": "toolbit {a.toolbit!r}: the job's tools are {', '.join(x.Label for x in job.Tools.Group)} (cam_tool_add adds one)."}, "code": "not_found", "when": "=want_tc is None"}
        ]
       },
       {"let": {"chosen": "=want_tc or job.Tools.Group[0]"}},
@@ -12813,7 +12813,7 @@
         {"do": "=op.Proxy.findAllHoles(op)"},
         {
          "refuse": {
-          "fmt": "No holes the tool ({qty(op.ToolController.Tool.Diameter, 'mm')} mm) fits, upright (along Z), in {model.Label}: give faces (the holes' walls), or a smaller tool (cam_tool, or cam_tool_add and tool). Nothing was kept."
+          "fmt": "No holes the tool ({qty(op.ToolController.Tool.Diameter, 'mm')} mm) fits, upright (along Z), in {model.Label}: give faces (the holes' walls), or a smaller tool (cam_tool, or cam_tool_add and toolbit). Nothing was kept."
          },
          "code": "failed",
          "when": "=not op.Base"
@@ -17412,7 +17412,7 @@
   },
   "robot_new": {
    "group": "robot",
-   "description": "Make a six-axis robot (Robot::RobotObject). model kr16 | kr125 | kr210 | kr500: KUKA kinematics and picture, where this FreeCAD has the files. model puma: only a name for the built-in default; it has no Puma kinematics. kinematics: your own CSV file instead. The CSV has a header line, then six lines of a, alpha, d, theta, rotDir, maxAngle, minAngle, velocity (mm and degrees). Without a file, the robot is FreeCAD's built-in default, a KUKA IR 500. model in the answer tells which was used. tool { at, ypr }: the tool point from the flange (the tip of a gripper). tcp in robot_move and robot_run then means this point. The tool stores at, ypr as its Base, but FreeCAD's kinematics do not use it. Positions are always in the robot's own frame, with the origin at its foot. Answer: robot, axes [6 degrees], tcp { at, ypr }, model.",
+   "description": "Make a six-axis robot (Robot::RobotObject). model kr16 | kr125 | kr210 | kr500: KUKA kinematics and picture, where this FreeCAD has the files. model puma: only a name for the built-in default; it has no Puma kinematics. kinematics: your own CSV file instead. The CSV has a header line, then six lines of a, alpha, d, theta, rotDir, maxAngle, minAngle, velocity (mm and degrees). Without a file, the robot is FreeCAD's built-in default, a KUKA IR 500. model in the answer tells which was used. endTool { at, ypr }: the tool point from the flange (the tip of a gripper). tcp in robot_move and robot_run then means this point. endTool stores at, ypr as its Base, but FreeCAD's kinematics do not use it. Positions are always in the robot's own frame, with the origin at its foot. Answer: robot, axes [6 degrees], tcp { at, ypr }, model.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -17430,7 +17430,7 @@
       "type": "array",
       "items": {}
      },
-     "tool": {
+     "endTool": {
       "type": "object",
       "description": "{ at [x,y,z], ypr [yaw, pitch, roll] | axis + angle }"
      },
@@ -17456,7 +17456,7 @@
     {"when": "=kin", "then": [{"set": {"o.RobotKinematicFile": "=kin"}}, {"let": {"how": {"fmt": "kinematics from {basename(kin)}"}}}], "else": [{"when": "=model in MODELS", "then": [{"let": {"csv": "=lib_file(model, 'csv')"}}, {"when": "=csv", "then": [{"set": {"o.RobotKinematicFile": "=csv"}}, {"let": {"wrl": "=lib_file(model, 'wrl')"}}, {"set": {"o.RobotVrmlFile": "=wrl"}, "when": "=wrl"}, {"let": {"how": {"fmt": "KUKA {model.upper()} (FreeCAD's library)"}}}]}]}]},
     {"when": "=how is None", "then": [{"set": {"o.Label": "=unique('Robot (FreeCAD default)', o)"}, "when": "=not a.name"}, {"let": {"lacks": "='' if model == 'puma' else ' — this FreeCAD ships no ' + model.upper() + ' file; give kinematics for the real one'"}}, {"let": {"how": {"fmt": "FreeCAD's built-in default robot (a KUKA IR 500: about 2.8 m reach){lacks}"}}}]},
     {"set": {"o.Base": "=placement(a, 'robot')"}, "when": "=a.at is not None or a.ypr is not None"},
-    {"set": {"o.Tool": "=placement(a.tool, 'tool')"}, "when": "=a.tool is not None"},
+    {"set": {"o.Tool": "=placement(a.endTool, 'endTool')"}, "when": "=a.endTool is not None"},
     {"do": "=settle(o)"}
    ],
    "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"...state": "=state(o)", "model": "=how"}}
@@ -19807,14 +19807,14 @@
   },
   "robot_tool": {
    "group": "std_more",
-   "description": "Draw a tool shape on the flange of a robot (Robot's Add tool shape). robot: the robot. tool: an object with a shape. at / axis + angle: where on the shape the flange is (ToolBase). It shows only in the window. It does not change the kinematics or the tool point; robot_new tool does that.",
+   "description": "Draw a tool shape on the flange of a robot (Robot's Add tool shape). robot: the robot. endTool: an object with a shape. at / axis + angle: where on the shape the flange is (ToolBase). It shows only in the window. It does not change the kinematics or the tool point; robot_new endTool does that.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "robot": {
       "type": "string"
      },
-     "tool": {
+     "endTool": {
       "type": "string"
      },
      "at": {
@@ -19835,7 +19835,7 @@
     },
     "required": [
      "robot",
-     "tool"
+     "endTool"
     ],
     "additionalProperties": false
    },
@@ -19846,11 +19846,11 @@
    "steps": [
     {"let": {"r": "=find(a.robot, 'robot')"}},
     {"refuse": {"fmt": "robot: {r.Label} is not a robot ({r.TypeId}) — robot_new makes one."}, "when": "=not r.isDerivedFrom('Robot::RobotObject')"},
-    {"let": {"t": "=shaped(a.tool, 'tool')"}},
+    {"let": {"t": "=shaped(a.endTool, 'endTool')"}},
     {"set": {"r.ToolBase": "=placement(a)"}, "when": "=placed(a)"},
     {"set": {"r.ToolShape": "=t"}}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"robot": "=r.Label", "tool": "=t.Label", "drawnAt": "=[round(c, 2) for c in r.Tcp.multiply(r.ToolBase.inverse()).Base]", "toolVisible": "=bool(get(t, 'Visibility', True))", "note": "The tool shape is drawn on the robot's flange (ToolBase is where on the shape the flange sits). Drawing only, and only in the window: it does not move the tool point robot_move tcp works with (robot_new tool sets that)."}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"robot": "=r.Label", "tool": "=t.Label", "drawnAt": "=[round(c, 2) for c in r.Tcp.multiply(r.ToolBase.inverse()).Base]", "toolVisible": "=bool(get(t, 'Visibility', True))", "note": "The tool shape is drawn on the robot's flange (ToolBase is where on the shape the flange sits). Drawing only, and only in the window: it does not move the tool point robot_move tcp works with (robot_new endTool sets that)."}}
   },
   "sheet_cells": {
    "group": "std_more",

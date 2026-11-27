@@ -335,7 +335,7 @@ class BatchTypical(unittest.TestCase):
     def call(name, args):
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
         return [r.get("isError", False), json.loads(r["content"][0]["text"])]
-    calls = [{"tool": "tool_groups", "arguments": {}}, {"tool": "session_state", "arguments": {}}, {"tool": "tool_groups", "arguments": {}}]
+    calls = [{"tool": "tool_groups"}, {"tool": "session_state"}, {"tool": "tool_groups"}]
     plain = call("batch", {"calls": calls, "rollback": False})
     jobs._RECENT["session_state"] = [70.0, 80.0, 90.0]
     slow = call("batch", {"calls": calls, "rollback": False})

@@ -414,7 +414,7 @@ class MoreFamilies(Base):
     def test_cam_library(self):
         self.have("cam_library")
         self.box("Cm block", [60, 40, 15], [0, 2000, 0])
-        self.ok("cam_job", {"body": "Cm block", "tool": {"diameter": 6}, "name": "Cm job"})
+        self.ok("cam_job", {"body": "Cm block", "toolbit": {"diameter": 6}, "name": "Cm job"})
         e = self.ok("cam_library", {"job": "Cm job", "action": "export", "path": "tools.json"})
         with open(e["path"]) as f:
             data = json.load(f)
@@ -499,7 +499,7 @@ class MoreFamilies(Base):
     def test_cam_edit(self):
         self.have("cam_edit")
         self.box("Ce block", [40, 30, 10], [0, 1500, 0])
-        self.ok("cam_job", {"body": "Ce block", "tool": {"diameter": 6}, "name": "Ce job"})
+        self.ok("cam_job", {"body": "Ce block", "toolbit": {"diameter": 6}, "name": "Ce job"})
         self.ok("cam_op", {"job": "Ce job", "kind": "profile", "side": "outside", "name": "Ce outline"})
         self.ok("cam_edit", {"job": "Ce job", "action": "copy", "op": "Ce outline", "name": "Ce rough"})
         st = self.ok("cam_edit", {"job": "Ce job", "action": "stop", "text": "check part", "after": "Ce rough"})

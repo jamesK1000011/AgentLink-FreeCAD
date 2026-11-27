@@ -8,7 +8,7 @@ call's answer without that value passing through the conversation:
   { "$file": "outline.json", "$at": "loops.0.points" }   the part at that path
   { "$from": 2, "$at": "bodies.0.name" }           from call 2's answer
 
-and a call can keep its own answer out of the reply: { tool, arguments,
+and a call can keep its own answer out of the reply: { tool, <its inputs>,
 writeTo: "outline.json" } writes the answer to that file and the batch's result
 for the call is { written: { path, bytes }, keys | length }.
 

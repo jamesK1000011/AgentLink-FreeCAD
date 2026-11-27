@@ -1,23 +1,40 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""One call shape for batch calls and fast steps (owner decisions 1 and 3,
-23 Nov): { tool, arguments }, every input inside arguments.
+"""One flat step for run, batch and fast (owner decisions, 26 Nov):
 
-A batch call may also have writeTo (its answer to a file); a fast step may
-also have as and when. Nothing else stands beside tool:
+  { "tool": "pd_pad", "sketch": "Sketch", "length": 6 }
 
-  * an exact field of the tool's card is moved into arguments, and the
-    answer says so (readAs). This is no guess: the name is the card's own
-    and the value is the agent's; only the nesting was wrong.
-  * the same field also inside arguments with the same value: the copy is
-    dropped and said; with another value: refused.
-  * a wrapper ("options", "params" …) or an unknown key: refused, with the
-    keys named and the right form.
-  * "tool" only inside arguments: refused, with where it goes.
-  * the old fast form { call, … }: refused, no alias (rule R5).
+The tool's name is tool. Its inputs stand beside it, by the names on its
+card. There is no arguments wrapper.
+
+Three keys of a step are the step's own and are never a tool's input:
+tool, each and writeTo (RESERVED).
+
+  * each: { "x": [15, 45] } runs the step once for each value, in order.
+    "$x" in the inputs (also inside a list) is that value. One variable.
+    Each pass is one call. A writeTo does not go with each.
+  * writeTo: a .json file for the call's whole answer. A batch step only.
+
+The old forms are refused with the new form in the words (rule R5: no
+alias, nothing is read silently): { tool, arguments }, { call, … }, do,
+as, when, then, else, let, try, choose, and each with in and steps.
+arguments is refused as the old form only when the named tool has no
+input called arguments (cookbook_run has one).
+
+No tool has an input with a reserved name (tests/test_flat_call_1126.py
+checks tools.json). A tool that has one cannot be given it in a step.
 
 Plain Python: reads the tools' schemas only."""
+import copy
+import re
 
-EXAMPLE = '{ "tool": "sketch_new", "arguments": { "plane": "XY" } }'
+RESERVED = ("tool", "each", "writeTo")
+OLD_KEYS = ("arguments", "as", "when", "then", "else", "let", "try", "choose")
+MAX_EACH = 200  # the values of one each (a block takes at most 200 calls)
+EXAMPLE = '{ "tool": "sketch_new", "plane": "XY" }'
+RUN_EXAMPLE = '{ "tool": "pd_pad", "sketch": "Sketch", "length": 6 }'
+LOOP_EXAMPLE = '{ "tool": "sketch_add", "each": { "x": [15, 45] }, "items": [{ "kind": "circle", "center": ["$x", 15], "radius": 5 }] }'
+_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+_VAR = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def card_fields(server, name):
@@ -28,9 +45,47 @@ def card_fields(server, name):
 
 
 class Refused(Exception):
-    def __init__(self, words):
+    def __init__(self, words, no_tool=False):
         super().__init__(words)
         self.words = words
+        self.no_tool = no_tool  # the step has no tool at all
+
+
+def _form(name="pd_pad"):
+    return f'{{ "tool": "{name}", <the inputs> }}'
+
+
+def old_words(key, where, name=None):
+    """The words for an old key of a step: what to write now."""
+    n = name if isinstance(name, str) and name else "sketch_new"
+    if key == "arguments":
+        return (f"{where}: arguments is the old form. Put the inputs beside tool: {{ \"tool\": \"{n}\", \"plane\": \"XY\" }}. "
+                "There is no arguments wrapper.")
+    if key == "call":
+        return (f"{where}: {{ call, … }} is the old form of a step. A step is {_form(n)}, "
+                "with the inputs beside tool.")
+    if key == "as":
+        return (f"{where}: as is not part of a step. To use an earlier call's answer in a batch, give "
+                "{ \"$from\": 0, \"$at\": \"feature\" } where the value goes.")
+    if key in ("when", "then", "else", "try", "choose"):
+        return (f"{where}: {key} is not part of a step. A step is {_form(n)}. "
+                "Send only the calls that you want to run.")
+    if key == "let":
+        return (f"{where}: let is not part of a step. Write the value in the inputs, or use each for a list of values: "
+                f"{LOOP_EXAMPLE}.")
+    if key == "do":
+        return "do is now calls: { \"calls\": [{ \"tool\": \"sketch_new\", \"plane\": \"XY\" }] }. Nothing was run."
+    return f"{where}: {key} is not part of a step."
+
+
+def _each_old(c, where):
+    """The old loop { each: name, in, steps }: refused."""
+    return (f"{where}: each is now a key of the step, an object with one variable: {LOOP_EXAMPLE}. "
+            "The step runs once for each value, and \"$x\" is the value. Steps inside steps are not part of a step.")
+
+
+def _name_ok(n):
+    return isinstance(n, str) and bool(_NAME.match(n))
 
 
 def _show(v):
@@ -43,66 +98,129 @@ def _show(v):
     return t if len(t) <= 40 else t[:37] + "…"
 
 
-def split(server, c, where, extra=(), runner="batch"):
-    """(tool, arguments, readAs words or None) of one call, or Refused.
-    c: the call as sent. extra: the step keys this runner takes beside tool
-    and arguments. where: "calls.2" or "do.2". The arguments are not
-    copied when nothing moves."""
+def put_in(v, var, value):
+    """v with every string "$var" put at value (a new copy)."""
+    if isinstance(v, str):
+        return copy.deepcopy(value) if v == f"${var}" else v
+    if isinstance(v, list):
+        return [put_in(x, var, value) for x in v]
+    if isinstance(v, dict):
+        return {k: put_in(x, var, value) for k, x in v.items()}
+    return v
+
+
+def _loose_vars(v, var, out):
+    if isinstance(v, str):
+        if _VAR.match(v) and v != f"${var}":
+            out.append(v)
+    elif isinstance(v, list):
+        for x in v:
+            _loose_vars(x, var, out)
+    elif isinstance(v, dict):
+        for x in v.values():
+            _loose_vars(x, var, out)
+    return out
+
+
+def inputs_of(c):
+    """The inputs of a flat step: every key but the reserved ones."""
+    return {k: v for k, v in c.items() if k not in RESERVED}
+
+
+def steps_of(server, c, where, runner="batch"):
+    """The calls of one step as a list of { tool, inputs, writeTo, pass,
+    of }, or Refused. c: the step as sent. where: "calls.2". runner: run,
+    batch or fast. A step without each is one call. The inputs are copies."""
     if not isinstance(c, dict):
-        raise Refused(f"{where}: a call is an object, {EXAMPLE}.")
-    if "call" in c and "tool" not in c:
-        if runner == "fast":
-            raise Refused(f"{where}: {{ call, … }} is the old form of a fast step. A tool step is "
-                          f"{{ \"tool\": \"{c['call'] if isinstance(c['call'], str) else 'sketch_new'}\", \"arguments\": {{ … }}, \"as\": \"name\" }}, "
-                          "the same as a batch call, with every input inside arguments.")
-        raise Refused(f"{where}: call is not part of a batch call. A call has tool and arguments: {EXAMPLE}.")
-    args = c.get("arguments")
+        from .protocol import describe
+
+        # What it is, never its own text (an echo of a failed call makes the same call again more likely).
+        raise Refused(f"{where} is {describe(c)}, not an object. A step is {EXAMPLE}.")
     if "tool" not in c:
-        if isinstance(args, dict) and isinstance(args.get("tool"), str):
-            raise Refused(f"{where}: tool is inside arguments. tool goes beside arguments: "
-                          f"{{ \"tool\": \"{args['tool']}\", \"arguments\": {{ … }} }}.")
-        return None, args, None
+        if "call" in c:
+            raise Refused(old_words("call", where, c["call"] if isinstance(c["call"], str) else None))
+        if isinstance(c.get("each"), str):
+            raise Refused(_each_old(c, where))
+        if isinstance(c.get("arguments"), dict):
+            raise Refused(old_words("arguments", where))
+        for k in ("let", "when", "try", "choose"):
+            if k in c:
+                raise Refused(old_words(k, where))
+        for k in ("get", "refuse", "push"):
+            if k in c:
+                raise Refused(f"{where}: {k} is not a step. A step is {_form('get')}: a read is the tool get, "
+                              "for example { \"tool\": \"get\", \"what\": \"Body.volume\" }.")
+        keys = [k for k in c if k not in RESERVED]
+        raise Refused(f"{where}: a step has no \"tool\". A step is {_form()}, with the tool's plain name"
+                      + (f" (it has: {', '.join(str(k) for k in list(c)[:6])})." if keys else "."), no_tool=True)
     name = c["tool"]
-    keys = [k for k in c if k not in ("tool", "arguments") and k not in extra]
-    if not keys:
-        return name, args, None
+    if not isinstance(name, str) or not name.strip():
+        from .protocol import describe
+
+        raise Refused(f"{where} has a tool that is {describe(name)}, not a tool's name (text). A step is {EXAMPLE}.")
+    label = f"{where} ({name})"
     fields = card_fields(server, name)
-    label = f"{where} ({name})" if isinstance(name, str) else where
-    if "as" in keys and runner == "batch":
-        raise Refused(f"{label}: as is a key of fast steps, not of batch calls. To use this call's answer in a later call, "
-                      f"give {{ \"$from\": {where.rsplit('.', 1)[-1]}, \"$at\": \"feature\" }} there.")
-    if fields is None:
-        return name, args, None  # no such tool: refused as not found, later
-    if not isinstance(args, dict):
-        args = {} if args is None else args
-    if not isinstance(args, dict):
-        return name, args, None
-    bad = [k for k in keys if k not in fields]
-    if bad:
-        words = (f"{label}: {', '.join(bad)} {'is' if len(bad) == 1 else 'are'} not part of a call. A call has tool and arguments only. "
-                 f"Put the inputs inside arguments: {{ \"tool\": \"{name}\", \"arguments\": {{ … }} }}. "
-                 f"The fields of {name}: {', '.join(fields) or 'none'}.")
-        for k in bad:
-            v = c[k]
-            if isinstance(v, dict):
-                known = [x for x in v if x in fields]
-                if known:
-                    words += f" {k} holds {', '.join(known)}: put {'it' if len(known) == 1 else 'them'} inside arguments."
-        raise Refused(words)
-    moved, dropped = [], []
-    out = dict(args)
-    for k in keys:
-        if k in out:
-            if out[k] != c[k]:
-                raise Refused(f"{label}: {k} is given twice (beside tool: {_show(c[k])}, in arguments: {_show(out[k])}). "
-                              "Give it once, inside arguments.")
-            dropped.append(k)
-        else:
-            out[k] = c[k]
-            moved.append(k)
-    said = []
-    if moved:
-        said.append(f"{where}: {', '.join(moved)} {'was' if len(moved) == 1 else 'were'} beside tool: read inside arguments")
-    if dropped:
-        said.append(f"{where}: {', '.join(dropped)} beside tool {'was' if len(dropped) == 1 else 'were'} the same as in arguments: dropped")
-    return name, out, "; ".join(said) + ". Put every input inside arguments."
+    held = set(fields or ())
+    for k in OLD_KEYS:
+        if k in c and k not in held:
+            raise Refused(old_words(k, label, name))
+    loop = None
+    if "each" in c:
+        e = c["each"]
+        if isinstance(e, str):
+            raise Refused(_each_old(c, label))
+        if not isinstance(e, dict) or not e:
+            raise Refused(f"{label}: each is an object with one variable and its list of values: {LOOP_EXAMPLE}.")
+        if len(e) > 1:
+            raise Refused(f"{label}: each takes one variable, not {len(e)} ({', '.join(str(k) for k in e)}). "
+                          "Send one step for each variable, or one each with one list.")
+        var, vals = next(iter(e.items()))
+        if not _name_ok(var):
+            raise Refused(f"{label}: each's variable is a plain name (letters, digits, _; a letter first), not {_show(var)}.")
+        if not isinstance(vals, list) or not vals:
+            raise Refused(f"{label}: each.{var} is a list of values, at least one: \"each\": {{ \"{var}\": [15, 45] }}.")
+        if len(vals) > MAX_EACH:
+            raise Refused(f"{label}: each.{var} has {len(vals)} values. At most {MAX_EACH}: split the step.")
+        loose = _loose_vars(inputs_of(c), var, [])
+        if loose:
+            raise Refused(f"{label}: {loose[0]} is not the variable of each (\"${var}\" is). Use \"${var}\" where the value goes.")
+        loop = (var, vals)
+    if "writeTo" in c:
+        if runner != "batch":
+            raise Refused(f"{label}: writeTo is a key of batch steps. {runner} gives its own answer; "
+                          "use batch { calls: [{ tool, …, writeTo }] } to write a call's answer to a file.")
+        if loop is not None:
+            raise Refused(f"{label}: writeTo does not go with each: every pass would write the same file. Send one step for each file.")
+    base = inputs_of(c)
+    if loop is None:
+        return [{"tool": name, "inputs": copy.deepcopy(base), "writeTo": c.get("writeTo") if "writeTo" in c else None, "pass": None, "of": None}]
+    var, vals = loop
+    return [{"tool": name, "inputs": put_in(copy.deepcopy(base), var, v), "writeTo": None, "pass": i, "of": len(vals)} for i, v in enumerate(vals)]
+
+
+NOT_IN_RUN = ("approve_file", "approve_code", "run")
+
+
+def run_call(server, params):
+    """A call of run: its whole input is one step. The step runs as a call
+    of the named tool, through the normal path, so the answer is the one a
+    direct call gives. A step with each runs as a batch of its passes.
+    Refused: the two approvals (a direct call of the client only) and run."""
+    a = params.get("arguments")
+    if not isinstance(a, dict):
+        return server.refusal("invalid_input", f"run: one step as the input, {RUN_EXAMPLE}.")
+    try:
+        parts = steps_of(server, a, "run", runner="run")
+    except Refused as e:
+        return server.refusal("invalid_input", e.words)
+    from .protocol import plain_name
+
+    name = plain_name(server, parts[0]["tool"])
+    if name in NOT_IN_RUN:
+        if name == "run":
+            return server.refusal("invalid_input", "run: tool is the tool to run, not run.")
+        return server.refusal("not_allowed", f"run: {name} takes only a direct call from the client, which asks the person first. "
+                                              f"A step of run, batch or fast cannot call it. Call {name} by its own name. Nothing was approved.")
+    if parts[0]["pass"] is not None:
+        return server.call({"name": "batch", "arguments": {"calls": [a]}})
+    return server.call({"name": parts[0]["tool"], "arguments": parts[0]["inputs"]})

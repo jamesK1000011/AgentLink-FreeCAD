@@ -290,7 +290,7 @@ class Wrapped(unittest.TestCase):
             with self.assertRaises(ToolError) as e:
                 check_input(GET, dict(a), "get")
             self.assertEqual(e.exception.message, "inputs go at the top level of a direct call: get { what: … }, not inside arguments. "
-                                                  "Only a batch step takes { tool, arguments }.")
+                                                  "A batch step is { tool, <its inputs> }: the inputs stand beside tool.")
 
     def test_names_tool(self):
         self.assertTrue(protocol.names_tool("mcp__agentlink__tool_find", "tool_find"))
@@ -352,7 +352,7 @@ class RanBefore(unittest.TestCase):
     def test_before_with_its_steps(self):
         got = in_a_process(SETUP + '''
     from agentlink import tools
-    calls = [{"tool": "sketch_new", "arguments": {}}, {"tool": "sketch_add", "arguments": {}}, {"tool": "pd_pad", "arguments": {}}]
+    calls = [{"tool": "sketch_new"}, {"tool": "sketch_add"}, {"tool": "pd_pad"}]
     ref = {"tool": "sketch_new", "status": "not_started"}
     out = {"done": []}
     a = tools._refused_note(ref, [], calls, 0, 0, out, {"ranBefore": [0, 1], "ranBeforeSteps": [9, 6]})

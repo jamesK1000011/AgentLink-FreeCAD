@@ -27,7 +27,7 @@ class ResultAndStatus(unittest.TestCase):
         # A call that went through but made no undo step in the start
         # document (doc_new moves the session) still makes the result kept.
         got = run(READ + '''
-    print(json.dumps(call("batch", {"calls": [{"tool": "probe_read", "arguments": {}}, mk("X", fail=True)]})))
+    print(json.dumps(call("batch", {"calls": [{"tool": "probe_read"}, mk("X", fail=True)]})))
 ''')
         _, b, _ = got
         self.assertEqual(b["result"], "kept")
@@ -86,10 +86,10 @@ if __name__ == "__main__":
 
 
 class BesideTool(unittest.TestCase):
-    """1a (owner decision 1): exact card fields beside tool move inside
-    arguments, said in readAs; wrappers, unknown keys and as are refused."""
+    """26 Nov (owner decisions): a step is flat, { tool, <its inputs> }. The old forms
+    (arguments, as, a wrapper under another name) are refused, no alias."""
 
-    def test_an_exact_field_is_moved_and_said(self):
+    def test_flat_inputs_run(self):
         b = run('''
     r = call("batch", {"calls": [{"tool": "probe_make", "name": "A"}]})
     print(json.dumps([r[0], r[1], labels()]))
@@ -98,7 +98,7 @@ class BesideTool(unittest.TestCase):
         self.assertIn("A", labs)
         row = ans["results"][0]
         self.assertTrue(row["ok"])
-        self.assertIn("calls.0: name was beside tool: read inside arguments. Put every input inside arguments.", row["readAs"])
+        self.assertNotIn("readAs", row)
 
     def test_a_wrapper_refuses_only_its_call(self):
         b = run('''
@@ -106,39 +106,40 @@ class BesideTool(unittest.TestCase):
 ''')
         b = b[1]
         self.assertEqual((b["done"], b["refused"]["call"]), ([0], 1))
-        self.assertIn("options is not part of a call", b["refused"]["error"])
-        self.assertIn("options holds name: put it inside arguments.", b["refused"]["error"])
-        self.assertIn("The fields of probe_make: name, type, fail.", b["refused"]["error"])
+        # The inputs are checked by the tool's own schema, as a direct call is.
+        self.assertIn("input.name: required", b["refused"]["error"])
 
-    def test_given_twice(self):
+    def test_arguments_is_the_old_form(self):
         b = run('''
     out = {}
     out["other"] = call("batch", {"calls": [{"tool": "probe_make", "name": "A", "arguments": {"name": "B"}}]})
-    out["same"] = call("batch", {"calls": [{"tool": "probe_make", "name": "C", "arguments": {"name": "C"}}]})
+    out["alone"] = call("batch", {"calls": [{"tool": "probe_make", "arguments": {"name": "C"}}]})
     print(json.dumps(out))
 ''')
-        self.assertIn('name is given twice (beside tool: "A", in arguments: "B")', b["other"][1]["refused"]["error"])
-        self.assertTrue(b["same"][1]["results"][0]["ok"])
-        self.assertIn("the same as in arguments: dropped", b["same"][1]["results"][0]["readAs"])
+        for k in ("other", "alone"):
+            err = b[k][1]["refused"]["error"]
+            self.assertIn("arguments is the old form. Put the inputs beside tool", err, k)
+            self.assertIn('{ "tool": "probe_make", "plane": "XY" }', err, k)
+        self.assertEqual(b["other"][1]["done"], [])
 
     def test_as_and_profile_and_wrapped_tool(self):
         b = run('''
     out = {}
-    out["as"] = call("batch", {"calls": [{"tool": "probe_make", "arguments": {"name": "A"}, "as": "p"}]})
-    out["profile"] = call("batch", {"calls": [{"tool": "probe_make", "arguments": {"name": "A"}, "profile": True}]})
+    out["as"] = call("batch", {"calls": [{"tool": "probe_make", "name": "A", "as": "p"}]})
+    out["profile"] = call("batch", {"calls": [{"tool": "probe_make", "name": "A", "profile": True}]})
     out["inside"] = call("batch", {"calls": [{"arguments": {"tool": "probe_make", "name": "A"}}]})
     print(json.dumps(out))
 ''')
-        self.assertIn("as is a key of fast steps, not of batch calls", b["as"][1]["refused"]["error"])
+        self.assertIn("as is not part of a step", b["as"][1]["refused"]["error"])
         self.assertIn('{ "$from": 0, "$at": "feature" }', b["as"][1]["refused"]["error"])
-        self.assertIn("profile is not part of a call", b["profile"][1]["refused"]["error"])
-        self.assertIn("tool is inside arguments. tool goes beside arguments", b["inside"][1]["refused"]["error"])
+        self.assertIn("input.profile: not a known field", b["profile"][1]["refused"]["error"])
+        self.assertIn("arguments is the old form", b["inside"][1]["refused"]["error"])
 
     def test_rollback(self):
         b = run('''
     out = {}
     out["moved"] = call("batch", {"rollback": True, "calls": [{"tool": "probe_make", "name": "A"}]})
-    out["wrapper"] = call("batch", {"rollback": True, "calls": [mk("B"), {"tool": "probe_make", "params": {}}]})
+    out["wrapper"] = call("batch", {"rollback": True, "calls": [mk("B"), {"tool": "probe_make", "arguments": {}}]})
     out["labels"] = labels()
     print(json.dumps(out))
 ''')
@@ -149,46 +150,48 @@ class BesideTool(unittest.TestCase):
 
 
 class FastShape(unittest.TestCase):
-    """Decision 3: fast's tool step is a batch call's shape, { tool,
-    arguments, as, when }; the old { call, … } is refused, no alias."""
+    """fast's step is a batch step; the old { call, … } and do are refused, no alias."""
 
     def test_old_form_refused_before_step_one(self):
         b = run('''
-    print(json.dumps([call("fast", {"do": [mk("A"), {"call": "probe_make", "name": "B"}]}), labels()]))
+    print(json.dumps([call("fast", {"calls": [mk("A"), {"call": "probe_make", "name": "B"}]}), labels()]))
 ''')
         (err, ans, _t), labs = b
         self.assertTrue(err)
-        self.assertIn("{ call, … } is the old form of a fast step", ans["error"]["message"])
-        self.assertIn('{ "tool": "probe_make", "arguments": { … }, "as": "name" }', ans["error"]["message"])
+        self.assertIn("{ call, … } is the old form of a step", ans["error"]["message"])
+        self.assertIn('{ "tool": "probe_make", <the inputs> }', ans["error"]["message"])
         self.assertNotIn("A", labs)
 
-    def test_tool_step_runs_and_a_field_beside_tool_is_moved(self):
+    def test_tool_step_runs(self):
         b = run('''
-    print(json.dumps([call("fast", {"do": [{"tool": "probe_make", "arguments": {"name": "A"}, "as": "a"}, {"tool": "probe_make", "name": "B"}]}), labels()]))
+    print(json.dumps([call("fast", {"calls": [{"tool": "probe_make", "name": "A"}, {"tool": "probe_make", "name": "B"}]}), labels()]))
 ''')
         (err, ans, _t), labs = b
         self.assertFalse(err, ans)
         self.assertTrue({"A", "B"} <= set(labs))
-        self.assertIn("do.1: name was beside tool: read inside arguments.", ans["readAs"])
+        self.assertNotIn("readAs", ans)
 
 
 class ListedSchema(unittest.TestCase):
     """1b (owner decision 2): in the static list the batch schema shows
-    calls (required, items typed { tool, arguments }), rollback and
+    calls (required, items typed { tool } and open for the inputs), rollback and
     stopOnError; the server still takes the other fields."""
 
     def test_listed_batch_and_fast(self):
         got = run('''
     tl = srv.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})["result"]["tools"]
-    print(json.dumps({t["name"]: t["inputSchema"] for t in tl if t["name"] in ("batch", "fast")}))
+    print(json.dumps({t["name"]: t["inputSchema"] for t in tl if t["name"] in ("batch", "fast", "run")}))
 ''')
         b = got["batch"]
         self.assertEqual(sorted(b["properties"]), ["calls", "rollback", "stopOnError"])
         self.assertEqual(b["required"], ["calls"])
-        self.assertEqual(b["properties"]["calls"]["items"]["required"], ["tool", "arguments"])
+        self.assertEqual(b["properties"]["calls"]["items"]["required"], ["tool"])
+        self.assertNotIn("additionalProperties", b["properties"]["calls"]["items"])
         self.assertNotIn("additionalProperties", b)
-        if "fast" in got:
-            self.assertEqual(sorted(got["fast"]["properties"]["do"]["items"]["properties"]), ["arguments", "as", "tool"])
+        self.assertEqual(sorted(got["fast"]["properties"]), ["calls", "check", "rollback"])
+        self.assertEqual(got["fast"]["properties"]["calls"]["items"]["required"], ["tool"])
+        self.assertEqual(got["run"]["required"], ["tool"])
+        self.assertNotIn("additionalProperties", got["run"])
 
     def test_hidden_fields_still_work_and_unknown_is_refused(self):
         got = run('''
@@ -220,7 +223,7 @@ class RecordRead(unittest.TestCase):
     out = {}
     b = call("batch", {"calls": [mk("A")]})
     out["rec"] = call("record_read", {"path": b[1]["record"], "at": "results.0.ok"})
-    out["write"] = call("batch", {"calls": [{"tool": "probe_make", "arguments": {"name": "B"}, "writeTo": "b.json"}]})
+    out["write"] = call("batch", {"calls": [{"tool": "probe_make", "name": "B", "writeTo": "b.json"}]})
     for k, v in (("read", "x.json"), ("file", "x.json"), ("from", 0), ("to", "y.json")):
         out[k] = call("batch", {"calls": [mk("C")], k: v})
     print(json.dumps(out))
@@ -247,15 +250,15 @@ class StartDocument(unittest.TestCase):
 
 
 class NoToolKey(unittest.TestCase):
-    """24 Nov (LFM): a batch call with arguments and no tool is refused with
+    """24 Nov (LFM): a batch call with inputs and no tool is refused with
     "no tool" first and the tools whose cards take those inputs."""
 
     def test_no_tool_words(self):
         got = run('''
-    print(json.dumps(call("batch", {"calls": [mk("A"), {"arguments": {"name": "B", "fail": False}}]})))
+    print(json.dumps(call("batch", {"calls": [mk("A"), {"name": "B", "fail": False}]})))
 ''')
         err = got[1]["refused"]["error"]
-        self.assertTrue(err.startswith('calls.1 has no "tool": every call names its tool beside arguments.'), err)
+        self.assertTrue(err.startswith('calls.1 has no "tool": every call names its tool, and its inputs stand beside it.'), err)
         self.assertIn("Tools whose cards take name, fail: probe_make", err)
         self.assertIn('Form: { "tool": "probe_make"', err)
         self.assertEqual(err.count("The call was not run."), 1)

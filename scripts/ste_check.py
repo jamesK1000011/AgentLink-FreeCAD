@@ -46,6 +46,10 @@ WAIVERS = {
     ("export", "20"): "the 20 s estimate that sent an export to a job is gone (no prejudging, 18 Nov); a call past about 60 s moves to the background",
     ("export", "batch"): "the batch-only estimate question is gone with the estimates (18 Nov)",
     ("asm_joint", "get"): "the English verb in the original text, not the get tool that came on 22 Nov",
+    ("app_force_restart", "run"): "the English verb in the original text, not the run tool that came on 26 Nov",
+    ("draft_text", "run"): "the English verb in the original text, not the run tool that came on 26 Nov",
+    ("tool_groups", "run"): "the English verb in the original text, not the run tool that came on 26 Nov",
+    ("cam_job", "tool"): "the input tool is now toolbit (26 Nov: no input is named like a step key; no alias, rule R5)",
 }
 
 

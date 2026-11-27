@@ -171,7 +171,7 @@ class Ladder(unittest.TestCase):
 
 
 class BatchShape(unittest.TestCase):
-    """The batch tool's refusal of a call that is not { tool, arguments },
+    """The batch tool's refusal of a call that is not { tool, <inputs> },
     and a refused step's row, through the hub's own tools (stand-ins)."""
 
     def setUp(self):
@@ -181,15 +181,25 @@ class BatchShape(unittest.TestCase):
             self.skipTest(f"needs FreeCAD: {e}")
 
     def test_described_not_echoed(self):
-        from agentlink.tools import _call_shape
+        from agentlink import callshape
 
-        sent = {"arguments": {"plane": "XZ", "name": "Sketch_unusual_name_42"}}
-        words = _call_shape(sent, 0)
-        self.assertEqual(words, "calls.0 has arguments and no tool.")
+        class Srv:
+            tools = {}
+
+        def said(c, i):
+            try:
+                callshape.steps_of(Srv, c, f"calls.{i}", "batch")
+            except callshape.Refused as e:
+                return e.words
+            self.fail("not refused")
+
+        sent = {"plane": "XZ", "name": "Sketch_unusual_name_42"}
+        words = said(sent, 0)
+        self.assertIn('calls.0: a step has no "tool"', words)
         self.assertNotIn(json.dumps(sent), words)
         self.assertNotIn("Sketch_unusual_name_42", words)
-        self.assertEqual(_call_shape([1, 2], 1), "calls.1 is a list of 2 items, not an object.")
-        self.assertIn("not a tool's name", _call_shape({"tool": 5}, 2))
+        self.assertIn("calls.1 is a list of 2 items, not an object.", said([1, 2], 1))
+        self.assertIn("not a tool's name", said({"tool": 5}, 2))
 
 
 class BatchInAProcess(unittest.TestCase):
@@ -210,8 +220,8 @@ class BatchInAProcess(unittest.TestCase):
     def call(name, args):
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
         return [r.get("isError", False), json.loads(r["content"][0]["text"])]
-    shape = call("batch", {"calls": [{"arguments": {"plane": "XZ", "label": "Odd_label_77"}}]})
-    rows = call("batch", {"calls": [{"tool": "job_start", "arguments": {"tool": "session_state"}}], "rollback": False, "stopOnError": False})
+    shape = call("batch", {"calls": [{"plane": "XZ", "label": "Odd_label_77"}]})
+    rows = call("batch", {"calls": [{"tool": "sketch_new", "bogus": 1}], "rollback": False, "stopOnError": False})
     print(json.dumps({"shape": shape, "rows": rows}))
 ''' % out)
         err, body = got["shape"]
@@ -220,7 +230,7 @@ class BatchInAProcess(unittest.TestCase):
         self.assertEqual((body["done"], body["notRun"], body["refused"]["call"]), ([], [], 0))
         e = body["results"][0]["error"]
         self.assertEqual((e["code"], e["kind"]), ("invalid_input", "fixable"))
-        self.assertIn('calls.0 has no "tool": every call names its tool beside arguments.', e["message"])
+        self.assertIn('calls.0 has no "tool": every call names its tool, and its inputs stand beside it.', e["message"])
         self.assertIn("The calls run in order", e["message"])
         self.assertIn('"tool": "sketch_new"', e["message"])  # the worked example stays
         self.assertNotIn("Odd_label_77", e["message"])
@@ -237,7 +247,7 @@ class BatchShapeWords(unittest.TestCase):
     def test_no_sent_echo_in_source(self):
         src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "tools.py"), encoding="utf-8").read()
         self.assertNotIn("was {sent}", src)
-        self.assertIn("_call_shape(c, i)", src)
+        self.assertIn("_cs.steps_of(", src)
         self.assertIn("The calls run in order", src)
 
     def test_batch_row_carries_kind(self):

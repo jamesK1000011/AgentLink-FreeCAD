@@ -76,8 +76,8 @@ class GuiInputInFront(unittest.TestCase):
         batch (calls sent as a string of JSON) was refused behind the dialog
         that gui_input { as: person } had opened."""
         steps = {"steps": [{"type": "5 mm"}], "as": "person"}
-        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": json.dumps([{"tool": "gui_input", "arguments": steps}])})))
-        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [json.dumps({"tool": "gui_input", "arguments": steps})]})))
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": json.dumps([{"tool": "gui_input", **steps}])})))
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [json.dumps({"tool": "gui_input", **steps})]})))
         self.assertTrue(gui_link._dialog_call(call("batch", json.dumps({"calls": [{"tool": "gui_input"}]}))))
         # A picture of the window beside it; never on its own, never with another tool.
         self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_input"}, {"tool": "window_snapshot"}]})))

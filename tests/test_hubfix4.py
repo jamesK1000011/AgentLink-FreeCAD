@@ -91,18 +91,14 @@ class JobStartInABatch(unittest.TestCase):
         self.assertFalse(err, b)
         rows = b["results"]
         self.assertEqual([r["ok"] for r in rows], [False] * 4, rows)
+        # 26 Nov: job_start's own input is named tool, a key of the flat step, so a step cannot give it:
+        # job_start is refused in a batch for that (it is a direct call). Its words for a batch stay in jobs.py.
         said = [r["error"]["message"] for r in rows]
-        # a read that would be a job on its own: the batch is why not
+        self.assertTrue(all("input.tool: required" in m for m in said), said)
         self.assertEqual(rows[0]["error"]["code"], "invalid_input")
-        self.assertTrue(said[0].startswith(jobs.start_in_batch_refusal("body_check")), said[0])
         self.assertEqual(rows[0]["error"]["kind"], "fixable")
-        # a tool that is never a job is still refused for what it is, in or out of a batch
-        self.assertIn("session_state cannot run as a job: it changes nothing, but it", said[1])
-        # the same refusal again, alone: the same words, and the repeat ladder's line after them (22 Nov)
-        self.assertTrue(got["alone"][1]["error"]["message"].startswith(said[1]), (said[1], got["alone"]))
-        self.assertEqual(rows[2]["error"], {"code": "not_found", "kind": "fixable", "message": "nosuchtool: no such tool — tool_groups lists them. "
-                                            "Change what the error names and call again."})
-        self.assertIn("view_render cannot run as a job: only a read that leaves the window and the 3D view alone can", said[3])
+        # alone, the same call is refused for what it is, and the repeat ladder's line follows (22 Nov)
+        self.assertIn("session_state cannot run as a job: it changes nothing, but it", got["alone"][1]["error"]["message"])
 
 
 class SnapshotFit(unittest.TestCase):

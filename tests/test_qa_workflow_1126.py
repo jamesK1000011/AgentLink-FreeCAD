@@ -37,7 +37,7 @@ RESEND = QA_SERVER + '''
         return make(a)
     srv.tools["probe_pad"] = Tool("probe_pad", "Pad.", SCH, picky, changes=True)
     def c(tool, **kw):
-        return {"tool": tool, "arguments": kw}
+        return {"tool": tool, **kw}
 '''
 
 

@@ -7,9 +7,11 @@ ToolListMode (preference, Mod/AgentLink, text) or AGENTLINK_TOOLLIST:
     static (default)   only BASE is listed: session_state, batch, guide_read,
                        tool_find, approve_file and approve_code (the person sets
                        the two approval tools in the client's permissions, so
-                       the client must list them). Every other tool is found with
-                       tool_find and called by name (in a batch where the
-                       client sends only listed tools). The list never
+                       the client must list them), then run (one step, a full
+                       answer: a client that sends only listed tools reaches
+                       every tool with it). With the fast path on, fast and get
+                       come before run. Every other tool is found with
+                       tool_find and called by name, or as a step of run or batch. The list never
                        changes by itself: no tools/list_changed, so every
                        client sees the same list. A group turned on with
                        tool_groups { enable } is listed too.
@@ -32,6 +34,9 @@ BASE = ("session_state", "batch", "guide_read", "tool_find", "approve_file", "ap
 # directly, not only inside batch. Eight tools on, six off: the A/B test
 # decides whether eight becomes the default for every client (owner, 22 Nov).
 FAST = ("fast", "get")
+# run is listed after them, with the fast path on or off: it is not part of
+# the fast path (owner, 26 Nov). Seven tools off, nine on.
+RUN = ("run",)
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
 _STE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ste.json")
 _cache = {}
@@ -79,43 +84,39 @@ def apply(server):
 
 
 def base(tools=None):
-    """BASE, plus the fast path's two tools when it is on and they are here."""
+    """BASE, plus the fast path's two tools when it is on and they are here,
+    plus run when it is here."""
     try:
         from . import fastpath
 
         on = fastpath.enabled()
     except Exception:  # noqa: BLE001 - a server without the fast path
         on = False
-    if on and all(t in (tools or {}) for t in FAST):
-        return BASE + FAST
-    return BASE
+    out = BASE + FAST if on and all(t in (tools or {}) for t in FAST) else BASE
+    return out + RUN if all(t in (tools or {}) for t in RUN) else out
 
 
-# The schema a client sees for batch and fast with the short descriptions
-# (owner decision 2, 23 Nov): only what a first call needs, each step typed
-# { tool, arguments }. The server still checks the tool's whole schema, so
-# the other fields (file, from, to, lines, build, check, budget, title) work
-# and the batch guide gives them. No additionalProperties here: a client
-# that checks a call against the listed schema must let them through.
-_CALL_ITEM = {"type": "object",
-              "properties": {"tool": {"type": "string", "description": "The tool's plain name, as tool_find gives it (sketch_new)."},
-                             "arguments": {"type": "object", "description": "Every input of the tool, by the names on its card. {} for none."}},
-              "required": ["tool", "arguments"]}
+# The schema a client sees for run, batch and fast with the short descriptions
+# (owner decision 9, 26 Nov): only what a first call needs. A step is one flat
+# object: tool, and the tool's inputs beside it. The server checks each step
+# against the named tool's own schema, as it checks a direct call. No
+# additionalProperties: false here: a client that checks a call against the
+# listed schema must let the inputs through.
+_STEP_ITEM = {"type": "object",
+              "properties": {"tool": {"type": "string", "description": "The tool's plain name, as tool_find gives it (pd_pad). Its inputs stand beside it."}},
+              "required": ["tool"]}
 LISTED_SCHEMAS = {
+    "run": copy.deepcopy(_STEP_ITEM),
     "batch": {"type": "object",
-              "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _CALL_ITEM},
+              "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _STEP_ITEM},
                              "rollback": {"type": "boolean", "description": "true: at a refusal, take back the whole batch."},
                              "stopOnError": {"type": "boolean", "description": "false: run every call, also after a refusal."}},
               "required": ["calls"]},
     "fast": {"type": "object",
-             "properties": {"do": {"type": "array", "minItems": 1,
-                                   "description": "The steps, in order. A tool step is { tool, arguments, as }; the other steps are on fast's card.",
-                                   "items": {"type": "object",
-                                             "properties": {**_CALL_ITEM["properties"],
-                                                            "as": {"type": "string", "description": "A name for this call's answer, for later steps."}}}},
+             "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _STEP_ITEM},
                             "rollback": {"type": "boolean", "description": "true: at a refusal, take back the whole block."},
                             "check": {"type": "boolean", "description": "true: check every step, run nothing."}},
-             "required": ["do"]},
+             "required": ["calls"]},
 }
 
 
@@ -137,7 +138,7 @@ GUIDE_HINT = ' guide_read { topic: "batch" } has the rules (chaining with $from,
 
 
 NOTHING_RAN = "Nothing was run."
-BASIC_FORM = " The basic form: batch { calls: [{ tool, arguments }] }."
+BASIC_FORM = ' The basic form: batch { calls: [{ "tool": "sketch_new", "plane": "XY" }] }.'
 
 
 def batch_hint(message):
