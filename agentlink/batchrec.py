@@ -166,8 +166,8 @@ def to_reply(got, first, path, size, lines="all"):
             h = res.get("health") if isinstance(res, dict) else r.get("health")
             if isinstance(h, dict) and h.get("facts"):
                 row["health"] = h["facts"]
-            if isinstance(h, dict) and h.get("errors"):
-                faults.add(first + i)  # FreeCAD reports a recompute error after this call
+            if isinstance(h, dict) and (h.get("errors") or (isinstance(h.get("facts"), str) and _once.FAULT.search(h["facts"]))):
+                faults.add(first + i)  # the health has a fault that FreeCAD reports, or it was not read (once.FAULT)
             if isinstance(r.get("written"), dict):
                 row["written"] = r["written"].get("path")
         lines.append(row)
@@ -181,7 +181,7 @@ def to_reply(got, first, path, size, lines="all"):
     if only in ("refused", "counts"):
         counts = {"ok": sum(1 for r in lines if r["ok"]), "refused": sum(1 for r in lines if not r["ok"])}
         # counts: no line at all (a run made for its files or pictures, read from the file afterwards)
-        # refused: the refused calls and the calls with a recompute error in their health (health.errors)
+        # refused: the refused calls and the calls whose health has a fault word (once.FAULT) or was not read
         lines = [] if only == "counts" else [r for r in lines if not r["ok"] or r["i"] in faults]
     short = {k: v for k, v in got.items() if k != "results"}
     short.update({"results": lines, "written": {"path": path, "bytes": size}})

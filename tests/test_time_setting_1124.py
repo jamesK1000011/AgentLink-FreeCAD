@@ -61,8 +61,8 @@ class TimeSet(unittest.TestCase):
         self.assertEqual(self.got["state"], "16 of 30 minutes used")
         with open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8") as f:
             src = f.read()
-        body = src[src.index("    def session_state(self, a):"):src.index("    def _front_state(self):")]
-        self.assertIn("**_time_state(),", body)
+        body = src[src.index("    def _state_parts(self, a):"):src.index("    def _front_state(self):")]
+        self.assertIn('(("time",), _time_state),', body)
 
     def test_the_health_verdict_shows_it_from_half_the_limit(self):
         self.assertNotIn("time:", self.got["earlyVerdict"])

@@ -93,6 +93,22 @@ def placement_fact(o):
         return None
 
 
+def container_fact(o):
+    """{ at, axis, angle } of the Placement that o's containers add (an
+    App::Part that holds the body): o's global Placement less its own, when
+    that is not the identity. None when there is none or it is not read. A
+    shape's box has the object's own Placement only."""
+    import math
+
+    try:
+        p = o.getGlobalPlacement().multiply(o.Placement.inverse())
+        if p.isIdentity():
+            return None
+        return {"at": vec(p.Base), "axis": vec(p.Rotation.Axis), "angle": round(math.degrees(p.Rotation.Angle), 4)}
+    except Exception:
+        return None
+
+
 def shape_key(shape):
     """A cheap key that changes when the shape does: its hash (the OCC shape
     and placement), kind, element counts and quick box. The hash alone is
@@ -152,6 +168,9 @@ def short_edges(shape, length_mm=0.02):
     return out
 
 
+CHECK_LINES = 10  # lines of FreeCAD's check that body_check gives; errorsInAll counts them all
+
+
 def core_check(shape):
     """FreeCAD's own geometry check (Part Check Geometry's, shape.check with
     its BOP checks): (ok, the problems it names). None, [] where this
@@ -164,7 +183,7 @@ def core_check(shape):
         return True, []
     except Exception as e:  # Part.OCCError / ValueError: one line a problem
         lines = [ln.strip() for ln in str(e).splitlines() if ln.strip()]
-        return False, lines[:10] or [type(e).__name__]
+        return False, lines or [type(e).__name__]
 
 
 # BOP check findings that are tolerance matters on a shape BRepCheck

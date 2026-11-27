@@ -310,6 +310,7 @@ def used_mark(sk):
         return None
 
 
+HELD = "The document's recompute is held (a batch with build: \"end\"), so the change of {body} is not measured here."
 NOT_RECOMPUTED = "{body} is not recomputed yet (its features are Touched), so its change is not measured here."
 
 
@@ -329,7 +330,8 @@ def used_change(sk, mark, only_changed=False):
         if body is None or body.Name != mark.get("body"):
             return None
         if getattr(getattr(sk, "Document", None), "RecomputesFrozen", False) is True:
-            return NOT_RECOMPUTED.format(body=body.Label)
+            # The State flags are not read here: only what is known is said.
+            return HELD.format(body=body.Label)
         for o in [body, *list(getattr(body, "Group", None) or [])]:
             if "Touched" in (getattr(o, "State", None) or ()):
                 # On FreeCAD the features wait for a recompute after a sketch
@@ -1175,7 +1177,13 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
             line += " " + along
     if line and placed:
         line += (f" {body.Label}'s Placement is at {placed['at']}, axis {placed['axis']}, angle {placed['angle']} deg: "
-                 "the boxes here are the world's, and the body's planes and axes are placed so.")
+                 "the boxes here are with this Placement, and the body's planes and axes are placed so.")
+    held = geo.container_fact(body)
+    if held:
+        out["containerPlacement"] = held
+        if line:
+            line += (f" {body.Label} is in a container with a Placement of its own (at {held['at']}, axis {held['axis']}, angle {held['angle']} deg): "
+                     "the boxes here do not have that Placement.")
     if line and valid is False:
         line += " FreeCAD's shape check (isValid) says that the body's shape is not valid. FreeCAD gave no error."
     if line:
@@ -1206,7 +1214,17 @@ STORED = {
     "PartDesign::PolarPattern": ("Axis", "Reversed", "Mode", "Angle", "Offset", "Occurrences", "TransformMode", "Refine"),
     "PartDesign::Mirrored": ("MirrorPlane", "TransformMode", "Refine"),
     "PartDesign::MultiTransform": ("TransformMode", "Refine"),
+    "PartDesign::AdditivePipe": ("Mode", "Transition", "Transformation", "Refine"),
+    "PartDesign::SubtractivePipe": ("Mode", "Transition", "Transformation", "Refine"),
+    "PartDesign::AdditiveLoft": ("Ruled", "Closed", "Refine"),
+    "PartDesign::SubtractiveLoft": ("Ruled", "Closed", "Refine"),
+    "PartDesign::AdditiveHelix": ("Mode", "Pitch", "Height", "Turns", "Angle", "LeftHanded", "Reversed", "Refine"),
+    "PartDesign::SubtractiveHelix": ("Mode", "Pitch", "Height", "Turns", "Angle", "LeftHanded", "Reversed", "Refine"),
+    "PartDesign::Boolean": ("Type", "Refine"),
 }
+# Any other feature: its Refine, when it has one (FreeCAD takes its default
+# from a preference, so the caller cannot know it).
+STORED_ELSE = ("Refine",)
 
 
 def _stored_value(v):
@@ -1237,7 +1255,7 @@ def stored_values(feat):
         have = set(feat.PropertiesList)
     except Exception:  # noqa: BLE001
         return {}
-    for k in STORED.get(getattr(feat, "TypeId", ""), ()):
+    for k in STORED.get(getattr(feat, "TypeId", ""), STORED_ELSE):
         if k not in have:
             continue
         try:
@@ -1387,6 +1405,26 @@ def exact_box(shape):
     return _bbt(geo.bound_box(shape))
 
 
+def in_body_frame(body, shape):
+    """A feature's shape (kept in the body's own frame) placed as the Body's
+    own Shape is: with the Body's Placement. FreeCAD's Body gives its Shape
+    with its Placement (Body.cpp, Body::execute), and a feature's Shape has
+    none of it, so the two are in one frame only after this (27 Nov review,
+    A4: a placed body's "before" and its change were read across two
+    frames). The shape itself when the Body's Placement is the identity or
+    there is no shape. Never changes the feature's shape: a copy is placed."""
+    if shape is None or geo.placement_fact(body) is None:
+        return shape
+    try:
+        if shape.isNull():
+            return shape
+        placed = shape.copy()
+        placed.Placement = body.Placement.multiply(shape.Placement)
+        return placed
+    except Exception:  # noqa: BLE001 - not placed: the caller's measure fails or is left out
+        return None
+
+
 def where_went(feat, body, delta, tol=0.01, keep=None):
     """{added: "x .., y .., z ..", beyond: [sides]} or {removed: …, opens:
     [faces of the body it breaks through]}, from the body before the
@@ -1398,7 +1436,7 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
     measured (old, new, reg, cut, lids), for result_line."""
     try:
         base = getattr(feat, "BaseFeature", None)
-        old = getattr(base, "Shape", None) if base is not None else None
+        old = in_body_frame(body, getattr(base, "Shape", None) if base is not None else None)
         new = body.Shape
         if keep is not None:
             keep["old"], keep["new"], keep["tol"] = old, new, tol
@@ -1511,7 +1549,7 @@ def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
     old = keep.get("old") if "old" in keep else None
     if "old" not in keep:
         base = getattr(feat, "BaseFeature", None)
-        old = getattr(base, "Shape", None) if base is not None else None
+        old = in_body_frame(body, getattr(base, "Shape", None) if base is not None else None)
     have_old = old is not None and not old.isNull() and bool(old.Solids)
     solids = len(new.Solids) if new_ok else None
     was = len(old.Solids) if have_old else None

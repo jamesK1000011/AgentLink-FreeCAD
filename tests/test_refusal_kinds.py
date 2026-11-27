@@ -27,7 +27,7 @@ def call(srv, name, args):
 class Kinds(unittest.TestCase):
     def test_words_are_fixed(self):
         self.assertEqual(FIX, "Change what the error names and call again.")
-        self.assertEqual(RETRY, "The cause is not in the call: FreeCAD was busy or not ready.")
+        self.assertEqual(RETRY, "")  # 27 Nov review: no guessed cause; the error's own words stand
         self.assertEqual(STOP, "Do not call it again. Report what happened.")
 
     def test_kind_per_code(self):

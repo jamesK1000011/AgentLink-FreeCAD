@@ -451,7 +451,7 @@ class FastPath(unittest.TestCase):
         self.assertTrue(body["fast"].startswith("ran 5 calls "), body)
         self.assertIn("+Sketch", body["fast"])
         self.assertIn("+Pad", body["fast"])
-        self.assertTrue(body["fast"].endswith("no recompute error"), body)
+        self.assertTrue(body["fast"].endswith("health: no fault in the readings of the calls"), body)
         self.assertLessEqual(set(body), {"fast", "values", "warnings", "filled", "checkpoint", "record", "ms", "made", "checks", "now"})
         # Every call went through the server's own path, in order, with the sketch filled in from the block.
         tools = [t for t, _a in got["seen"]]

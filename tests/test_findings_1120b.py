@@ -109,7 +109,7 @@ class FrontDocument(unittest.TestCase):
 
     def test_session_state_and_the_cards_say_it(self):
         src = open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8").read()
-        self.assertIn("**self._front_state(),", src)
+        self.assertIn('(("agentDocument", "frontDocument", "mismatch"), self._front_state),', src)
         self.assertIn("agentDocument, frontDocument and mismatch", src)
         self.assertIn("rebound: true", entries()["doc_switch"]["description"])
 

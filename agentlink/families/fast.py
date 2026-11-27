@@ -49,7 +49,7 @@ def tools(session):
                      "each: { x: [15, 45] } on the step runs it once for each value, as a batch does. The answer is then the batch's. \"$x\" in the inputs is the value. "
                      "run does not run approve_file, approve_code, batch or fast: call them by their own names. "
                      "The answer ends with now: the names in each body as they are, by label. Example: \"now\": { \"Body\": [\"Sketch→Pad\"] }. "
-                     "A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the cause is not in the call. "
+                     "A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the error's words name a busy, locked or timed-out state. "
                      "For many calls in one request, use batch (a full answer for each call) or fast (one short answer)."),
              copy.deepcopy(RUN_SCHEMA), run),
         Tool("fast", ("Run many calls in one request, and get one short answer. The answer ends with now: the names in each body as they are, by label. Example: \"now\": { \"Body\": [\"Sketch→Pad\"] }. For one call, use run. For a full answer for each call, use batch. "
@@ -58,11 +58,11 @@ def tools(session):
                       "{ \"$from\": 2, \"$at\": \"height\" } takes a value from the answer of call 2 of this block. Calls count from 0. Each pass of each is one call. "
                       "A read is the tool get: { tool: \"get\", what: \"Body.volume\" }. "
                       "Each call goes through the normal input checks, refusals, approvals and undo step of its tool. "
-                      "The answer is one line: calls, time, objects made, the volume change and whether FreeCAD reports a recompute error. "
+                      "The answer is one line: calls, time, objects made, the volume change and whether a call's health has a fault. "
                       "made lists each object made: its name (later calls take it), label and type. "
                       "checks has the main results of body_check, doc_save, doc_close, measure and other *_check steps. "
                       "The volume change is of the document the block started in, while it is open. "
-                      "values has the value of each get. warnings has each warning of a call, and the health's facts of a call with a recompute error. "
+                      "values has the value of each get. warnings has each warning of a call. It also has the health's facts of a call whose health has a fault or was not read. "
                       "A required field that you leave out comes from the current body, sketch or last result. "
                       "A body or sketch field that you leave out comes from what the block made. filled names each of them. "
                       "Before step 1, each step is checked: its fields, and its leading checks up to the first change. "

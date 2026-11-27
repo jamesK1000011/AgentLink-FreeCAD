@@ -394,10 +394,14 @@ def branch_words(ends, curves, size, dist, rounds=(), joins=()):
     return words
 
 
-def cross_words(loops, meet):
+CROSS_SHOWN = 4  # pairs of wires that meet, said one by one in the todo; wiresMeet counts them all
+
+
+def cross_words(loops, meet, cap=CROSS_SHOWN):
     """The todo words for closed loops that cross or touch each other (a
     loop inside another, apart from it, is a hole: no words). loops: their
-    names; meet(i, j): (x, y) where loops i and j meet, or None."""
+    names; meet(i, j): (x, y) where loops i and j meet, or None. cap: the
+    pairs said one by one, then how many more; None gives every pair."""
     words = []
     for i in range(len(loops)):
         for j in range(i + 1, len(loops)):
@@ -406,8 +410,8 @@ def cross_words(loops, meet):
                 words.append(f"{loops[i]} meets {loops[j]} at {_at(p)}")
     if not words:
         return []
-    if len(words) > 4:
-        words = words[:4] + [f"and {len(words) - 4} more loops that meet"]
+    if cap is not None and len(words) > cap:
+        words = words[:cap] + [f"and {len(words) - cap} more loops that meet"]
     return words
 
 
@@ -505,7 +509,7 @@ def _cross_words(sk, wires):
             q = inv.multVec(pts[0][0])
             return (q.x, q.y)
 
-        return cross_words([name(w) for w in loops], meet)
+        return cross_words([name(w) for w in loops], meet, cap=None)
     except Exception:  # noqa: BLE001 - no reading: said as not tested
         return None
 
@@ -617,7 +621,9 @@ def state_of(sk):
             out["wiresMeet"] = f"not tested: {why_not}"
             cross = []
         else:
-            out["wiresMeet"] = len(cross)
+            out["wiresMeet"] = len(cross)  # every pair that meets (27 Nov review, A3)
+            if len(cross) > CROSS_SHOWN:
+                cross = cross[:CROSS_SHOWN] + [f"and {len(cross) - CROSS_SHOWN} more loops that meet"]
         out["selfCrossing"] = "not tested"
     said = []
     if openv or (wires and closed < len(wires)):
@@ -718,6 +724,15 @@ def by_default(item):
             out[name] = v
     if k == "bspline" and item.get("interpolate") is False and item.get("degree") is None:
         out["degree"] = 3
+    if k == "parabola":
+        # from and to are -2 and 2 times the focal when left out (build)
+        try:
+            f = float(item.get("focal", 0))
+            for name, v in (("from", -2 * f), ("to", 2 * f)):
+                if item.get(name) is None:
+                    out[name] = v
+        except (TypeError, ValueError):
+            pass
     if item.get("construction") is None:
         out["construction"] = False
     return out or None

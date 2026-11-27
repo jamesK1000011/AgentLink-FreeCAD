@@ -40,6 +40,9 @@ import time
 # What health.facts says when no fact is news: the state pass ran on every
 # object and FreeCAD reports no recompute error.
 NOTHING = "recompute: FreeCAD reports no recompute error"
+# What health.facts says when the check did not read the document: never
+# NOTHING for a pass that did not run (27 Nov review, A2).
+NOT_READ = "health: not read"
 # Whether the last check read a fault that FreeCAD reports (a recompute
 # error, a shape that is not valid or not closed, conflicting, redundant or
 # malformed constraints, an open dialog): a repeated reading with one is
@@ -1042,12 +1045,14 @@ def check(session, tool, m, args=None):
     deadline = t0 + BUDGET_S
     doc = getattr(session, "doc", None)
     if doc is None:
-        return None
+        _last["fault"] = False
+        return {"facts": f"{NOT_READ} (no document)"}
     try:
         doc_name = doc.Name
         objs = list(doc.Objects)
-    except Exception:
-        return None
+    except Exception as e:
+        _last["fault"] = False
+        return {"facts": f"{NOT_READ} (the document's objects were not read: {type(e).__name__})"}
     by_name = {o.Name: o for o in objs}
     same_doc = doc_name == m.get("doc")
     before_bad = m.get("bad", {}) if same_doc else {}
@@ -1092,6 +1097,7 @@ def check(session, tool, m, args=None):
                     pass
     else:
         unchecked.append(f"State flags ({len(objs)} objects, over {MAX_OBJECTS})")
+        lines.append(f"recompute: not read ({len(objs)} objects, and the State flags are read for {MAX_OBJECTS} at most)")
     if errors:
         red = True
         new = [e for e in errors if e.get("new")]

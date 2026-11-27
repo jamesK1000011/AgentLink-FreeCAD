@@ -91,7 +91,10 @@ class ToolError(Exception):
 
 KIND_WORDS = {
     "fixable": "Change what the error names and call again.",
-    "retry": "The cause is not in the call: FreeCAD was busy or not ready.",
+    # retry has no sentence of its own (27 Nov review, B4): the kind comes from
+    # a word of the error (TRANSIENT_WORDS), and the error's own words are
+    # the fact. No cause is guessed.
+    "retry": "",
     "stop": "Do not call it again. Report what happened.",
 }
 # A FreeCAD error that names no input to change (24 Nov QA: "BRep_API:
@@ -128,7 +131,8 @@ def strip_kind(message):
     wraps another one's words, a ladder that adds its own)."""
     m = str(message or "")
     for w in (*KIND_WORDS.values(), *OLD_KIND_WORDS):
-        m = m.replace(" " + w, "").replace(w, "")
+        if w:
+            m = m.replace(" " + w, "").replace(w, "")
     return m.strip()
 
 
@@ -1375,14 +1379,29 @@ class Server:
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
         from . import around
 
-        with _as_user(s), _acting(s), _hang_trace(s, params.get("name")), _progress_for(self, params):
-            result = self._call(params)
-            with around.part("callDone"):  # the add-ons' call_done handlers
-                self._done(params, result, before)
+        # The calls in hand, outermost first (session_state's steps: a call
+        # that a tool makes itself is no line), and where the steps stood
+        # when a batch or a fast block began (its rollback marks its lines).
+        stack = self.__dict__.setdefault("_call_names", [])
+        marks = self.__dict__.setdefault("_steps_marks", [])
+        me = plain_name(self, params.get("name")) if isinstance(params.get("name"), str) else params.get("name")
+        stack.append(me)
+        runner = me in ("batch", "fast")
+        if runner:
+            marks.append(len(getattr(self, "_step_log", None) or []))
         try:
-            note_step(self, params, result)
-        except Exception:  # noqa: BLE001 - a record only
-            pass
+            with _as_user(s), _acting(s), _hang_trace(s, params.get("name")), _progress_for(self, params):
+                result = self._call(params)
+                with around.part("callDone"):  # the add-ons' call_done handlers
+                    self._done(params, result, before)
+            try:
+                note_step(self, params, result)
+            except Exception:  # noqa: BLE001 - a record only
+                pass
+        finally:
+            stack.pop()
+            if runner:
+                marks.pop()
         with around.part("notice"):
             _add_notice(result)
             _add_rider(result, params.get("name"))
@@ -1904,6 +1923,13 @@ def note_step(server, params, result):
     name = plain_name(server, name) if isinstance(name, str) else name
     if not isinstance(name, str) or name in STEP_RUNNERS:
         return
+    # A call that a tool of its own makes (not a runner's) is no line: the
+    # client's call is. A call of the person (the panel) is no line.
+    stack = getattr(server, "_call_names", None) or []
+    if any(n not in STEP_RUNNERS for n in stack[:-1]):
+        return
+    if getattr(getattr(server, "session", None), "by", "agent") != "agent":
+        return
     tool = server.tools.get(name)
     args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
     if tool is not None:
@@ -1927,6 +1953,37 @@ def note_step(server, params, result):
     if (result or {}).get("isError") and not isinstance(err, dict):
         err = {"code": "failed"}
     log.append(step_line(len(log) + 1, name, body, err))
+
+
+def note_refused(server, name, code, where=""):
+    """A refused line for a call that never reached its tool: a batch step
+    refused by its form, a fast block refused in its check before step 1."""
+    try:
+        log = getattr(server, "_step_log", None)
+        if log is None:
+            log = server._step_log = []
+        log.append(f"{len(log) + 1} {name}: refused {code}" + (f" ({where})" if where else ""))
+    except Exception:  # noqa: BLE001 - a record only
+        pass
+
+
+ROLLED_BACK = "; taken back by rollback"
+
+
+def note_rolled_back(server, words=ROLLED_BACK):
+    """The lines of the batch or fast block in hand marked with words (taken
+    back, or how many steps a partial rollback took back): its rollback
+    ran. Refused lines made nothing and stay as they are."""
+    try:
+        log = getattr(server, "_step_log", None) or []
+        marks = getattr(server, "_steps_marks", None) or []
+        if not marks:
+            return
+        for i in range(marks[-1], len(log)):
+            if ": refused " not in log[i] and not log[i].endswith(words):
+                log[i] += words
+    except Exception:  # noqa: BLE001 - a record only
+        pass
 
 
 def steps_part(server, limit=STEPS_CHARS):

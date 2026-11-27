@@ -633,6 +633,7 @@
     "doc",
     "edge_words",
     "edges_form",
+    "fit_word",
     "has_prop",
     "hole_spots",
     "in_body",

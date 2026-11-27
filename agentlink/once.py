@@ -59,7 +59,7 @@ CODED = {
 # words them): a reading with one is given whole each time, never as
 # NOTHING_NEW. It decides only what is said again, not how a result is graded.
 FAULT = re.compile(r"failed to recompute|still failing|not recomputed yet|NOT valid|NOT closed|conflicting|redundant|malformed|a dialog is open|"
-                   r"did not run|Check Geometry reports|empty shape|recompute failed")
+                   r"did not run|not read|switched off|Check Geometry reports|empty shape|recompute failed|volume -?[0-9.e+-]+ mm³")
 STANDING = re.compile(r"^(?:recompute: )?\d+ objects? still failing from before this call: ")
 
 # Left-out words that are not named in saidBefore: they say how Agent Link

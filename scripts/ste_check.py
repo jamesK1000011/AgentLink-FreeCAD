@@ -65,6 +65,9 @@ WAIVERS = {
     ("body_check", "0.01"): "the sliver check (faces under 0.01 mm wide) is gone (27 Nov, facts only: FreeCAD has no such check)",
     ("body_check", "mm"): "the sliver check and its width in mm are gone (27 Nov, facts only); the volume's unit is mm³",
     ("body_check", "only"): "the words 'a BOP-only finding' are gone (27 Nov, facts only): Check Geometry's errors are given as FreeCAD words them",
+    ("part_from_mesh", "meshobj_decimate"): "the advice to decimate first is gone (27 Nov review, facts only)",
+    ("pd_boolean", "refuse"): "the hub does not refuse a boolean that changes nothing (27 Nov, facts only): the sentence was false",
+    ("pd_primitive", "must"): "'it must overlap the body' is no rule (27 Nov, facts only): the call is kept with volume change 0",
     ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 

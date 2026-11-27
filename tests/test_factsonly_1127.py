@@ -393,7 +393,10 @@ class HealthIsWhatFreeCADReports(unittest.TestCase):
 
         self.assertEqual(health.NOTHING, "recompute: FreeCAD reports no recompute error")
         out = health.attach(types.SimpleNamespace(doc=None), "pd_pad", {"depth": 0}, {})
-        self.assertEqual(out["health"], {"facts": health.NOTHING})
+        self.assertEqual(out["health"], {"facts": "health: not read (no document)"})  # 27 Nov review: not read is not "no error"
+        doc = types.SimpleNamespace(Name="D", Objects=[])
+        out = health.attach(types.SimpleNamespace(doc=doc), "pd_pad", health.mark(types.SimpleNamespace(doc=doc)), {})
+        self.assertEqual(out["health"], {"facts": health.NOTHING})  # the state pass ran on every object: none failed
 
     def test_body_check_reads_freecads_checks_only(self):
         t = source("tools.py")
@@ -409,7 +412,7 @@ class HealthIsWhatFreeCADReports(unittest.TestCase):
         f = source("fastpath.py")
         for gone in ('"clean"', "not clean", "check ok"):
             self.assertNotIn(gone, f, gone)
-        self.assertIn('"no recompute error" if not run.health_bad', f)
+        self.assertIn('"health: no fault in the readings of the calls"', f)
 
     def test_lines_refused_keeps_calls_with_a_recompute_error(self):
         from agentlink import batchrec
@@ -555,7 +558,7 @@ class HubFactsOfTheBrief(unittest.TestCase):
     full ones)."""
 
     NOW = 'The answer ends with now: the names in each body as they are, by label. Example: "now": { "Body": ["Sketch→Pad"] }.'
-    KIND = "A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the cause is not in the call."
+    KIND = "A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the error's words name a busy, locked or timed-out state."
     NOTOOL = "There is no sketch_rectangle, sketch_circle or pad tool: sketch_add takes kind, and the pad tool is pd_pad."
 
     def ste(self):
@@ -645,7 +648,7 @@ class SessionSteps(unittest.TestCase):
         from agentlink import tools
         from agentlink.protocol import ToolError
         ses = types.SimpleNamespace(STATE_PARTS=tools.Session.STATE_PARTS, orientation=lambda: {"where": "hidden"},
-                                    _state_all=lambda a: {"document": "Part", "bodies": [{"name": "Body"}], "step": 1, "steps": ["1 pd_pad Pad: step 1"], "outDir": "/tmp/x"})
+                                    _state_all=lambda a, only=None: {k: v for k, v in {"document": "Part", "bodies": [{"name": "Body"}], "step": 1, "steps": ["1 pd_pad Pad: step 1"], "outDir": "/tmp/x"}.items() if only is None or k in only})
         def st(a):
             try:
                 return tools.Session.session_state(ses, a)
@@ -698,6 +701,174 @@ class SessionSteps(unittest.TestCase):
         self.assertEqual(fastpath.ACTIVE, ("active.body", "active.sketch", "active.document", "selection", "bodies"))
         self.assertFalse(hasattr(fastpath, "SESSION_PARTS"))
         self.assertNotIn("steps", source("families", "fast.py").split('Tool("get"')[1].split("Tool(")[0])
+
+
+class ReviewFixes(unittest.TestCase):
+    """The independent review of 27 Nov (factsonly-REVIEW.md): one test for each fix."""
+
+    def test_a1_fast_does_not_say_no_error_over_a_fault_or_an_unread_health(self):
+        from agentlink import fastpath
+
+        for facts in ("recompute: 1 object still failing from before this call: Pad001", "the health check did not run (KeyError: x)",
+                      "health: not read (no document)", "shape: Body: NOT valid, closed, 1 solid", "window: a dialog is open: Missing link"):
+            self.assertEqual(fastpath._health_words({"health": {"facts": facts}}), facts, facts)
+        self.assertIsNone(fastpath._health_words({"health": {"facts": "shape: Body: valid, closed, 1 solid"}}))
+        run = types.SimpleNamespace(calls=1, made=[], health_bad=1)
+        self.assertIn("health: a fault or no reading after 1 call (warnings)", fastpath._summary(run, True, 0.1, None, None))
+        run.health_bad = 0
+        self.assertTrue(fastpath._summary(run, True, 0.1, None, None).endswith("health: no fault in the readings of the calls"))
+        self.assertNotIn("no recompute error", source("fastpath.py"))
+
+    def test_a2_nothing_is_said_only_when_the_state_pass_ran(self):
+        from agentlink import health
+
+        got = health.check(types.SimpleNamespace(doc=None), "pd_pad", {"depth": 0})
+        self.assertEqual(got, {"facts": "health: not read (no document)"})
+        h = source("health.py")
+        self.assertIn('lines.append(f"recompute: not read ({len(objs)} objects, and the State flags are read for {MAX_OBJECTS} at most)")', h)
+        self.assertIn('return {"facts": health.NOT_READ}', source("tools.py"))
+
+    def test_a3_wires_meet_counts_every_pair(self):
+        got = child('''
+        from agentlink.families import sketch
+        names = [f"circle {i}" for i in range(5)]
+        every = sketch.cross_words(names, lambda i, j: (0, 0), cap=None)
+        cut = sketch.cross_words(names, lambda i, j: (0, 0))
+        print(json.dumps([len(every), len(cut), cut[-1]]))
+        ''')
+        self.assertEqual(got, [10, 5, "and 6 more loops that meet"])
+        src = source("families", "sketch.py")
+        self.assertIn("return cross_words([name(w) for w in loops], meet, cap=None)", src)
+        self.assertIn('out["wiresMeet"] = len(cross)  # every pair that meets', src)
+
+    def test_a4_the_body_before_is_read_with_the_bodys_placement(self):
+        got = child('''
+        class Pl:
+            def __init__(s, n, ident=False): s.n, s.ident = n, ident
+            def isIdentity(s): return s.ident
+            def multiply(s, o): return Pl(s.n + "*" + o.n)
+            Base = types.SimpleNamespace(x=100.0, y=0.0, z=0.0); Rotation = types.SimpleNamespace(Axis=types.SimpleNamespace(x=0.0, y=0.0, z=1.0), Angle=0.0)
+        class Shape:
+            def __init__(s): s.Placement = Pl("feature")
+            def isNull(s): return False
+            def copy(s): return Shape()
+        old = Shape()
+        placed = pc.in_body_frame(types.SimpleNamespace(Placement=Pl("body")), old)
+        same = pc.in_body_frame(types.SimpleNamespace(Placement=Pl("body", True)), old)
+        print(json.dumps([placed.Placement.n, placed is old, old.Placement.n, same is old, pc.in_body_frame(types.SimpleNamespace(Placement=Pl("body")), None)]))
+        ''')
+        self.assertEqual(got, ["body*feature", False, "feature", True, None])
+        pd = source("families", "pd_common.py")
+        self.assertEqual(pd.count('in_body_frame(body, getattr(base, "Shape", None) if base is not None else None)'), 2)
+        self.assertNotIn("the boxes here are the world's", pd)
+        self.assertIn("the boxes here do not have that Placement.", pd)
+
+    def test_a5_a6_steps_mark_a_rollback_and_list_form_and_check_refusals(self):
+        from agentlink import protocol
+        from agentlink.protocol import Server, Tool
+
+        schema = {"type": "object", "properties": {"name": {"type": "string"}}, "additionalProperties": True}
+        srv = None
+
+        def batch(a):
+            srv.call({"name": "probe_make", "arguments": {"name": "A"}})
+            protocol.note_refused(srv, "pad", "not_found", "a batch step, refused by its form")
+            if a.get("rollback"):
+                protocol.note_rolled_back(srv)
+            return {"ran": 1}
+
+        def nested(a):
+            srv.call({"name": "probe_make", "arguments": {"name": "inner"}})  # a tool that calls a tool: one line, the client's
+            return {"object": "outer"}
+
+        srv = Server("t", "0", [Tool("probe_make", "Make.", schema, lambda a: {"body": a.get("name"), "step": 1}, changes=True),
+                                Tool("batch", "Batch.", schema, batch, changes=True), Tool("probe_nested", "Nested.", schema, nested, changes=True)])
+        srv.call({"name": "probe_make", "arguments": {"name": "Kept"}})
+        srv.call({"name": "batch", "arguments": {"rollback": True}})
+        srv.call({"name": "probe_nested", "arguments": {}})
+        self.assertEqual(protocol.steps_part(srv)["steps"],
+                         ["1 probe_make Kept: step 1", "2 probe_make A: step 1; taken back by rollback",
+                          "3 pad: refused not_found (a batch step, refused by its form)", "4 probe_nested outer"])
+        self.assertIn("note_refused(server, str(stop.tool or \"fast\"), stop.code", source("fastpath.py"))
+        self.assertIn("note_rolled_back(getattr(s, \"server\", None), ROLLED_BACK if out.get(\"result\") == \"rolled_back\"", source("tools.py"))
+
+    def test_a7_a_part_that_is_not_returned_is_not_built(self):
+        got = child('''
+        from agentlink import tools
+        built = []
+        def part(name, value):
+            def f(*a, **k):
+                built.append(name); return value
+            return f
+        ses = types.SimpleNamespace(STATE_PARTS=tools.Session.STATE_PARTS, steps=[1, 2], out_dir="/tmp/x", where="hidden",
+                                    _hidden_state=part("hidden", {}), _steps_state=part("steps", {"steps": ["1 x"]}), _next_state=part("next", {}),
+                                    _options_state=part("options", {"options": "o"}), _tools_state=part("toolsChanged", {"toolsChanged": "names"}),
+                                    _extensions_state=part("leftOut", {}), _unattended_state=part("machine", {}), _front_state=part("front", {}))
+        ses._state_parts = lambda a: tools.Session._state_parts(ses, a)
+        ses._state_all = lambda a, only=None: tools.Session._state_all(ses, a, only)
+        one = tools.Session.session_state(ses, {"what": "steps"})
+        first = list(built)
+        two = tools.Session.session_state(ses, {"what": ["toolsChanged", "step"]})
+        print(json.dumps([one, first, two, built[len(first):]]))
+        ''')
+        self.assertEqual(got, [{"steps": ["1 x"]}, ["steps"], {"toolsChanged": "names", "step": 2}, ["toolsChanged"]])
+
+    def test_a8_model_thread_goes_to_freecads_property_whatever_threaded_is(self):
+        e = entries()["pd_hole"]
+        s = json.dumps(e["steps"])
+        self.assertIn('{"set": {"f.ModelThread": "=bool(a.modelThread)"}, "when": "=a.modelThread is not None and has_prop(f, \'ModelThread\')"}', s)
+        self.assertNotIn("f.Threaded and has_prop(f, 'ModelThread')", s)
+        a = json.dumps(e["answer"])
+        self.assertIn("'modelThread': bool(get(f, 'ModelThread', False))", a)
+        self.assertIn("'drillPoint': str(f.DrillPoint).lower()", a)  # read from the feature, not a constant
+        self.assertIn("fit_word(f)", a)
+
+    def test_a9_a10_a11_check_row_cut_said_and_refine_stated(self):
+        from agentlink import fastpath
+
+        row = fastpath.check_row("calls.0", "body_check", {"body": "B", "valid": True, "closed": True, "solids": 1, "volume": 5, "checkGeometry": {"errors": ["Edge3: BOPAlgo_InvalidCurveOnSurface"]}})
+        self.assertEqual(row["checkGeometry"], {"errors": ["Edge3: BOPAlgo_InvalidCurveOnSurface"]})
+        self.assertIs(row["closed"], True)
+        t = source("tools.py")
+        self.assertIn('s["checkGeometry"]["errorsInAll"] = len(said)', t)
+        self.assertIn("return False, lines or [type(e).__name__]", source("geometry.py"))
+        self.assertNotIn('"body_check": {"did": ["Checked {body}", "Checked the part"], "result": ["Sound if {ok=true}"', source("data", "activity.json"))
+        self.assertIn('"Valid if {valid=true}"', source("data", "activity.json"))
+        got = child('''
+        pipe = types.SimpleNamespace(TypeId="PartDesign::AdditivePipe", PropertiesList=["Mode", "Transition", "Refine"], Mode="Standard", Transition="Transformed", Refine=True)
+        prim = types.SimpleNamespace(TypeId="PartDesign::AdditiveBox", PropertiesList=["Length", "Refine"], Length=10.0, Refine=False)
+        print(json.dumps([pc.stored_values(pipe), pc.stored_values(prim)]))
+        ''')
+        self.assertEqual(got, [{"Mode": "Standard", "Transition": "Transformed", "Refine": True}, {"Refine": False}])
+        self.assertIn("'refine': get(f, 'Refine')", json.dumps(entries()["pd_pipe"]["answer"]))
+
+    def test_b_the_listed_sentences_and_the_guessed_cause_are_gone(self):
+        from agentlink import protocol
+
+        e = entries()
+        for name, gone in (("pd_boolean", "refuses a fuse or cut"), ("pd_primitive", "Use a primitive"), ("pd_primitive", "must overlap"),
+                           ("sketch_attach", "Use it when"), ("part_from_mesh", "first use meshobj_decimate")):
+            self.assertNotIn(gone, e[name]["description"], name)
+        steps = json.dumps({n: e[n]["steps"] for n in ("pd_pad", "pd_pocket", "pd_hole", "pd_revolution", "pd_groove")})
+        for gone in ("pd_pad (or pd_primitive) first", "or two features", "make the hole by diameter, then feature_edit", "make it one-sided, then feature_edit"):
+            self.assertNotIn(gone, steps, gone)
+        self.assertEqual(protocol.KIND_WORDS["retry"], "")
+        err = protocol.set_kind({"code": "busy", "message": "FreeCAD is busy with another call."})
+        self.assertEqual((err["kind"], err["message"]), ("retry", "FreeCAD is busy with another call."))  # the raw error; no guessed cause
+        self.assertNotIn("FreeCAD was busy or not ready", source("protocol.py"))
+
+    def test_c2_d2_a_parabolas_ends_are_said_and_a_held_recompute_is_said_as_held(self):
+        got = child('''
+        from agentlink.families import sketch
+        feat = types.SimpleNamespace(Label="Pad", Name="Pad", TypeId="PartDesign::Pad", State=[])
+        sk = types.SimpleNamespace(Label="Base", Name="Base", TypeId="Sketcher::SketchObject", InList=[feat], State=[], Document=types.SimpleNamespace(RecomputesFrozen=True))
+        body = types.SimpleNamespace(Label="Body", Name="Body", Group=[sk, feat], State=[])
+        pc.body_of = lambda o: body
+        held = pc.used_change(sk, {"sketch": "Base", "body": "Body", "volume": 1.0, "box": (0, 1, 0, 1, 0, 1), "solids": 1})
+        print(json.dumps([sketch.by_default({"kind": "parabola", "vertex": [0, 0], "focal": 3, "construction": False}), held]))
+        ''')
+        self.assertEqual(got[0], {"rotation": 0, "from": -6.0, "to": 6.0})
+        self.assertEqual(got[1], 'The document\'s recompute is held (a batch with build: "end"), so the change of Body is not measured here.')
 
 
 class Sentences(unittest.TestCase):

@@ -694,7 +694,7 @@ def _open(doc):
 # (live, 22 Nov: an agent spent a call reading the record for body_check's
 # verdict and the save's result).
 CHECK_KEYS = {
-    "body_check": ("body", "valid", "solids", "volume", "box", "problems"),
+    "body_check": ("body", "valid", "closed", "solids", "volume", "box", "checkGeometry"),
     "doc_save": ("path", "bytes"),
     "doc_close": ("closed", "discarded"),
     "measure": ("value", "unit", "distance", "angle"),
@@ -716,10 +716,14 @@ def check_row(where, tool, body):
 
 
 def _health_words(body):
-    """The health's facts of a call whose health has recompute errors
-    (health.errors: what FreeCAD reports), else None."""
+    """The health's facts of a call whose health has a fault that FreeCAD
+    reports (once.FAULT: a recompute error new or from before, a shape that
+    is not valid or not closed, flagged constraints, a dialog) or that was
+    not read; else None."""
+    from . import once
+
     h = body.get("health") if isinstance(body, dict) else None
-    if isinstance(h, dict) and h.get("errors"):
+    if isinstance(h, dict) and (h.get("errors") or (isinstance(h.get("facts"), str) and once.FAULT.search(h["facts"]))):
         return _cut(h.get("facts") or "recompute errors")
     return None
 
@@ -785,7 +789,9 @@ def _summary(run, ok, secs, v0, v1, cp=None):
         parts.append(" ".join(f"+{x}" for x in shown) + (f" +{len(run.made) - 8} more" if len(run.made) > 8 else ""))
     if v0 is not None and v1 is not None and abs(v1 - v0) > 1e-6:
         parts.append(f"vol {_fmt_num(v0)}→{_fmt_num(v1)} mm³")
-    parts.append("no recompute error" if not run.health_bad else f"recompute errors after {run.health_bad} call{'s' if run.health_bad != 1 else ''}")
+    # What the calls' own health readings say: no claim for a reading that is not there (27 Nov review, A1).
+    parts.append(f"health: a fault or no reading after {run.health_bad} call{'s' if run.health_bad != 1 else ''} (warnings)" if run.health_bad
+                 else "health: no fault in the readings of the calls")
     return " · ".join(parts)
 
 
@@ -805,6 +811,9 @@ def fast_tool(server, session, a):
         raise ToolError("invalid_input", f"calls: a list of steps, {callshape.EXAMPLE}. Nothing was run.")
     dry, stop = check(server, session, steps)
     if stop is not None:
+        from .protocol import note_refused
+
+        note_refused(server, str(stop.tool or "fast"), stop.code, f"fast, in the check before step 1, at {stop.where}; nothing was run")
         err = ToolError(stop.code, f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)} Read before step 1. Nothing was run.")
         err.outcome = "not_started"
         raise err

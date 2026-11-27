@@ -6649,7 +6649,7 @@
      ]
     },
     {"let": {"sided": "=set_sides(f, side, L2 if typ == 'length' else None)"}},
-    {"refuse": {"fmt": "sides two with extent {typ}: this FreeCAD ({version()}) has two sides for extent length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
+    {"refuse": {"fmt": "sides two with extent {typ}: this FreeCAD ({version()}) has two sides for extent length only."}, "code": "unavailable", "when": "=not sided"},
     {"set": {"f.Reversed": true}, "when": "=a.reversed"},
     {"set": {"f.TaperAngle": "=float(taper)"}, "when": "=taper and has_prop(f, 'TaperAngle')"}
    ],
@@ -6716,7 +6716,7 @@
     {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "tip": "=solid_tip(b)"}},
-    {"refuse": {"fmt": "{b.Label} has no solid to pocket: pd_pad (or pd_primitive) first."}, "code": "invalid_state", "when": "=tip is None"},
+    {"refuse": {"fmt": "{b.Label} has no solid to pocket."}, "code": "invalid_state", "when": "=tip is None"},
     {"refuse": {"fmt": "face is the face to go up to (extent up_to_face), not where the cut starts: with length, leave face out. A feature starts at its sketch and goes the length from there; reversed: true goes the other way."}, "when": "=a.face is not None and not a.extent and a.get('length') is not None"},
     {"let": {"types": "={'length': 'Length', 'up_to_face': 'UpToFace', 'up_to_first': 'UpToFirst', 'through_all': 'ThroughAll'}", "typ": "=a.extent or ('up_to_face' if a.face is not None else 'length')", "why": "=' — a pocket has no up_to_last: through_all.' if typ == 'up_to_last' else '.'"}},
     {"refuse": {"fmt": "extent {typ!r}: one of length, up_to_face, up_to_first, through_all{why}"}, "when": "=typ not in types"},
@@ -6753,7 +6753,7 @@
      ]
     },
     {"let": {"sided": "=set_sides(f, side, L2 if typ == 'length' else None)"}},
-    {"refuse": {"fmt": "sides two with extent {typ}: this FreeCAD ({version()}) has two sides for extent length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
+    {"refuse": {"fmt": "sides two with extent {typ}: this FreeCAD ({version()}) has two sides for extent length only."}, "code": "unavailable", "when": "=not sided"},
     {"set": {"f.Reversed": true}, "when": "=a.reversed"},
     {"set": {"f.TaperAngle": "=float(taper)"}, "when": "=taper and has_prop(f, 'TaperAngle')"}
    ],
@@ -6810,7 +6810,7 @@
     {"let": {"angle": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
     {"let": {"side": "=a.sides or 'one'"}},
-    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, values: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). FreeCAD's Type TwoAngles with Angle2 is not set by this tool."}, "when": "=side not in ('one', 'symmetric')"},
     {"let": {"f": "=new(b, 'PartDesign::Revolution', 'Revolution')"}},
     {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
     {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
@@ -6870,7 +6870,7 @@
     {"let": {"angle": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
     {"let": {"side": "=a.sides or 'one'"}},
-    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, values: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). FreeCAD's Type TwoAngles with Angle2 is not set by this tool."}, "when": "=side not in ('one', 'symmetric')"},
     {"let": {"f": "=new(b, 'PartDesign::Groove', 'Groove')"}},
     {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
     {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
@@ -6887,7 +6887,7 @@
   },
   "pd_hole": {
    "group": "feature",
-   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: true makes the tap-drill size; cosmetic unless modelThread. threaded: false (FreeCAD's default) makes a clearance hole. fit: close|normal|loose is FreeCAD's ThreadFit Fine|Medium|Coarse for ISO metric (default Medium). depth: mm | \"through\" (FreeCAD's default: 25 mm). drillPoint: flat|angled (FreeCAD's default: angled, 118 deg). cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes (the number it drilled), diameter, thread, cut. For two or more circles, profiles names each circle that cut nothing. For each that cut only part, it gives the share of its volume that was cut. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. With modelThread, the answer adds threadVolumeChange: the volume with the thread less the volume without it.",
+   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: true makes the tap-drill size; cosmetic unless modelThread. threaded: false (FreeCAD's default) makes a clearance hole. fit: close|normal|loose is FreeCAD's ThreadFit Fine|Medium|Coarse for ISO metric (default Medium). depth: mm | \"through\" (FreeCAD's default: 25 mm). drillPoint: flat|angled (FreeCAD's default: angled, 118 deg). cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes (the number it drilled), diameter, thread, cut. For two or more circles, profiles names each circle that cut nothing. For each that cut only part, it gives the share of its volume that was cut. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. modelThread sets FreeCAD's ModelThread as given, with threaded true or false. With ModelThread true, the answer adds threadVolumeChange: the volume with the thread less the volume without it.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6976,14 +6976,13 @@
          "when": "=pick is None",
          "then": [
           {"let": {"key": "=thread_key(thread)", "same": "=[z for z in fine if key and (thread_key(z) or (None,))[0] == key[0]]"}},
-          {"refuse": {"fmt": "thread {thread!r}: not an ISO metric size FreeCAD has — coarse by diameter (\"M5\"): {', '.join(sizes[6:16])} …; fine pitches for M{key[0]:g}: {', '.join(same)}. Other standards (UNC, UNF, BSP …): make the hole by diameter, then feature_edit its ThreadType and ThreadSize."}, "when": "=same"},
-          {"refuse": {"fmt": "thread {thread!r}: not an ISO metric size FreeCAD has — coarse by diameter (\"M5\"): {', '.join(sizes[6:16])} …; fine with its pitch: {', '.join(fine[10:14])} … Other standards (UNC, UNF, BSP …): make the hole by diameter, then feature_edit its ThreadType and ThreadSize."}}
+          {"refuse": {"fmt": "thread {thread!r}: not an ISO metric size FreeCAD has — coarse by diameter (\"M5\"): {', '.join(sizes[6:16])} …; fine pitches for M{key[0]:g}: {', '.join(same)}. This tool sets ISO metric threads only; FreeCAD's other ThreadType values (UNC, UNF, BSP …) are not set by it."}, "when": "=same"},
+          {"refuse": {"fmt": "thread {thread!r}: not an ISO metric size FreeCAD has — coarse by diameter (\"M5\"): {', '.join(sizes[6:16])} …; fine with its pitch: {', '.join(fine[10:14])} … This tool sets ISO metric threads only; FreeCAD's other ThreadType values (UNC, UNF, BSP …) are not set by it."}}
          ]
         }
        ]
       },
       {"set": {"f.ThreadSize": "=pick", "f.Threaded": "=bool(a.get('threaded', False))"}},
-      {"set": {"f.ModelThread": "=bool(a.get('modelThread', False))"}, "when": "=f.Threaded and has_prop(f, 'ModelThread')"},
       {
        "when": "=not f.Threaded and fit and has_prop(f, 'ThreadFit')",
        "then": [
@@ -6996,6 +6995,7 @@
       {"set": {"f.Diameter": "=float(d)"}}
      ]
     },
+    {"set": {"f.ModelThread": "=bool(a.modelThread)"}, "when": "=a.modelThread is not None and has_prop(f, 'ModelThread')"},
     {"set": {"f.DepthType": "ThroughAll"}, "when": "=depth == 'through'"},
     {"set": {"f.DepthType": "Dimension", "f.Depth": "=float(depth)"}, "when": "=depth is not None and depth != 'through'"},
     {"set": {"f.DrillPoint": "='Angled' if point == 'angled' else 'Flat'"}, "when": "=point is not None"},
@@ -7028,7 +7028,7 @@
      {"put": {"thread": "=f.ThreadSize + (' (cosmetic)' if f.Threaded and not get(f, 'ModelThread', False) else '' if f.Threaded else ' clearance')"}, "when": "=thread"},
      {"put": {"cut": "={'type': f.HoleCutType, 'diameter': num_json(f.HoleCutDiameter), 'depth': num_json(f.HoleCutDepth)}"}, "when": "=cut"},
      {"put": {"threadVolumeChange": "=thread_change(b, f)"}, "when": "=get(f, 'ModelThread', False)"},
-     {"do": "=not_given(out, a, {'threaded': False if thread else None, 'modelThread': False if thread and f.Threaded else None, 'fit': 'normal' if thread and not f.Threaded else None, 'depth': num_json(f.Depth), 'drillPoint': 'angled', 'reversed': False})"}
+     {"do": "=not_given(out, a, {'threaded': False if thread else None, 'modelThread': bool(get(f, 'ModelThread', False)), 'fit': fit_word(f) if thread and not f.Threaded else None, 'depth': num_json(f.Depth), 'drillPoint': str(f.DrillPoint).lower(), 'reversed': False})"}
     ]
    }
   },
@@ -7621,7 +7621,8 @@
     "with": ["=b", "=f", "pd_pipe", "=before"],
     "then": [
      {"put": {"sketch": "=sk.Label", "path": "=path.Label", "edges": "=names"}, "when": "=made or a.edges is not None or not path.isDerivedFrom('Sketcher::SketchObject')"},
-     {"put": {"sketchIs": "=held"}, "when": "=held"}
+     {"put": {"sketchIs": "=held"}, "when": "=held"},
+     {"do": "=not_given(out, a, {'refine': get(f, 'Refine'), 'subtractive': False})"}
     ]
    }
   },
@@ -11463,7 +11464,7 @@
   },
   "part_from_mesh": {
    "group": "model",
-   "description": "Make a mesh into a solid, with every triangle a face. mesh: an object. Or file: STL, OBJ …. tolerance: sews it. refine (default): merges flat triangles. The tool refuses more than maxFacets (60000); first use meshobj_decimate. Thousands of faces make it and every later boolean slow; the window is frozen. refine doubles the time. It always starts. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Of several pieces, only the largest becomes the solid (note says so).",
+   "description": "Make a mesh into a solid, with every triangle a face. mesh: an object. Or file: STL, OBJ …. tolerance: sews it. refine (default): merges flat triangles. The tool refuses more than maxFacets (60000). Thousands of faces make it and every later boolean slow; the window is frozen. refine doubles the time. It always starts. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Of several pieces, only the largest becomes the solid (note says so).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20235,7 +20236,7 @@
   },
   "pd_primitive": {
    "group": "feature",
-   "description": "Make a PartDesign primitive. kind: box | cylinder | sphere | cone | ellipsoid | torus | prism | wedge. size: { … } (mm). at: [x, y, z], the corner of a box or the base centre of a round one. rotate: { axis, angle } from the origin of the body. subtractive: true cuts it out; it must overlap the body. It is parametric, attached to the XY plane of the body. Answer: as pd_pad. A primitive has no constraints to the rest. Use a primitive for a stand-in or a simple cut.",
+   "description": "Make a PartDesign primitive. kind: box | cylinder | sphere | cone | ellipsoid | torus | prism | wedge. size: { … } (mm). at: [x, y, z], the corner of a box or the base centre of a round one. rotate: { axis, angle } from the origin of the body. subtractive: true cuts it out. It is parametric, attached to the XY plane of the body. Answer: as pd_pad. A primitive has no constraints to the rest.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20690,7 +20691,7 @@
   },
   "pd_boolean": {
    "group": "feature",
-   "description": "Do a boolean inside a body with other PartDesign bodies. op: fuse (default) | cut | common. bodies: [body names]. The tool bodies move inside the boolean, stay editable, and the boolean follows them. The tool refuses a fuse or cut that changes nothing.",
+   "description": "Do a boolean inside a body with other PartDesign bodies. op: fuse (default) | cut | common. bodies: [body names]. The tool bodies move inside the boolean, stay editable, and the boolean follows them.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21242,7 +21243,7 @@
   },
   "sketch_attach": {
    "group": "sketch",
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. reversed: true reverses the normal. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and reversed stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: axes (the frame in words), on, mode, support, repaired. A made face can get a new name after a change.",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. reversed: true reverses the normal. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and reversed stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Answer: axes (the frame in words), on, mode, support, repaired. A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {

@@ -312,6 +312,11 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
                 gone.append(f"{r.get('tool')}{' ' + what if what else ''}")
         if gone:
             out["takenBackNote"] = f"Taken back: {', '.join(gone)}. What those calls made is not in the document now."
+    if undone:
+        from .protocol import ROLLED_BACK, note_rolled_back
+
+        note_rolled_back(getattr(s, "server", None), ROLLED_BACK if out.get("result") == "rolled_back"
+                         else f"; the rollback was partial: {undone} of {made} steps of this {label} were taken back")
     return out
 
 # Seconds a batch starts calls for before it answers with what ran and where
@@ -836,34 +841,42 @@ class Session:
             unknown = [n for n in names if n not in self.STATE_PARTS]
             if unknown:
                 raise ToolError("invalid_input", f"what: {', '.join(unknown)} is not a part name. The part names: {', '.join(self.STATE_PARTS)}.")
-            full = self._state_all(a)
+            full = self._state_all(a, only=set(names))
             return {k: full[k] for k in names if k in full}
         if a.get("orient"):
             return self.orientation()
         return self._state_all(a)
 
-    def _state_all(self, a):
-        return {
-            "document": self.doc.Name,
-            "label": self.doc.Label,
-            "freecad": ".".join(FreeCAD.Version()[:3]),
-            "bodies": [self._body_row(o) for o in self.bodies()],
-            "documents": self.documents_state(),
-            **self._hidden_state(),
-            "step": len(self.steps),
-            **self._steps_state(),
-            "outDir": self.out_dir,
-            "where": getattr(self, "where", "hidden"),
-            **self._next_state(),
-            **self._options_state(),
-            **self._tools_state(),
-            **self._extensions_state(),
-            **self._unattended_state(machine=bool(a.get("machine"))),
-            **self._front_state(),
-            **_time_state(),
-            **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
-            **({"launcher": _launcher()} if a.get("launcher") else {}),
-        }
+    def _state_parts(self, a):
+        """The parts of session_state's answer, in order: [(the names a
+        builder can give, the builder)]. A builder is run only when one of
+        its names is asked for (27 Nov review, A7: a part that is not
+        returned is not built, so toolsChanged and options are not used up)."""
+        return [
+            (("document", "label", "freecad"), lambda: {"document": self.doc.Name, "label": self.doc.Label, "freecad": ".".join(FreeCAD.Version()[:3])}),
+            (("bodies",), lambda: {"bodies": [self._body_row(o) for o in self.bodies()]}),
+            (("documents",), lambda: {"documents": self.documents_state()}),
+            (("hidden", "hiddenNote", "assemblies"), self._hidden_state),
+            (("step",), lambda: {"step": len(self.steps)}),
+            (("steps", "stepsLeftOut"), self._steps_state),
+            (("outDir", "where"), lambda: {"outDir": self.out_dir, "where": getattr(self, "where", "hidden")}),
+            (("next",), self._next_state),
+            (("options",), self._options_state),
+            (("toolsChanged",), self._tools_state),
+            (("leftOut", "warning"), self._extensions_state),
+            (("machine", "queue", "dialog"), lambda: self._unattended_state(machine=bool(a.get("machine")))),
+            (("agentDocument", "frontDocument", "mismatch"), self._front_state),
+            (("time",), _time_state),
+            (("note",), lambda: {**({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {})}),
+            (("launcher",), lambda: {"launcher": _launcher()} if a.get("launcher") else {}),
+        ]
+
+    def _state_all(self, a, only=None):
+        out = {}
+        for names, build in self._state_parts(a):
+            if only is None or any(n in only for n in names):
+                out.update(build())
+        return out
 
     def _steps_state(self):
         """steps: the session's calls of changing tools, as facts
@@ -1046,7 +1059,11 @@ class Session:
             s["each"] = geo.each_solid(sh)
         ok, said = geo.core_check(sh)
         if ok is not None:
-            s["checkGeometry"] = {"errors": list(said or [])}
+            said = list(said or [])
+            s["checkGeometry"] = {"errors": said[:geo.CHECK_LINES]}
+            if len(said) > geo.CHECK_LINES:
+                # a list that is cut says so (27 Nov review, A10)
+                s["checkGeometry"]["errorsInAll"] = len(said)
             if said:
                 where = geo.bop_where(sh, said)
                 if where:
@@ -2527,7 +2544,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
 
             if tools is None:
                 health.drop(m)
-                return None
+                return {"facts": health.NOT_READ}
             if m is None:
                 return {"facts": "the health check is switched off or did not load"}
             # After sketch calls the sketches are read out as they stand.
@@ -3031,6 +3048,9 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     # Refused by its form (no tool, no such tool, arguments
                     # that are not an object): by itself, here in its order.
                     berr = kinded(dict(c["bad"]))
+                    from .protocol import note_refused
+
+                    note_refused(server, str(c.get("tool") or "(no tool)"), berr.get("code"), "a batch step, refused by its form")
                     answers[first + i] = {"ok": False, "tool": c["tool"], "size": 0, "error": berr.get("message")}
                     results.append({"tool": c["tool"], "ok": False, "error": berr})
                     if mine.get("record") is not None:
@@ -3434,7 +3454,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
              obj({"job": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["job"]), job_start),
         Tool("batch", "Run many calls in one request, and get a full answer for each call. The calls run one at a time, in order: a call sees what the calls before it made. "
                       "A call is a step: the tool's name in tool, and its inputs beside it. Example: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }. "
-                      "calls: [step, step]. For one call, use run. For many calls with one short answer, use fast. The answer ends with now: the names in each body as they are, by label. Example: \"now\": { \"Body\": [\"Sketch→Pad\"] }. A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the cause is not in the call. each: { \"x\": [15, 45] } on a step runs it once for each value, in order. \"$x\" in the inputs is the value, also inside a list. "
+                      "calls: [step, step]. For one call, use run. For many calls with one short answer, use fast. The answer ends with now: the names in each body as they are, by label. Example: \"now\": { \"Body\": [\"Sketch→Pad\"] }. A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the error's words name a busy, locked or timed-out state. each: { \"x\": [15, 45] } on a step runs it once for each value, in order. \"$x\" in the inputs is the value, also inside a list. "
                       "Each pass is one call: done, refused, notRun and $from count it. The old forms (arguments, as, when, let, try, choose, do) are refused. "
                       "Or path: a .json file that holds that list, or { calls, rollback, stopOnError "
                       "}. The file is read on this side: a long run of calls stays out of the conversation. A relative path is in the session's folder; files are read where "
@@ -3484,7 +3504,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "batch stops there as at a refusal (buildFailed: true). With rollback, the whole batch is taken back. guide_read, tool_groups, usage_report and "
                       "job_status run inside a held run without a build. If the person has Skip recomputes on already, nothing is held or built, and buildNote says so. Use "
                       "build for a sketch drawn and constrained in many calls, or many properties set. Not when each call's reading is important. lines: \"refused\" (with writeTo): "
-                      "the answer lists only refused calls and calls whose health has recompute errors (health.errors). The others are counts { ok, refused }. "
+                      "the answer lists only two kinds of call. They are refused calls, and calls whose health has a fault or was not read. The others are counts { ok, refused }. "
                       "lines: \"all\" (the default) keeps one line for each call. lines: \"counts\": only the counts. A batch from a file answers that "
                       "way also without writeTo, from its record. written names it; a line for each call unless lines says otherwise. So does a batch of calls given lines. lines: "
                       "\"full\" gives the whole answer of every call in the answer instead (with writeTo, also written there). record_read { path, at } reads a part of a "

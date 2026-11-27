@@ -453,6 +453,16 @@ def pipe_options(f, a):
         f.Refine = bool(a.get("refine"))
 
 
+FIT_WORDS = {"Medium": "normal", "Normal": "normal", "Standard": "normal", "Fine": "close", "Close": "close", "Coarse": "loose", "Loose": "loose", "Wide": "loose"}
+
+
+def fit_word(f):
+    """The fit input's word for the Hole's stored ThreadFit (read from the
+    feature); FreeCAD's own word when it is none of them."""
+    v = str(getattr(f, "ThreadFit", ""))
+    return FIT_WORDS.get(v, v)
+
+
 def thread_change(b, f):
     """The volume of body b with Hole f's modelled thread less its volume
     without it, mm³, as measured: ModelThread is set false, the document
@@ -511,5 +521,5 @@ def tools(session):
                "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots, "holes_cut": pc.holes_cut,
                "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body,
                "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec, "path_closed": path_closed, "closed_tube_words": closed_tube_words,
-               "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options, "not_given": pc.not_given, "thread_change": thread_change}
+               "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options, "not_given": pc.not_given, "thread_change": thread_change, "fit_word": fit_word}
     return runners.tools(GROUP, s, helpers)

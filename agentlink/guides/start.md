@@ -38,7 +38,7 @@
 - Add-ons installed beside Agent Link (printing, scans, drawings, electronics …) bring their own tool groups and guides: `tool_groups` and `guide_read` with no topic list them.
 
 ## Refusals
-Every refusal is `{ error: { code, kind, message } }`. `kind` is fixable (the message names what to change), retry (the cause is not in the call) or stop. By code:
+Every refusal is `{ error: { code, kind, message } }`. `kind` is fixable (the message names what to change), retry (the error's words name a busy, locked or timed-out state) or stop. By code:
 
 | Code | Means |
 |---|---|
