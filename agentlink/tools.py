@@ -3378,7 +3378,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                           "whole description and inputs of each one (its card). A name with a prefix, other letter case or a letter wrong is read as the name; readAs says so. "
                           "A card has two example calls and fill. plain has every input. ready is the same call filled from the open document. fill names the values to give. card and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
                           "callable by name, listed or not. Where the client sends only listed tools, use run for one call. Use batch for several calls. Use fast for several calls with one short answer. listing: true answers what the "
-                          "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. The write rule of every tool applies to it. Changes nothing.",
+                          "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. The write rule of every tool applies to it. "
+                          "There is no sketch_rectangle, sketch_circle or pad tool: sketch_add takes kind, and the pad tool is pd_pad. Changes nothing.",
              obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "card": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
                   "groups": {"type": "boolean"}, "group": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "listing": {"type": "boolean"}, "to": {"type": "string"}}), tool_find, group="find"),
         Tool("guide_read", "Read how to do a task: the workflow, and the traps that the tools' own descriptions do not give. No topic: the index. For each guide: its sections, "
@@ -3402,7 +3403,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
              obj({"job": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["job"]), job_start),
         Tool("batch", "Run many calls in one request, and get a full answer for each call. The calls run one at a time, in order: a call sees what the calls before it made. "
                       "A call is a step: the tool's name in tool, and its inputs beside it. Example: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }. "
-                      "calls: [step, step]. For one call, use run. For many calls with one short answer, use fast. each: { \"x\": [15, 45] } on a step runs it once for each value, in order. \"$x\" in the inputs is the value, also inside a list. "
+                      "calls: [step, step]. For one call, use run. For many calls with one short answer, use fast. The answer ends with now: the names in each body as they are, by label. Example: \"now\": { \"Body\": [\"Sketch→Pad\"] }. A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the cause is not in the call. each: { \"x\": [15, 45] } on a step runs it once for each value, in order. \"$x\" in the inputs is the value, also inside a list. "
                       "Each pass is one call: done, refused, notRun and $from count it. The old forms (arguments, as, when, let, try, choose, do) are refused. "
                       "Or path: a .json file that holds that list, or { calls, rollback, stopOnError "
                       "}. The file is read on this side: a long run of calls stays out of the conversation. A relative path is in the session's folder; files are read where "

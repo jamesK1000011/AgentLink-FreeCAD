@@ -6560,7 +6560,7 @@
   },
   "pd_pad": {
    "group": "feature",
-   "description": "Pad a closed sketch into the body, along its normal. extent: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes face { side: \"+z\" }, { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. length left out: FreeCAD's default, 10 mm. The first pad takes extent length. Faces and edges get new numbers: query again. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pad a closed sketch into the body, along its normal. extent: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes face { side: \"+z\" }, { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. length left out: FreeCAD's default, 10 mm. The first pad takes extent length. Faces and edges get new numbers: query again. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6664,7 +6664,7 @@
   },
   "pd_pocket": {
    "group": "feature",
-   "description": "Pocket a closed sketch out of the body. The pocket starts on its sketch's plane and goes into the body, against the sketch's normal. reversed: true goes the other way, along the normal. length left out: FreeCAD's default, 5 mm. extent: length | through_all | up_to_first | up_to_face (face). sides: one | two (length2) | symmetric. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pocket a closed sketch out of the body. The pocket starts on its sketch's plane and goes into the body, against the sketch's normal. reversed: true goes the other way, along the normal. length left out: FreeCAD's default, 5 mm. extent: length | through_all | up_to_first | up_to_face (face). sides: one | two (length2) | symmetric. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6768,7 +6768,7 @@
   },
   "pd_revolution": {
    "group": "feature",
-   "description": "Revolve a closed sketch about an axis. axis: V_Axis (default) | H_Axis, the sketch's axes. Or x | y | z, the body's axes. Or a datum line, or the geometry id of a line (from 0). angle: deg (360). sides: one | symmetric. reversed. The profile must not cross the axis. For two angles: feature_edit { Type: \"TwoAngles\", Angle2 }. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Revolve a closed sketch about an axis. axis: V_Axis (default) | H_Axis, the sketch's axes. Or x | y | z, the body's axes. Or a datum line, or the geometry id of a line (from 0). angle: deg (360). sides: one | symmetric. reversed. The profile must not cross the axis. For two angles: feature_edit { Type: \"TwoAngles\", Angle2 }. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6827,7 +6827,7 @@
   },
   "pd_groove": {
    "group": "feature",
-   "description": "Cut by revolving a closed sketch about an axis (inputs as pd_revolution). Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Cut by revolving a closed sketch about an axis (inputs as pd_revolution). result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6887,7 +6887,7 @@
   },
   "pd_hole": {
    "group": "feature",
-   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: true makes the tap-drill size; cosmetic unless modelThread. threaded: false (FreeCAD's default) makes a clearance hole. fit: close|normal|loose is FreeCAD's ThreadFit Fine|Medium|Coarse for ISO metric (default Medium). depth: mm | \"through\" (FreeCAD's default: 25 mm). drillPoint: flat|angled (FreeCAD's default: angled, 118 deg). cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes (the number it drilled), diameter, thread, cut. For two or more circles, profiles names each circle that cut nothing. For each that cut only part, it gives the share of its volume that was cut. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. With modelThread, the answer adds threadVolumeChange: the volume with the thread less the volume without it.",
+   "description": "Drill holes into the body from the plane of the sketch, against the sketch's normal. reversed: true drills the other way. A hole goes at the centre of every circle of the sketch, not construction geometry. FreeCAD 1.1 also drills at its points. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: true makes the tap-drill size; cosmetic unless modelThread. threaded: false (FreeCAD's default) makes a clearance hole. fit: close|normal|loose is FreeCAD's ThreadFit Fine|Medium|Coarse for ISO metric (default Medium). depth: mm | \"through\" (FreeCAD's default: 25 mm). drillPoint: flat|angled (FreeCAD's default: angled, 118 deg). cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes (the number it drilled), diameter, thread, cut. For two or more circles, profiles names each circle that cut nothing. For each that cut only part, it gives the share of its volume that was cut. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. With modelThread, the answer adds threadVolumeChange: the volume with the thread less the volume without it.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7034,7 +7034,7 @@
   },
   "pd_fillet": {
    "group": "feature",
-   "description": "Round edges of the body. edges: one selector. { near: [x,y,z] } is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give a reference that shape_query answers (\"Edge3\", \"Body.Edge3\"), or a list of such references. Or give shape_query's filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\", outside: true } is the outside vertical corners. Without outside, { type: \"line\", axis: \"z\" } is every vertical edge, inside corners too. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An outside (convex) edge loses material; an inside (concave) edge gets material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Round edges of the body. edges: one selector. { near: [x,y,z] } is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give a reference that shape_query answers (\"Edge3\", \"Body.Edge3\"), or a list of such references. Or give shape_query's filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. { type: \"line\", axis: \"z\", outside: true } is the outside vertical corners. Without outside, { type: \"line\", axis: \"z\" } is every vertical edge, inside corners too. Add length or inside to keep fewer of them. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An outside (convex) edge loses material; an inside (concave) edge gets material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7087,7 +7087,7 @@
   },
   "pd_chamfer": {
    "group": "feature",
-   "description": "Bevel edges of the body. edges: as pd_fillet: one selector, or a list of references. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Bevel edges of the body. edges: as pd_fillet: one selector, or a list of references. { type: \"line\", axis: \"z\" } is every straight edge along z: the vertical edges. size: mm (default 1). size2 for two distances, or angle deg for a distance and an angle (one of them). On an inside corner it adds material; on an outside corner it removes material. outside: true keeps the outside edges, false the inside edges. The answer adds on: a count of the outside and inside edges. Then each edge with its direction, length, mid-point and side. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7149,7 +7149,7 @@
   },
   "pd_draft": {
    "group": "feature",
-   "description": "Taper faces for moulding. faces: [{ side: \"+z\" } or { at, normal }], or shape_query's references or filters. angle: deg (1.5). neutral: the plane that the faces pivot on (XY default, a datum plane, or a face). The faces must meet it. pull: the direction, x|y|z (z) or a datum line. reversed. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Taper faces for moulding. faces: [{ side: \"+z\" } or { at, normal }], or shape_query's references or filters. angle: deg (1.5). neutral: the plane that the faces pivot on (XY default, a datum plane, or a face). The faces must meet it. pull: the direction, x|y|z (z) or a datum line. reversed. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7204,7 +7204,7 @@
   },
   "pd_thickness": {
    "group": "feature",
-   "description": "Shell the PartDesign body: open faces and leave walls of a thickness. faces: [{ side: \"+z\" } or { at, normal }] (or shape_query's references or filters) to open; the tool removes them. thickness: mm of the wall (1). It goes inward unless outward: true. join: arc|intersection. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Shell the PartDesign body: open faces and leave walls of a thickness. faces: [{ side: \"+z\" } or { at, normal }] (or shape_query's references or filters) to open; the tool removes them. thickness: mm of the wall (1). It goes inward unless outward: true. join: arc|intersection. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7255,7 +7255,7 @@
   },
   "pd_mirrored": {
    "group": "feature",
-   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default) or a datum plane. Or face: a flat face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. A mirrored modelled thread changes its hand.",
+   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default) or a datum plane. Or face: a flat face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. A mirrored modelled thread changes its hand.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7331,7 +7331,7 @@
   },
   "pd_linear_pattern": {
    "group": "feature",
-   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. count: 1 or more, with the original (FreeCAD's default: 2). spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. This tool sets one direction. FreeCAD 1.1's LinearPattern also has Direction2 and Occurrences2. This tool does not set them. pd_multitransform with two linear steps also makes a grid. spacing and length left out: FreeCAD's default length, 100 mm. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. count: 1 or more, with the original (FreeCAD's default: 2). spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. This tool sets one direction. FreeCAD 1.1's LinearPattern also has Direction2 and Occurrences2. This tool does not set them. pd_multitransform with two linear steps also makes a grid. spacing and length left out: FreeCAD's default length, 100 mm. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7420,7 +7420,7 @@
   },
   "pd_polar_pattern": {
    "group": "feature",
-   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). count: 1 or more, with the original (FreeCAD's default: 3). angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). count: 1 or more, with the original (FreeCAD's default: 3). angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7506,7 +7506,7 @@
   },
   "pd_loft": {
    "group": "feature",
-   "description": "Loft through closed sketches. sketch: the first sketch. sections: [the other sketches, in order, each on its own plane]. ruled, closed. subtractive: true cuts it. The sketches must have the same edge count and matching start corners, or the loft twists. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Loft through closed sketches. sketch: the first sketch. sections: [the other sketches, in order, each on its own plane]. ruled, closed. subtractive: true cuts it. The sketches must have the same edge count and matching start corners, or the loft twists. result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7559,7 +7559,7 @@
   },
   "pd_pipe": {
    "group": "feature",
-   "description": "Sweep a closed sketch along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. sketch: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: left out, FreeCAD's own value (its preference RefineModel; true when that is not set). Answer: result (a one-line summary first), feature, sketch, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Sweep a closed sketch along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. sketch: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: left out, FreeCAD's own value (its preference RefineModel; true when that is not set). result says what changed and where: the material, the body before, each axis, the contact, the solids. Answer: result (a one-line summary first), feature, sketch, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {

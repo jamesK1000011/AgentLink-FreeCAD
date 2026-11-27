@@ -410,10 +410,10 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 
 | Tool list | Tools listed | Tokens (est.) of the `tools/list` answer |
 |---|---:|---:|
-| static (default), ste | 6 | 1,839 |
-| static, full | 6 | 4,632 |
-| classic, ste | 24 | 6,728 |
-| classic, full | 24 | 9,450 |
+| static (default), ste | 6 | 1,939 |
+| static, full | 6 | 4,732 |
+| classic, ste | 24 | 6,797 |
+| classic, full | 24 | 9,519 |
 <!-- stats:end -->
 
 ## Add-ons

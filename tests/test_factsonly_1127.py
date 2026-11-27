@@ -549,6 +549,53 @@ class MeasuredFactsCorrected(unittest.TestCase):
         self.assertEqual(got[1], "Note: Base is the profile of Pad. " + got[0])
 
 
+class HubFactsOfTheBrief(unittest.TestCase):
+    """Decision 10: the facts that only the test brief gave are in the
+    descriptions that every client gets (the static list's own, and the
+    full ones)."""
+
+    NOW = 'The answer ends with now: the names in each body as they are, by label. Example: "now": { "Body": ["Sketch→Pad"] }.'
+    KIND = "A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the cause is not in the call."
+    NOTOOL = "There is no sketch_rectangle, sketch_circle or pad tool: sketch_add takes kind, and the pad tool is pd_pad."
+
+    def ste(self):
+        with open(os.path.join(ROOT, "agentlink", "data", "ste.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        return next(v for v in d.values() if isinstance(v, dict) and "batch" in v)
+
+    def test_now_and_the_kinds_are_in_run_batch_and_fast(self):
+        ste = self.ste()
+        for name in ("run", "batch", "fast"):
+            self.assertIn(self.NOW, ste[name], name)
+        for name in ("run", "batch"):
+            self.assertIn(self.KIND, ste[name], name)
+        full = source("tools.py") + source("families", "fast.py")
+        self.assertEqual(full.count(self.NOW.replace('"', '\\"')), 3)
+        self.assertEqual(full.count(self.KIND), 2)
+
+    def test_the_tool_names_that_are_not_there(self):
+        self.assertIn(self.NOTOOL, self.ste()["tool_find"])
+        self.assertIn(self.NOTOOL, source("tools.py"))
+        from agentlink import runners
+
+        names = set(runners.entries())
+        self.assertFalse({"sketch_rectangle", "sketch_circle", "pad"} & names)
+        self.assertTrue({"sketch_add", "pd_pad"} <= names)
+
+    def test_each_feature_card_says_what_result_holds(self):
+        said = "result says what changed and where: the material, the body before, each axis, the contact, the solids."
+        e = entries()
+        cards = [n for n in e if said in e[n]["description"]]
+        self.assertEqual(len(cards), 14)
+        for n in ("pd_pad", "pd_pocket", "pd_hole", "pd_fillet", "pd_linear_pattern", "pd_pipe"):
+            self.assertIn(n, cards)
+
+    def test_the_stop_after_equal_refusals_is_in_no_description(self):
+        text = json.dumps(self.ste()) + source("tools.py") + source("families", "fast.py")
+        self.assertNotIn("After 5 refusals", text)
+        self.assertNotIn("says stop", text)
+
+
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
         self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")

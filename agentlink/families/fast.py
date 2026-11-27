@@ -48,9 +48,11 @@ def tools(session):
                      "run runs the first step only. A step after it is not run and not checked. The answer has a notice that says so. "
                      "each: { x: [15, 45] } on the step runs it once for each value, as a batch does. The answer is then the batch's. \"$x\" in the inputs is the value. "
                      "run does not run approve_file, approve_code, batch or fast: call them by their own names. "
+                     "The answer ends with now: the names in each body as they are, by label. Example: \"now\": { \"Body\": [\"Sketch→Pad\"] }. "
+                     "A refusal has a kind: fixable, retry or stop. fixable: the message names what to change. retry: the cause is not in the call. "
                      "For many calls in one request, use batch (a full answer for each call) or fast (one short answer)."),
              copy.deepcopy(RUN_SCHEMA), run),
-        Tool("fast", ("Run many calls in one request, and get one short answer. Use it when you know the work. For one call, use run. For a full answer for each call, use batch. "
+        Tool("fast", ("Run many calls in one request, and get one short answer. The answer ends with now: the names in each body as they are, by label. Example: \"now\": { \"Body\": [\"Sketch→Pad\"] }. For one call, use run. For a full answer for each call, use batch. "
                       "calls: [steps]. A step is the same as a batch step: the tool's name in tool, and its inputs beside it. Example: { \"tool\": \"pd_pad\", \"sketch\": \"Sketch\", \"length\": 6 }. "
                       "each: { x: [15, 45] } runs the step once for each value, in order; \"$x\" in the inputs is the value, also inside a list. "
                       "{ \"$from\": 2, \"$at\": \"height\" } takes a value from the answer of call 2 of this block. Calls count from 0. Each pass of each is one call. "
