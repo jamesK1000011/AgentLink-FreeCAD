@@ -114,19 +114,18 @@ def base(tools=None):
 _STEP_ITEM = {"type": "object",
               "description": "One step. \"tool\" is necessary: the tool's plain name, as tool_find gives it (pd_pad). The tool's inputs stand beside it.",
               "additionalProperties": True}
+# batch and fast list only calls (27 Nov, QA s1127a F8): the default is the
+# one path a model sees (the first refused call stops, the calls before it
+# stay). The server still takes rollback, stopOnError and check.
 LISTED_SCHEMAS = {
     "run": {"type": "object",
             "properties": {"calls": {"type": "array", "minItems": 1, "description": "One call: [step]. Only the first step runs.", "items": copy.deepcopy(_STEP_ITEM)}},
             "required": ["calls"]},
     "batch": {"type": "object",
-              "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _STEP_ITEM},
-                             "rollback": {"type": "boolean", "description": "true: at a refusal, take back the whole batch."},
-                             "stopOnError": {"type": "boolean", "description": "false: run every call, also after a refusal."}},
+              "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _STEP_ITEM},},
               "required": ["calls"]},
     "fast": {"type": "object",
-             "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _STEP_ITEM},
-                            "rollback": {"type": "boolean", "description": "true: at a refusal, take back the whole block."},
-                            "check": {"type": "boolean", "description": "true: check every step, run nothing."}},
+             "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _STEP_ITEM},},
              "required": ["calls"]},
 }
 

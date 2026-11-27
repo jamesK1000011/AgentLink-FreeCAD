@@ -183,7 +183,8 @@ class ListedSchema(unittest.TestCase):
     print(json.dumps({t["name"]: t["inputSchema"] for t in tl if t["name"] in ("batch", "fast", "run")}))
 ''')
         b = got["batch"]
-        self.assertEqual(sorted(b["properties"]), ["calls", "rollback", "stopOnError"])
+        # 27 Nov (QA s1127a F8): batch and fast list only calls; the server still takes the other fields.
+        self.assertEqual(sorted(b["properties"]), ["calls"])
         self.assertEqual(b["required"], ["calls"])
         # 27 Nov: the step declares no key (tests/test_step_no_key_1127.py says why).
         self.assertNotIn("required", b["properties"]["calls"]["items"])
@@ -191,7 +192,7 @@ class ListedSchema(unittest.TestCase):
         # true, said in full: a server that writes to the schema lets the inputs through only then (27 Nov).
         self.assertIs(b["properties"]["calls"]["items"].get("additionalProperties"), True)
         self.assertNotIn("additionalProperties", b)
-        self.assertEqual(sorted(got["fast"]["properties"]), ["calls", "check", "rollback"])
+        self.assertEqual(sorted(got["fast"]["properties"]), ["calls"])
         self.assertNotIn("required", got["fast"]["properties"]["calls"]["items"])
         # 27 Nov: run takes the same calls list as batch and fast, and no other key.
         self.assertEqual(sorted(got["run"]["properties"]), ["calls"])
