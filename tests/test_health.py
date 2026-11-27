@@ -80,17 +80,17 @@ def test_new_failure_named_with_freecads_reason_and_old_ones_counted():
     d = Doc()
     Obj(d, "Old", error="Old broke")
     h = run(d, lambda: [Obj(d, "Pad", error="Pad: Result has multiple solids")])
-    assert h["ok"] is False
-    assert "1 object failed to recompute: Pad (Pad: Result has multiple solids)" in h["verdict"]
-    assert "1 more were failing before" in h["verdict"]
-    assert h["errors"][0]["new"] is True and h["todo"]
+    assert "ok" not in h and "verdict" not in h and "todo" not in h  # facts only (27 Nov)
+    assert "recompute: 1 object failed to recompute: Pad (Pad: Result has multiple solids)" in h["facts"]
+    assert "1 more were failing before" in h["facts"]
+    assert h["errors"][0]["new"] is True
 
 
 def test_only_old_failures_say_so():
     d = Doc()
     Obj(d, "Old", error="broke")
     h = run(d, lambda: [Obj(d, "Fine")])
-    assert h["ok"] is False and "still failing from before this call: Old" in h["verdict"]
+    assert "recompute: 1 object still failing from before this call: Old" in h["facts"]
     assert "errors" not in h
 
 
@@ -100,7 +100,7 @@ def test_touched_objects_the_call_left_alone_want_a_recompute():
     pad.TypeId = "PartDesign::Pad"
     Obj(d, "Records", state=["Touched"])  # a plain holder with no inputs: not out of date
     h = run(d, lambda: [Obj(d, "Other")])
-    assert h["ok"] is True and h["needRecompute"] == ["Pad"] and "recompute" in h["todo"]
+    assert h["needRecompute"] == ["Pad"] and "state: 1 object not recomputed yet (State Touched)" in h["facts"]
 
 
 def test_still_touched_after_its_own_recompute_is_not_asked_again():
@@ -118,37 +118,36 @@ def test_many_clean_sketches_are_counted_and_yellow_ones_capped():
         return out
 
     h = run(d, change)
-    v = h["verdict"]
-    assert v.startswith("Bad: conflicting constraints #0")
-    assert v.count("DoF left") == 3 and "2 more with freedom left" in v
+    v = h["facts"]
+    assert v.startswith("solver: Bad: conflicting constraints #0")
+    assert v.count("DoF left") == 3 and "2 more sketch or shape readings are not shown (this text shows 3" in v  # a cap that is used is said
     assert "5 sketches fully constrained" in v and "Full0" not in v
 
 
 def test_sketch_fully_constrained():
     d = Doc()
     h = run(d, lambda: [Sketch(d, "Sketch")])
-    assert h == {"ok": True, "verdict": "Sketch: fully constrained"}
+    assert h == {"facts": "solver: Sketch: fully constrained"}
 
 
 def test_sketch_dof_names_the_free_geometry():
     d = Doc()
     # line 3 whole (its edge, 0), line 1 by its end point only
     h = run(d, lambda: [Sketch(d, "Sketch", dof=2, free=[(3, 0), (3, 1), (1, 2)])])
-    assert h["ok"] is True
-    assert h == {"ok": True, "verdict": "Sketch: 2 DoF left on the end of line 1, line 3"}
+    assert h == {"facts": "solver: Sketch: 2 DoF left on the end of line 1, line 3"}
 
 
 def test_free_points_of_one_kind_are_named_together():
     d = Doc()
     h = run(d, lambda: [Sketch(d, "Sketch", dof=4, free=[(0, 1), (1, 1), (2, 1), (3, 1)])])
-    assert h["verdict"] == "Sketch: 4 DoF left on the start of lines 0, 1, 2, 3"
+    assert h["facts"] == "solver: Sketch: 4 DoF left on the start of lines 0, 1, 2, 3"
 
 
 def test_sketch_conflict_is_red_and_counts_from_zero():
     d = Doc()
     h = run(d, lambda: [Sketch(d, "Sketch", dof=0, conflicting=[5, 8])])
-    assert h["ok"] is False and "conflicting constraints #4, #7" in h["verdict"]
-    assert h["sketches"][0]["conflicting"] == [4, 7] and "sketch_edit" in h["todo"]
+    assert "solver: Sketch: conflicting constraints #4, #7" in h["facts"]
+    assert h["sketches"][0]["conflicting"] == [4, 7] and "todo" not in h
 
 
 def test_a_failed_sketch_is_not_read_twice():
@@ -160,7 +159,7 @@ def test_a_failed_sketch_is_not_read_twice():
         return [sk]
 
     h = run(d, change)
-    assert "sketches" not in h and "failed to recompute" in h["verdict"]
+    assert "sketches" not in h and "failed to recompute" in h["facts"]
 
 
 def test_marks_nest_as_a_batch_and_its_calls_do():
@@ -170,10 +169,10 @@ def test_marks_nest_as_a_batch_and_its_calls_do():
     inner = health.mark(s)
     a = Sketch(d, "A")
     health._observer_note(a)
-    assert "A: fully constrained" in health.check(s, T, inner)["verdict"]
+    assert "A: fully constrained" in health.check(s, T, inner)["facts"]
     b = Sketch(d, "B", dof=1, free=[(0, 0)])
     health._observer_note(b)
-    v = health.check(s, T, outer)["verdict"]
+    v = health.check(s, T, outer)["facts"]
     assert "A: fully constrained" in v and "B: 1 DoF left on line 0" in v
     assert health._seen["depth"] == 0 and health._seen["log"] == []
 
@@ -192,13 +191,13 @@ def test_family_reading_joins_the_verdict():
         h = run(d, lambda: [Obj(d, "X")])
     finally:
         health.unregister("fam")
-    assert h["ok"] is False and "Assembly: assembly conflicting" in h["verdict"] and h["todo"] == "asm_check"
+    assert "fam: Assembly: assembly conflicting" in h["facts"] and "todo" not in h  # the source first; no advice
 
 
 def test_report_lines_counted_in_the_verdict():
-    body = {"health": {"ok": True, "verdict": "Sketch: fully constrained"}}
+    body = {"health": {"facts": "solver: Sketch: fully constrained"}}
     health.note_report(body, ["Warning: x", "Error: y"])
-    assert body["health"]["verdict"].endswith("2 new Report view lines (see report)")
+    assert body["health"]["facts"].endswith("report view: 2 new lines (see report)")
 
 
 def test_attach_never_raises_and_leaves_other_answers_alone():
@@ -245,13 +244,13 @@ def test_a_sketch_whose_reading_changed_is_said_after_any_call():
         nut.DoF, nut._free = 2, [(0, 0), (1, 1)]
         return [nut]
 
-    assert "NutSketch: 2 DoF left" in run_as(Other, d, change)["verdict"]
+    assert "NutSketch: 2 DoF left" in run_as(Other, d, change)["facts"]
 
     def solved():
         nut.DoF, nut._free = 0, []
         return [nut]
 
-    assert run_as(Other, d, solved)["verdict"] == "NutSketch: fully constrained"
+    assert run_as(Other, d, solved)["facts"] == "solver: NutSketch: fully constrained"
 
 
 def test_fully_constrained_is_no_news_after_a_call_that_is_not_a_sketch_tools():
@@ -259,15 +258,15 @@ def test_fully_constrained_is_no_news_after_a_call_that_is_not_a_sketch_tools():
     assert run_as(Other, d, lambda: [Sketch(d, "Made")]) is None
     assert run_as(Other, d, lambda: [Sketch(d, "Blank", n=0)]) is None
     # freedom left on a sketch the call made is still said
-    assert "Loose: 1 DoF left" in run_as(Other, d, lambda: [Sketch(d, "Loose", dof=1, free=[(0, 0)])])["verdict"]
+    assert "Loose: 1 DoF left" in run_as(Other, d, lambda: [Sketch(d, "Loose", dof=1, free=[(0, 0)])])["facts"]
     # and a sketch tool's own call reads its sketch out as before
-    assert run_as(T, d, lambda: [Sketch(d, "Mine")])["verdict"] == "Mine: fully constrained"
+    assert run_as(T, d, lambda: [Sketch(d, "Mine")])["facts"] == "solver: Mine: fully constrained"
 
 
 def test_a_sketch_tool_reads_an_unchanged_sketch_out():
     d = Doc()
     sk = Sketch(d, "Sketch", dof=1, free=[(0, 0)])
-    assert "Sketch: 1 DoF left on line 0" in run_as(T, d, lambda: [sk])["verdict"]
+    assert "Sketch: 1 DoF left on line 0" in run_as(T, d, lambda: [sk])["facts"]
 
 
 def test_a_sketch_tool_that_names_its_sketch_reads_out_only_that_one_and_changed_ones():
@@ -279,21 +278,21 @@ def test_a_sketch_tool_that_names_its_sketch_reads_out_only_that_one_and_changed
     m = health.mark(s)
     for o in (a, b):
         health._observer_note(o)
-    v = health.check(s, T, m, {"sketch": "B"})["verdict"]
+    v = health.check(s, T, m, {"sketch": "B"})["facts"]
     assert "B: 4 DoF left on line 0" in v and "A:" not in v
     # a sketch it names nothing about but changed is still said
     m = health.mark(s)
     a.DoF, a._free = 3, [(0, 0)]
     for o in (a, b):
         health._observer_note(o)
-    v = health.check(s, T, m, {"sketch": "B"})["verdict"]
+    v = health.check(s, T, m, {"sketch": "B"})["facts"]
     assert "A: 3 DoF left" in v and "B: 4 DoF left" in v
 
 
 def test_only_the_first_free_sketch_names_its_free_geometry():
     d = Doc()
     made = lambda: [Sketch(d, "A", dof=4, free=[(0, 0)]), Sketch(d, "B", dof=2, free=[(0, 0)])]
-    v = run_as(T, d, made)["verdict"]
+    v = run_as(T, d, made)["facts"]
     assert "A: 4 DoF left on line 0" in v
     assert "B: 2 DoF left" in v and "B: 2 DoF left on" not in v
 
@@ -302,7 +301,7 @@ def test_a_red_sketch_is_said_however_it_read_before():
     d = Doc()
     sk = Sketch(d, "Sketch", conflicting=[2])
     h = run_as(Other, d, lambda: [sk])
-    assert h["ok"] is False and "conflicting constraints #1" in h["verdict"]
+    assert "conflicting constraints #1" in h["facts"]
 
 
 def test_a_cam_tool_bits_own_sketch_is_passed_over():
@@ -324,7 +323,7 @@ def test_a_cam_tool_bits_own_sketch_is_passed_over():
 
     for tool in (T, Other):
         d = Doc()
-        v = run_as(tool, d, lambda: change(d))["verdict"]
+        v = run_as(tool, d, lambda: change(d))["facts"]
         assert "Sketch001" not in v and "Profile: 1 DoF left" in v
 
 

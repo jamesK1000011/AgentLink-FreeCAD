@@ -384,14 +384,16 @@ class OnStandIns(unittest.TestCase):
             print(json.dumps(out, default=str))
         """)
         st = out["Stem"]
-        self.assertTrue(st["ok"], st)
+        # 27 Nov, facts only: FreeCAD's checks as they read; no ok, no problems, no warning grade
+        for r in out.values():
+            for gone in ("ok", "problems", "warnings", "narrow", "shortEdges", "practice", "todo"):
+                self.assertNotIn(gone, r, gone)
         self.assertEqual(len(st["each"]), 2)
-        self.assertIn("intended", st)
-        self.assertTrue(st["checkGeometry"]["warning"])
-        self.assertIn("InvalidCurveOnSurface", st["warnings"][0])
-        self.assertFalse(out["Loose"]["ok"])           # two solids not meant
-        self.assertFalse(out["Broken"]["ok"])          # not valid by BRepCheck: still a problem
-        self.assertFalse(out["Selfx"]["ok"])           # a self-intersection is never soft
+        self.assertIs(st["allowCompound"], True)
+        self.assertIn("InvalidCurveOnSurface", " ".join(st["checkGeometry"]["errors"]))
+        self.assertEqual((out["Loose"]["solids"], out["Loose"]["allowCompound"]), (2, False))
+        self.assertIs(out["Broken"]["valid"], False)
+        self.assertIn("BOPAlgo_SelfIntersect", out["Selfx"]["checkGeometry"]["errors"][0])
 
     def test_6_take_back_removes_what_undo_left(self):
         out = run_stub("""

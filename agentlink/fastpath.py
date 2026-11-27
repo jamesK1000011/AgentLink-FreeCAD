@@ -716,9 +716,11 @@ def check_row(where, tool, body):
 
 
 def _health_words(body):
+    """The health's facts of a call whose health has recompute errors
+    (health.errors: what FreeCAD reports), else None."""
     h = body.get("health") if isinstance(body, dict) else None
-    if isinstance(h, dict) and h.get("ok") is False:
-        return _cut(h.get("verdict") or "not clean")
+    if isinstance(h, dict) and h.get("errors"):
+        return _cut(h.get("facts") or "recompute errors")
     return None
 
 
@@ -777,13 +779,13 @@ def precheck_calls(server, calls, first=0):
 # ---- the fast tool --------------------------------------------------------------------------------
 
 def _summary(run, ok, secs, v0, v1, cp=None):
-    parts = [f"{'ok' if ok else 'refused'} {run.calls} call{'s' if run.calls != 1 else ''} {secs:.1f} s"]
+    parts = [f"{'ran' if ok else 'refused'} {run.calls} call{'s' if run.calls != 1 else ''} {secs:.1f} s"]
     if run.made:
         shown = run.made[:8]
         parts.append(" ".join(f"+{x}" for x in shown) + (f" +{len(run.made) - 8} more" if len(run.made) > 8 else ""))
     if v0 is not None and v1 is not None and abs(v1 - v0) > 1e-6:
         parts.append(f"vol {_fmt_num(v0)}→{_fmt_num(v1)} mm³")
-    parts.append("clean" if not run.health_bad else f"health: {run.health_bad} not clean")
+    parts.append("no recompute error" if not run.health_bad else f"recompute errors after {run.health_bad} call{'s' if run.health_bad != 1 else ''}")
     return " · ".join(parts)
 
 
@@ -807,7 +809,7 @@ def fast_tool(server, session, a):
         err.outcome = "not_started"
         raise err
     if a.get("check"):
-        out = {"fast": f"check ok: {dry.calls} call{'s' if dry.calls != 1 else ''}; leading checks read for {dry.read_checks} (the ones before the first change)"
+        out = {"fast": f"check: no refusal found: {dry.calls} call{'s' if dry.calls != 1 else ''}; leading checks read for {dry.read_checks} (the ones before the first change)"
                        + ". Nothing was run."}
         if dry.notes:
             out["notRead"] = dry.notes[:12]

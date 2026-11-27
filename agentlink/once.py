@@ -55,13 +55,12 @@ CODED = {
     "batch": {},
 }
 
-# health.todo parts that are advice, not a reading: the same words whatever
-# the objects (agentlink/health.py words them).
-HEALTH_TODOS = {
-    "overlap": "an overlap is right for a boolean's tool or a press fit; if it is not meant, part_transform moves the part and clearance reads the gap",
-    "failing": "recompute lists them with FreeCAD's reasons",
-}
-STANDING = re.compile(r"^\d+ objects? still failing from before this call: ")
+# Words of health.facts for what FreeCAD reports as a fault (agentlink/health.py
+# words them): a reading with one is given whole each time, never as
+# NOTHING_NEW. It decides only what is said again, not how a result is graded.
+FAULT = re.compile(r"failed to recompute|still failing|not recomputed yet|NOT valid|NOT closed|conflicting|redundant|malformed|a dialog is open|"
+                   r"did not run|Check Geometry reports|empty shape|recompute failed")
+STANDING = re.compile(r"^(?:recompute: )?\d+ objects? still failing from before this call: ")
 
 # Left-out words that are not named in saidBefore: they say how Agent Link
 # itself works (a batch's own notes), or their reading stays in
@@ -183,11 +182,12 @@ def health_content(h):
 
 
 def quiet_health(st, tool, out):
-    """A changing tool's health given as NOTHING_NEW when its finding is
-    the one last given in this conversation and all is well (ok true). The
-    check itself ran: only its words are left out. A reading that differs,
-    or one that is not ok (a failure, a broken object, a dialog), is given
-    whole and is then the last one given. The lines beside it (options,
+    """A changing tool's health given as NOTHING_NEW when its facts are
+    the ones last given in this conversation and FreeCAD reports no fault
+    in them (FAULT: a recompute error, a shape that is not valid or not
+    closed, flagged constraints, a dialog, a check that did not run). The check itself ran: only its
+    words are left out. A reading that differs, or one with such a fault, is
+    given whole and is then the last one given. The lines beside it (options,
     appliesNow) move to the answer itself. Explicit reads (body_check,
     session_state …) do not change the document, and keep theirs whole.
     True when the health was left out."""
@@ -198,11 +198,14 @@ def quiet_health(st, tool, out):
     # Per subject (the verdict's head: "Body", "Sketch 2"): a build that
     # goes sketch, feature, sketch, feature alternates two verdicts, so one
     # "last given" never matched (live, 25 Nov: no answer in a batch was quiet).
-    v = h.get("verdict")
+    v = h.get("facts")
     head = v.split("; ", 1)[0] if isinstance(v, str) else ""
-    subject = head.split(":", 1)[0].strip() if ":" in head else ""
+    # A fact is "source: subject: words": the subject is its second part.
+    bits = head.split(": ")
+    subject = bits[1].strip() if len(bits) > 2 else ""
     last = st.setdefault("healthBy", {})
-    if h.get("ok") is not True or key != last.get(subject):
+    fault = bool(h.get("errors") or h.get("needRecompute") or h.get("sketches")) or bool(isinstance(v, str) and FAULT.search(v))
+    if fault or key != last.get(subject):
         last[subject] = key
         st["health"] = key
         return False
@@ -214,26 +217,11 @@ def quiet_health(st, tool, out):
 
 
 def thin_health(st, h):
-    """A health reading with its standing advice left out once said, and
-    the standing part of its verdict ("N objects still failing from before
-    this call: …") left out while it is what was last said; each named in
-    health.saidBefore (overlap, failing)."""
+    """A health reading with the standing part of its facts ("N objects
+    still failing from before this call: …") left out while it is what was
+    last said; named in health.saidBefore (failing)."""
     gone = []
-    todo = h.get("todo")
-    if isinstance(todo, str):
-        for tag, words in HEALTH_TODOS.items():
-            if words not in todo:
-                continue
-            if tag in st["todo"]:
-                todo = todo.replace("; " + words, "").replace(words + "; ", "").replace(words, "").strip()
-                gone.append(tag)
-            else:
-                st["todo"].add(tag)
-        if todo:
-            h["todo"] = todo
-        else:
-            h.pop("todo", None)
-    v = h.get("verdict")
+    v = h.get("facts")
     if isinstance(v, str):
         parts = v.split("; ")
         part = next((p for p in parts if STANDING.match(p)), None)
@@ -243,7 +231,7 @@ def thin_health(st, h):
             st["failing"] = part
         else:
             rest = [p for p in parts if p is not part]
-            h["verdict"] = "; ".join(rest) if rest else "as before"
+            h["facts"] = "; ".join(rest) if rest else "as before"
             gone.append("failing")
     if gone:
         h["saidBefore"] = sorted(set(h.get("saidBefore") or []) | set(gone))
@@ -285,7 +273,7 @@ def health_said(session):
     st = getattr(session, "_said", None)
     if not isinstance(st, dict):
         return {}
-    out = {tag: HEALTH_TODOS[tag] for tag in sorted(st["todo"]) if tag in HEALTH_TODOS}
+    out = {}
     if st.get("failing"):
         out["failingNow"] = st["failing"]
     return out

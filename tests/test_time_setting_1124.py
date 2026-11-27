@@ -27,7 +27,7 @@ BODY = '''
         timelimit._first[0] = first - 125      # two minutes and a bit since the first call
     early = tools._time_state()
     # A health the same as the last one given is "nothing new" (once.quiet_health).
-    verdict = lambda h: h.get("verdict") if isinstance(h, dict) else h
+    verdict = lambda h: h.get("facts") if isinstance(h, dict) else h
     early_verdict = verdict(call("probe_make", {"name": "E"})[1]["health"])
     if first is not None:
         timelimit._first[0] = first - 965      # sixteen minutes and a bit: past half of 30
@@ -36,7 +36,7 @@ BODY = '''
     inside = call("batch", {"calls": [mk("B"), mk("C")]})[1]
     print(json.dumps({"before": before, "started": first is not None, "state": state.get("time"),
                       "early": early.get("time"), "earlyVerdict": early_verdict,
-                      "verdict": verdict(made["health"]), "batch": verdict(inside.get("health", {})),
+                      "facts": verdict(made["health"]), "batch": verdict(inside.get("health", {})),
                       "rows": [verdict(r.get("result", {}).get("health", {})) for r in inside.get("results", []) if isinstance(r, dict)]}))
 '''
 
@@ -66,23 +66,23 @@ class TimeSet(unittest.TestCase):
 
     def test_the_health_verdict_shows_it_from_half_the_limit(self):
         self.assertNotIn("time:", self.got["earlyVerdict"])
-        self.assertTrue(self.got["verdict"].endswith("; time: 16 of 30 minutes used") or self.got["verdict"] == "time: 16 of 30 minutes used",
-                        self.got["verdict"])
-        self.assertEqual(self.got["verdict"].count("time:"), 1)
+        self.assertTrue(self.got["facts"].endswith("; time: 16 of 30 minutes used") or self.got["facts"] == "time: 16 of 30 minutes used",
+                        self.got["facts"])
+        self.assertEqual(self.got["facts"].count("time:"), 1)
 
     def test_a_batch_says_it_once(self):
         # On the last call's health only: the batch's answer has no health of its own.
         self.assertIsNone(self.got["batch"])
         self.assertEqual(len(self.got["rows"]), 2)
         self.assertNotIn("time:", self.got["rows"][0])
-        self.assertEqual(self.got["rows"][1], "nothing red; time: 16 of 30 minutes used")
+        self.assertEqual(self.got["rows"][1], "recompute: FreeCAD reports no recompute error; time: 16 of 30 minutes used")
 
 
 class TimeNotSet(unittest.TestCase):
     def test_nothing_shows(self):
         got = run_with({})
         self.assertIsNone(got["state"])
-        self.assertNotIn("time:", got["verdict"])
+        self.assertNotIn("time:", got["facts"])
         self.assertNotIn("time:", got["batch"] or "")
         for v in got["rows"]:
             self.assertNotIn("time:", v)
@@ -110,16 +110,16 @@ class TheSetting(unittest.TestCase):
         timelimit.started(now=1.0)
         self.assertIsNone(timelimit.line())
         self.assertEqual(timelimit.state(), {})
-        h = {"ok": True, "verdict": "nothing red"}
-        self.assertEqual(timelimit.mark_health(h), {"ok": True, "verdict": "nothing red"})
+        h = {"facts": "recompute: FreeCAD reports no recompute error"}
+        self.assertEqual(timelimit.mark_health(h), {"facts": "recompute: FreeCAD reports no recompute error"})
 
     def test_the_verdict_gets_it_once_from_half_the_limit(self):
         timelimit.configure("30")
-        self.assertEqual(timelimit.mark_health({"ok": True, "verdict": "nothing red"})["verdict"], "nothing red")  # before the first call
+        self.assertEqual(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"})["facts"], "recompute: FreeCAD reports no recompute error")  # before the first call
         timelimit.started(now=1000.0)
-        self.assertEqual(timelimit.mark_health({"ok": True, "verdict": "nothing red"}, now=1000.0 + 60 * 14)["verdict"], "nothing red")
-        h = timelimit.mark_health(timelimit.mark_health({"ok": True, "verdict": "nothing red"}, now=1000.0 + 60 * 15), now=1000.0 + 60 * 15)
-        self.assertEqual(h["verdict"], "nothing red; time: 15 of 30 minutes used")
+        self.assertEqual(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"}, now=1000.0 + 60 * 14)["facts"], "recompute: FreeCAD reports no recompute error")
+        h = timelimit.mark_health(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"}, now=1000.0 + 60 * 15), now=1000.0 + 60 * 15)
+        self.assertEqual(h["facts"], "recompute: FreeCAD reports no recompute error; time: 15 of 30 minutes used")
 
     def test_documented_with_the_other_settings(self):
         for doc in ("SETUP.md", "README.md", os.path.join("docs", "clients", "README.md")):

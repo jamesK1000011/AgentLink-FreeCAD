@@ -90,8 +90,8 @@ def mark_health(h, now=None):
     the limit on (matters). Never raises."""
     try:
         ln = line(now) if matters(now) else None
-        if ln and isinstance(h, dict) and ln not in str(h.get("verdict", "")):
-            h["verdict"] = f"{h.get('verdict', '')}; {ln}".lstrip("; ")
+        if ln and isinstance(h, dict) and ln not in str(h.get("facts", "")):
+            h["facts"] = f"{h.get('facts', '')}; {ln}".lstrip("; ")
     except Exception:  # noqa: BLE001
         pass
     return h

@@ -26,7 +26,7 @@ sys.path.insert(0, HERE)
 from agentlink import nexthint, once  # noqa: E402
 from agentlink.protocol import Tool  # noqa: E402
 
-CLEAN = {"ok": True, "verdict": "Body: valid, closed, 1 solid"}
+CLEAN = {"facts": "shape: Body: valid, closed, 1 solid"}
 
 
 def changing(name="pd_pad"):
@@ -55,30 +55,30 @@ class HealthNews(unittest.TestCase):
     def test_sketch_and_feature_calls_in_turn_are_quiet_per_subject(self):
         # live, 25 Nov: sketch, pad, sketch, pad in one batch; one "last given"
         # never matched, so every answer repeated the whole verdict.
-        sk = {"ok": True, "verdict": "Sketch 2: 4 DoF left on the start of lines 0, 1, 2, 3"}
+        sk = {"facts": "solver: Sketch 2: 4 DoF left on the start of lines 0, 1, 2, 3"}
         once.thin_reply(self.s, changing(), answer(CLEAN))
         once.thin_reply(self.s, changing("sketch_add"), answer(sk))
         self.assertEqual(once.thin_reply(self.s, changing(), answer(CLEAN))["health"], once.NOTHING_NEW)
         self.assertEqual(once.thin_reply(self.s, changing("sketch_add"), answer(sk))["health"], once.NOTHING_NEW)
-        sk3 = {"ok": True, "verdict": "Sketch 3: empty"}
+        sk3 = {"facts": "solver: Sketch 3: empty"}
         self.assertEqual(once.thin_reply(self.s, changing("sketch_new"), answer(sk3))["health"], sk3)
 
     def test_a_change_is_given_whole(self):
         once.thin_reply(self.s, changing(), answer(CLEAN))
-        two = {"ok": True, "verdict": "Body: valid, closed, 2 solids"}
-        self.assertEqual(once.thin_reply(self.s, changing(), answer(two))["health"]["verdict"], two["verdict"])
+        two = {"facts": "shape: Body: valid, closed, 2 solids"}
+        self.assertEqual(once.thin_reply(self.s, changing(), answer(two))["health"]["facts"], two["facts"])
         # and the new one is then the one last given
         self.assertEqual(once.thin_reply(self.s, changing(), answer(two))["health"], once.NOTHING_NEW)
         task = {**CLEAN, "taskPanel": ["Pad parameters"]}
         self.assertEqual(once.thin_reply(self.s, changing(), answer(task))["health"]["taskPanel"], ["Pad parameters"])
 
     def test_something_wrong_is_always_given(self):
-        bad = {"ok": False, "verdict": "a dialog is open in the window: Missing link", "todo": "dialog_answer reads it and presses a button"}
+        bad = {"facts": "window: a dialog is open: Missing link"}
         for _ in range(3):
             h = once.thin_reply(self.s, changing(), answer(bad))["health"]
             self.assertIsInstance(h, dict)
-            self.assertFalse(h["ok"])
-        failed = {"ok": None, "verdict": "the health check did not run (KeyError: x)"}
+            self.assertIn("a dialog is open", h["facts"])
+        failed = {"facts": "the health check did not run (KeyError: x)"}
         for _ in range(2):
             self.assertIsInstance(once.thin_reply(self.s, changing(), answer(failed))["health"], dict)
 
@@ -196,7 +196,7 @@ class NextHintsSwitch(unittest.TestCase):
     def test_the_health_and_session_state_read_the_switch(self):
         with open(os.path.join(ROOT, "agentlink", "health.py"), encoding="utf-8") as f:
             src = f.read()
-        step = src[src.index("# 7. What the window is in the middle of"):src.index("# 8. Modelling practice")]
+        step = src[src.index("# 7. What the window is in the middle of"):src.index('_last["fault"] = bool(red)')]
         self.assertIn("nexthint.on()", step)
         with open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8") as f:
             src = f.read()
@@ -217,9 +217,9 @@ def tool_part(tool, inp, out, status="completed"):
 SESSION = {"info": {"id": "ses_x"}, "messages": [
     {"info": {"role": "assistant"}, "parts": [
         {"type": "text", "text": "I start."},
-        tool_part("agentlink-freecad_sketch_new", {"plane": "XY"}, {"sketch": "Sketch", "health": {"ok": True, "verdict": "nothing red",
+        tool_part("agentlink-freecad_sketch_new", {"plane": "XY"}, {"sketch": "Sketch", "health": {"facts": "recompute: FreeCAD reports no recompute error",
                                                   "next": "sketch Sketch is open in edit, 4 DoF left; likely next: sketch_add (draw the outline, a box), sketch_constrain (fix it); workbench Sketcher"}}),
-        tool_part("agentlink-freecad_sketch_add", {"shapes": []}, {"added": 4, "health": {"ok": True, "verdict": "nothing red", "options": "step 2: 1 pd_pad sketch=Sketch ask length mm; 2 pd_pocket sketch=Sketch"}}),
+        tool_part("agentlink-freecad_sketch_add", {"shapes": []}, {"added": 4, "health": {"facts": "recompute: FreeCAD reports no recompute error", "options": "step 2: 1 pd_pad sketch=Sketch ask length mm; 2 pd_pocket sketch=Sketch"}}),
     ]},
     {"info": {"role": "assistant"}, "parts": [
         tool_part("agentlink-freecad_pd_pad", {"length": 5}, {"error": {"code": "invalid_input", "message": "length: a number"}}),

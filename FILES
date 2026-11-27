@@ -112,7 +112,6 @@ agentlink/families/view.py
 agentlink/fastpath.py
 agentlink/fitting.py
 agentlink/flat2d.py
-agentlink/fusehint.py
 agentlink/gdt.py
 agentlink/geometry.py
 agentlink/grab.py
@@ -186,7 +185,6 @@ agentlink/paths.py
 agentlink/person_ok.py
 agentlink/pointfiles.py
 agentlink/porting.py
-agentlink/practice.py
 agentlink/protocol.py
 agentlink/quit_guard.py
 agentlink/refusal.py
@@ -475,7 +473,6 @@ tests/test_local_client.py
 tests/test_local_fixes_1123.py
 tests/test_loft_findings.py
 tests/test_loft_spans.py
-tests/test_lost_face_1124.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py
@@ -510,7 +507,6 @@ tests/test_path_keys.py
 tests/test_paths.py
 tests/test_pipe_1120.py
 tests/test_porting.py
-tests/test_practice_warnings.py
 tests/test_pref_import.py
 tests/test_protocol.py
 tests/test_qa_fixes_1126cd.py

@@ -79,16 +79,16 @@ class BatchRecord:
 
 # The file's own note in a batch { to } reply.
 TO_NOTE = ("Each call's whole answer is in the file (results[i].result; a call with a writeTo of its own: in that file, written here); "
-           "here: ok, a refusal's words and the health verdict. record_read { path: the file, at: \"results.0.result\" } gives any part of it "
+           "here: ok, a refusal's words and the health's facts. record_read { path: the file, at: \"results.0.result\" } gives any part of it "
            "back (results count from this part's first call, i minus start).")
 
 
 # The part of a health verdict that stands from call to call: the objects
 # that were failing before the call (agentlink/health.py words it).
-STANDING = re.compile(r"^\d+ objects? still failing from before this call: ")
+STANDING = re.compile(r"^(?:recompute: )?\d+ objects? still failing from before this call: ")
 STANDING_NOTE = ("A line's health leaves out the part \"… still failing from before this call: …\" when it is the same as in the "
                  "last line that gave it: it is said at the first call it shows in and again only when it changes "
-                 "(\"as before\": nothing else was said). The file has every verdict whole.")
+                 "(\"as before\": nothing else was said). The file has the whole health of every call.")
 
 
 # Said once a conversation, not on every reply (agentlink/once.py).
@@ -145,16 +145,6 @@ def brief_verdicts(verdicts):
     return out, cut
 
 
-# A health verdict with nothing to act on: such a line is left out of a
-# lines: "refused" reply.
-CLEAN = re.compile(r"^(nothing red|as before|([^;]*: )?(\d+ parts? )?valid, closed, \d+ solids?( \(AllowCompound\))?|[^;]*: assembly solved|[^;]*: empty|[^;]*: fully constrained|CalculiX ran clean)$")
-
-
-def clean_verdict(v):
-    """Whether every part of a health verdict says all is well."""
-    return v is None or all(CLEAN.match(p.strip()) for p in str(v).split("; "))
-
-
 def to_reply(got, first, path, size, lines="all"):
     """A batch's answer as batch { to } gives it back once the whole of it
     is in the file at path: a line per call (ok, a refusal's words, the
@@ -163,7 +153,7 @@ def to_reply(got, first, path, size, lines="all"):
     before a heavy read or out of time says in its note how to go on
     (next, notRun, heavy): that note stays as note, and the file's is
     toNote beside it; with no note of the batch's own, note is the file's."""
-    only, lines = lines, []
+    only, lines, faults = lines, [], set()
     for i, r in enumerate(got.get("results") or []):
         row = {"i": first + i, "tool": r.get("tool"), "ok": bool(r.get("ok"))}
         if r.get("undone"):
@@ -174,8 +164,10 @@ def to_reply(got, first, path, size, lines="all"):
         else:
             res = r.get("result")
             h = res.get("health") if isinstance(res, dict) else r.get("health")
-            if isinstance(h, dict) and h.get("verdict"):
-                row["health"] = h["verdict"]
+            if isinstance(h, dict) and h.get("facts"):
+                row["health"] = h["facts"]
+            if isinstance(h, dict) and h.get("errors"):
+                faults.add(first + i)  # FreeCAD reports a recompute error after this call
             if isinstance(r.get("written"), dict):
                 row["written"] = r["written"].get("path")
         lines.append(row)
@@ -189,7 +181,8 @@ def to_reply(got, first, path, size, lines="all"):
     if only in ("refused", "counts"):
         counts = {"ok": sum(1 for r in lines if r["ok"]), "refused": sum(1 for r in lines if not r["ok"])}
         # counts: no line at all (a run made for its files or pictures, read from the file afterwards)
-        lines = [] if only == "counts" else [r for r in lines if not r["ok"] or not clean_verdict(r.get("health"))]
+        # refused: the refused calls and the calls with a recompute error in their health (health.errors)
+        lines = [] if only == "counts" else [r for r in lines if not r["ok"] or r["i"] in faults]
     short = {k: v for k, v in got.items() if k != "results"}
     short.update({"results": lines, "written": {"path": path, "bytes": size}})
     if counts is not None:

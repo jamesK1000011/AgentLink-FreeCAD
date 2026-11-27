@@ -163,14 +163,14 @@ def _child(case):
                 raise ToolError("invalid_input", "sketch: there are several sketches, name one.")
             sk = found[0]
         doc.add("Geo", "Part::GeomCircle", sk)  # a step of its own, as a real sketch edit is
-        return {"sketch": sk.Label, "added": 1, "kind": a.get("kind"), "center": a.get("center"), "health": {"ok": True, "verdict": "nothing red"}}
+        return {"sketch": sk.Label, "added": 1, "kind": a.get("kind"), "center": a.get("center"), "health": {"facts": "recompute: FreeCAD reports no recompute error"}}
 
     def pd_pad(a):
         sk = doc.getObject(a.get("sketch") or "") if a.get("sketch") else None
         if sk is None:
             raise ToolError("invalid_input", "sketch: which one? (the stand-in wants it named)")
         pad = doc.add("Pad", "PartDesign::Pad", sk.parent)
-        return {"pad": pad.Label, "length": a.get("length"), "health": {"ok": True, "verdict": "nothing red"}}
+        return {"pad": pad.Label, "length": a.get("length"), "health": {"facts": "recompute: FreeCAD reports no recompute error"}}
 
     srv.tools["sketch_new"].fn = sketch_new
     srv.tools["sketch_add"].fn = sketch_add
@@ -448,10 +448,10 @@ class FastPath(unittest.TestCase):
         self.assertFalse(got["got"]["isError"], got["got"])
         body = got["got"]["body"]
         # One short line, with the real names of what was made.
-        self.assertTrue(body["fast"].startswith("ok 5 calls "), body)
+        self.assertTrue(body["fast"].startswith("ran 5 calls "), body)
         self.assertIn("+Sketch", body["fast"])
         self.assertIn("+Pad", body["fast"])
-        self.assertTrue(body["fast"].endswith("clean"), body)
+        self.assertTrue(body["fast"].endswith("no recompute error"), body)
         self.assertLessEqual(set(body), {"fast", "values", "warnings", "filled", "checkpoint", "record", "ms", "made", "checks", "now"})
         # Every call went through the server's own path, in order, with the sketch filled in from the block.
         tools = [t for t, _a in got["seen"]]
@@ -545,7 +545,7 @@ class FastPath(unittest.TestCase):
         self.assertIn("Nothing was run", msg)
         self.assertEqual(got["bad"]["body"]["error"]["status"], "not_started")
         self.assertFalse(got["good"]["isError"], got["good"])
-        self.assertTrue(got["good"]["body"]["fast"].startswith("check ok: 5 calls"), got["good"])
+        self.assertTrue(got["good"]["body"]["fast"].startswith("check: no refusal found: 5 calls"), got["good"])
         self.assertEqual([t for t, _a in got["seen"]], ["fast", "fast"])
         self.assertEqual(got["labels"], ["Body"])
 

@@ -62,6 +62,9 @@ WAIVERS = {
     ("surface_polynomial", "meshobj_segments"): "the advice to split a scan first is gone (27 Nov, facts only)",
     ("surface_polynomial", "meshobj_trim"): "the advice to split a scan first is gone (27 Nov, facts only)",
     ("window_snapshot", "never"): "the advice on what a snapshot proves is gone (27 Nov, facts only)",
+    ("body_check", "0.01"): "the sliver check (faces under 0.01 mm wide) is gone (27 Nov, facts only: FreeCAD has no such check)",
+    ("body_check", "mm"): "the sliver check and its width in mm are gone (27 Nov, facts only); the volume's unit is mm³",
+    ("body_check", "only"): "the words 'a BOP-only finding' are gone (27 Nov, facts only): Check Geometry's errors are given as FreeCAD words them",
     ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 

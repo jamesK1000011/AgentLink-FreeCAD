@@ -15,7 +15,7 @@ from agentlink.protocol import Server, Tool  # noqa: E402
 
 class BatchTo(unittest.TestCase):
     def test_a_stopped_batch_keeps_its_note(self):
-        got = {"results": [{"tool": "pd_pad", "ok": True, "result": {"feature": "Pad", "health": {"ok": True, "verdict": "sound"}}},
+        got = {"results": [{"tool": "pd_pad", "ok": True, "result": {"feature": "Pad", "health": {"facts": "sound"}}},
                            {"tool": "sketch_state", "ok": False, "error": {"code": "not_found", "message": "no sketch X"}}],
                "ran": 2, "notRun": 3, "next": 7, "heavy": {"index": 7, "tool": "wall_read", "arguments": {}},
                "note": "Stopped before calls.7 (wall_read): a heavy read … then batch again with the calls from index 8 on."}

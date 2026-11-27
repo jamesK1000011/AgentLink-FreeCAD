@@ -213,14 +213,25 @@ def bop_where(shape, lines, n=3):
         return []
 
 
+def shape_facts(shape):
+    """What FreeCAD says of a shape, with no grade: valid (Shape.isValid),
+    closed (every shell is closed; false with no shell), solids (the
+    count) and volume (mm³)."""
+    shells = shape.Shells
+    try:
+        volume = shape.Volume
+    except Exception:
+        volume = 0.0
+    return {"valid": bool(shape.isValid()), "closed": bool(shells) and all(s.isClosed() for s in shells), "solids": len(shape.Solids), "volume": round(volume, 3)}
+
+
 def each_solid(shape):
-    """Each solid of a compound checked as soundness checks one: valid,
-    closed, a volume above 0, where it is."""
+    """Each solid of a compound, as shape_facts reads one: valid, closed,
+    volume, and the centre of its box."""
     out = []
     for i, so in enumerate(shape.Solids):
-        r = soundness(so)
-        out.append({"solid": i + 1, "ok": r["ok"], "valid": r["valid"], "closed": r["closed"], "volume": r["volume"],
-                    "at": vec(so.BoundBox.Center), **({"problems": r["problems"]} if r["problems"] else {})})
+        r = shape_facts(so)
+        out.append({"solid": i + 1, "valid": r["valid"], "closed": r["closed"], "volume": r["volume"], "at": vec(bound_box(so).Center)})
     return out
 
 

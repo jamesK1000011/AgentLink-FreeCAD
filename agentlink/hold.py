@@ -83,11 +83,11 @@ def held_answer(tool, body):
         return body
     left = [p for p in HELD_OK.get(tool, ()) if _drop(body, p)]
     body["build"] = HELD
-    h = {"build": HELD, "verdict": "build: held — the document is not rebuilt yet, so this call has no reading of its own: "
-                                   "the batch's builds[] carries the health of everything held, after the one recompute"}
+    h = {"build": HELD, "facts": "build: held — the document is not rebuilt yet, so this call has no reading of its own: "
+                                 "the batch's builds[] carries the health of everything held, after the one recompute"}
     if left:
         h["leftOut"] = left
-        h["verdict"] += f"; left out of this answer until then: {', '.join(left)}"
+        h["facts"] += f"; left out of this answer until then: {', '.join(left)}"
     body["health"] = h
     return body
 
@@ -185,11 +185,13 @@ class Hold:
         try:
             h = self._check(m, tools)
         except Exception as e:
-            h = {"ok": None, "verdict": f"the health check did not run ({e}): body_check and sketch_state read the result"}
+            h = {"facts": f"the health check did not run ({e})"}
         if h is None:
-            h = {"ok": True, "verdict": "nothing red"}
+            from . import health as _health
+
+            h = {"facts": _health.NOTHING}
         if "error" in entry:
-            h = {**h, "ok": False, "verdict": f"{entry['error']}; {h.get('verdict', '')}".rstrip("; ")}
+            h = {**h, "facts": f"{entry['error']}; {h.get('facts', '')}".rstrip("; ")}
         entry["health"] = h
         entry["ms"] = int((self._clock() - t0) * 1000)
         if calls and self._snapshot is not None:

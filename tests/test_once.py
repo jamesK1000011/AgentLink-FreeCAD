@@ -20,7 +20,6 @@ from agentlink.protocol import Server, Tool, compact  # noqa: E402
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 NOTE = "The previous document stays open: doc_switch { document } returns to it (doc_open { path } when it was saved and closed)."
-OVERLAP = once.HEALTH_TODOS["overlap"]
 
 
 def data_tool(name, entry, fn):
@@ -77,25 +76,23 @@ class Thin(unittest.TestCase):
         again = once.thin_reply(self.s, "session_state", {"bodies": [], "machine": dict(machine)})
         self.assertEqual(again["machine"], machine)
 
-    def test_health_advice_once_and_the_standing_failure_while_it_stands(self):
-        def h(verdict, todo):
-            return {"health": {"ok": False, "verdict": verdict, "todo": todo}}
+    def test_the_standing_failure_is_said_while_it_is_news(self):
+        # 27 Nov, facts only: a health has facts and no todo; the standing part is left out while it stands
+        def h(facts):
+            return {"health": {"facts": facts}}
 
-        v = "2 objects still failing from before this call: Left, Dimension002"
-        a = once.thin_reply(self.s, "part_transform", h("Trim: valid, closed, 1 solid; Trim interferes with Cube: 5 mm³; " + v, OVERLAP))
-        self.assertEqual(a["health"]["todo"], OVERLAP)
-        self.assertIn(v, a["health"]["verdict"])
-        b = once.thin_reply(self.s, "part_transform", h("Trim: valid, closed, 1 solid; Trim interferes with Cube: 9 mm³; " + v,
-                                                         "fix the input of the first failed object; " + OVERLAP))
-        self.assertEqual(b["health"]["todo"], "fix the input of the first failed object")  # other advice stays
-        self.assertNotIn("still failing", b["health"]["verdict"])
-        self.assertIn("interferes with Cube: 9", b["health"]["verdict"])  # the reading itself stays
-        self.assertEqual(b["health"]["saidBefore"], ["failing", "overlap"])
-        c = once.thin_reply(self.s, "x", {"health": {"verdict": v}})
-        self.assertEqual(c["health"]["verdict"], "as before")
-        once.thin_reply(self.s, "x", {"health": {"verdict": "nothing red"}})  # fixed: the next failure is news
-        self.assertEqual(once.thin_reply(self.s, "x", {"health": {"verdict": v}})["health"]["verdict"], v)
-        self.assertEqual(once.health_said(self.s)["overlap"], OVERLAP)  # reachable
+        v = "recompute: 2 objects still failing from before this call: Left, Dimension002"
+        a = once.thin_reply(self.s, "part_transform", h("shape: Trim: valid, closed, 1 solid; measured: Trim and Cube share 5 mm³; " + v))
+        self.assertIn(v, a["health"]["facts"])
+        b = once.thin_reply(self.s, "part_transform", h("shape: Trim: valid, closed, 1 solid; measured: Trim and Cube share 9 mm³; " + v))
+        self.assertNotIn("still failing", b["health"]["facts"])
+        self.assertIn("Trim and Cube share 9", b["health"]["facts"])  # the reading itself stays
+        self.assertEqual(b["health"]["saidBefore"], ["failing"])
+        c = once.thin_reply(self.s, "x", {"health": {"facts": v}})
+        self.assertEqual(c["health"]["facts"], "as before")
+        once.thin_reply(self.s, "x", {"health": {"facts": "recompute: FreeCAD reports no recompute error"}})  # fixed: the next failure is news
+        self.assertEqual(once.thin_reply(self.s, "x", {"health": {"facts": v}})["health"]["facts"], v)
+        self.assertNotIn("overlap", once.health_said(self.s))  # no advice is kept
 
     def test_a_batch_thins_its_calls_in_order_and_never_a_refusal(self):
         tools = {"doc_new": self.tool}
@@ -157,7 +154,7 @@ class FileBatch(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp()
         self.got = {"ran": 3, "results": [{"tool": "part_primitive", "ok": True, "result": {"body": f"B{i}", "volume": 1000.0 * i, "area": 600.0,
-                                                                                            "box": [10.0, 10.0, 10.0], "health": {"ok": True, "verdict": f"B{i}: valid, closed, 1 solid"}}}
+                                                                                            "box": [10.0, 10.0, 10.0], "health": {"facts": f"B{i}: valid, closed, 1 solid"}}}
                                           for i in range(3)], "record": "r"}
         self.path = os.path.join(self.d, "rec.json")
         with open(self.path, "w") as f:

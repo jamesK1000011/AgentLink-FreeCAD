@@ -36,25 +36,26 @@ class SolidsSaidAsMeasured(unittest.TestCase):
         out = run_stub(self.BODY + textwrap.dedent("""
             Shape.distToShape = lambda self, o: (12.5, [], [])
             r = s.body_check({"body": "Stem"})
-            print(json.dumps({"intended": r["intended"], "ok": r["ok"], "row": s._body_row(body)["multiSolid"]}))
+            print(json.dumps({"said": r["solidsSaid"], "allow": r["allowCompound"], "graded": "ok" in r or "problems" in r, "row": s._body_row(body)["multiSolid"]}))
         """))
-        self.assertEqual(out["intended"], "2 separate solids that do not touch (nearest gap 12.5 mm) in one Body (AllowCompound is true, FreeCAD's default): each checked on its own below.")
-        self.assertNotIn("on purpose", out["intended"] + out["row"])
-        self.assertTrue(out["ok"])  # nothing is failed or warned
+        self.assertEqual(out["said"], "2 separate solids that do not touch (nearest gap 12.5 mm)")
+        self.assertIs(out["allow"], True)  # FreeCAD's property, as a fact beside the count
+        self.assertNotIn("on purpose", out["said"] + out["row"])
+        self.assertFalse(out["graded"])  # facts only (27 Nov): no ok, no problems
 
     def test_solids_that_touch_are_not_said_to_be_apart(self):
         out = run_stub(self.BODY + textwrap.dedent("""
             Shape.distToShape = lambda self, o: (0.0, [], [])
-            print(json.dumps(s.body_check({"body": "Stem"})["intended"]))
+            print(json.dumps(s.body_check({"body": "Stem"})["solidsSaid"]))
         """))
         self.assertIn("2 separate solids; at least two touch", out)
         self.assertNotIn("do not touch", out)
 
     def test_without_a_distance_only_the_count_is_said(self):
         out = run_stub(self.BODY + textwrap.dedent("""
-            print(json.dumps(s.body_check({"body": "Stem"})["intended"]))
+            print(json.dumps(s.body_check({"body": "Stem"})["solidsSaid"]))
         """))
-        self.assertTrue(out.startswith("2 separate solids in one Body"), out)
+        self.assertEqual(out, "2 separate solids")
 
 
 class OpenEndsNameNoConstraint(unittest.TestCase):

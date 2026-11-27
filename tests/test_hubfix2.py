@@ -481,7 +481,7 @@ class Health(unittest.TestCase):
     def test_every_changing_call_carries_a_health(self):
         d = Doc("D")
         HObj(d, "View")
-        self.assertEqual(self.run_call(d, []), {"ok": True, "verdict": "nothing red"})
+        self.assertEqual(self.run_call(d, []), {"facts": "recompute: FreeCAD reports no recompute error"})
 
     def test_a_check_that_fails_says_so(self):
         d = Doc("D")
@@ -494,9 +494,8 @@ class Health(unittest.TestCase):
         finally:
             health.check = was
             health.drop(m)
-        self.assertIsNone(out["health"]["ok"])
-        self.assertIn("did not run", out["health"]["verdict"])
-        self.assertIn("recompute", out["health"]["verdict"])
+        self.assertNotIn("ok", out["health"])
+        self.assertIn("the health check did not run (ZeroDivisionError", out["health"]["facts"])
 
     def test_what_the_call_left_waiting_is_said_by_that_call(self):
         d = Doc("D")
@@ -504,14 +503,14 @@ class Health(unittest.TestCase):
         HObj(d, "Dimension", state=["Touched"])
         h = self.run_call(d, [(R, "Template", None), (C, "Template", "EditableTexts"), (N, "Dimension", None)])
         self.assertEqual(h["needRecompute"], ["Template", "Dimension"])
-        self.assertIn("2 objects not recomputed yet", h["verdict"])
-        self.assertIn("recompute", h["todo"])
+        self.assertIn("2 objects not recomputed yet", h["facts"])
+        self.assertNotIn("todo", h)  # facts only (27 Nov)
 
     def test_touched_from_before_its_own_recompute_is_not_asked_again(self):
         # One object's recompute executes and leaves the mark: up to date.
         d = Doc("D")
         HObj(d, "Screw", state=["Touched"])
-        self.assertEqual(self.run_call(d, [(C, "Screw", "Offset"), (R, "Screw", None)]), {"ok": True, "verdict": "nothing red"})
+        self.assertEqual(self.run_call(d, [(C, "Screw", "Offset"), (R, "Screw", None)]), {"facts": "recompute: FreeCAD reports no recompute error"})
 
     def test_an_output_property_changed_after_the_recompute_does_not_wait(self):
         d = Doc("D")
@@ -647,7 +646,7 @@ class LongChecks(unittest.TestCase):
         sh = Shape([face("Plane")] * 6, check="BOPAlgo_SelfIntersect Face3")
         r = health.shape_reading(Part_("Bad", sh), deadline=1e18, doc_name="D")
         self.assertTrue(r["red"])
-        self.assertIn("FreeCAD's geometry check: BOPAlgo_SelfIntersect", r["line"])
+        self.assertIn("Check Geometry reports BOPAlgo_SelfIntersect", r["line"])
 
     def test_out_of_time_is_said_not_passed_over(self):
         sh = Shape([face("Plane")] * 6)
@@ -804,24 +803,24 @@ class CompactLines(unittest.TestCase):
     def test_a_standing_part_is_said_once_and_again_when_it_changes(self):
         other = "1 object still failing from before this call: Left"
         got, cut = batchrec.brief_verdicts([f"{OLD}; Box: valid, closed, 1 solid", OLD, None, f"{OLD}; Pad: valid, closed, 1 solid",
-                                           "nothing red", other, other, f"{OLD}; 1 object not recomputed yet"])
-        self.assertEqual(got, [f"{OLD}; Box: valid, closed, 1 solid", "as before", None, "Pad: valid, closed, 1 solid", "nothing red", other,
+                                           "recompute: FreeCAD reports no recompute error", other, other, f"{OLD}; 1 object not recomputed yet"])
+        self.assertEqual(got, [f"{OLD}; Box: valid, closed, 1 solid", "as before", None, "Pad: valid, closed, 1 solid", "recompute: FreeCAD reports no recompute error", other,
                                "as before", f"{OLD}; 1 object not recomputed yet"])
         self.assertTrue(cut)
 
     def test_verdicts_without_one_are_untouched(self):
-        vs = ["Box: valid, closed, 1 solid", "nothing red", "1 object failed to recompute: Pad (x) — 2 more were failing before this call"]
+        vs = ["Box: valid, closed, 1 solid", "recompute: FreeCAD reports no recompute error", "1 object failed to recompute: Pad (x) — 2 more were failing before this call"]
         self.assertEqual(batchrec.brief_verdicts(vs), (vs, False))
 
     def test_the_reply_and_the_file(self):
-        results = [{"tool": "sheet_set", "ok": True, "result": {"health": {"ok": False, "verdict": OLD}}} for _ in range(3)]
+        results = [{"tool": "sheet_set", "ok": True, "result": {"health": {"facts": OLD}}} for _ in range(3)]
         got = {"results": results, "ran": 3}
         short = batchrec.to_reply(got, 0, "run.json", 10)
         self.assertEqual([r["health"] for r in short["results"]], [OLD, "as before", "as before"])
         self.assertIn("first call", short["healthNote"])
         # what goes to the file is as it was
-        self.assertEqual([r["result"]["health"]["verdict"] for r in got["results"]], [OLD] * 3)
-        plain = batchrec.to_reply({"results": [{"tool": "t", "ok": True, "result": {"health": {"verdict": "nothing red"}}}]}, 0, "run.json", 10)
+        self.assertEqual([r["result"]["health"]["facts"] for r in got["results"]], [OLD] * 3)
+        plain = batchrec.to_reply({"results": [{"tool": "t", "ok": True, "result": {"health": {"facts": "recompute: FreeCAD reports no recompute error"}}}]}, 0, "run.json", 10)
         self.assertNotIn("healthNote", plain)
 
 

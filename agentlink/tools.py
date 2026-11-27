@@ -1061,69 +1061,32 @@ class Session:
         return out
 
     def body_check(self, a):
-        """FreeCAD's own check (Part Check Geometry's shape.check) first, and
-        on top of it what it does not look for: slivers under 0.01 mm, very
-        short edges, one closed solid."""
+        """FreeCAD's own checks of a body, as facts (27 Nov): Shape.isValid
+        (valid), whether every shell is closed (closed), the count of solids,
+        the volume, and Part Check Geometry (shape.check with its BOP
+        checks: FreeCAD's own words, with where). No grade, no advice, and
+        no check that FreeCAD does not have."""
         o = self.body(a.get("body"))
         sh = o.Shape
-        intended = self.allows_compound(o) and len(sh.Solids) > 1
-        s = geo.soundness(sh, solids_intended=intended)
+        s = geo.shape_facts(sh)
         touch = self.solids_said(sh) if len(sh.Solids) > 1 else None
-        if intended:
-            # A deliberate split (Body.AllowCompound): counted, each solid
-            # checked on its own.
-            s["intended"] = f"{touch} in one Body (AllowCompound is true, FreeCAD's default): each checked on its own below."
+        if touch:
+            s["solidsSaid"] = touch
+            s["allowCompound"] = bool(self.allows_compound(o))
             s["each"] = geo.each_solid(sh)
-            bad = [e for e in s["each"] if not e["ok"]]
-            for e in bad:
-                s["problems"].append(f"Solid {e['solid']} (at {e['at']}): {'; '.join(e['problems'])}")
-            if bad:
-                s["ok"] = False
         ok, said = geo.core_check(sh)
         if ok is not None:
-            s["checkGeometry"] = {"ok": ok, **({"problems": said} if said else {})}
-            if not ok:
-                # BOP's own findings on a shape BRepCheck calls valid and
-                # closed (a curve off its surface where a counterbore breaks
-                # a chamfer) are a warning with where, not a broken body.
-                soft = geo.soft_bop(said) and s["valid"] and s["closed"]
-                if soft:
-                    s["checkGeometry"]["warning"] = True
-                    where = geo.bop_where(sh, said)
-                    s.setdefault("warnings", []).append(
-                        f"FreeCAD's Check Geometry (its BOP check) reports {'; '.join(said[:3])}"
-                        + (f" and {len(said) - 3} more" if len(said) > 3 else "")
-                        + ". The shape is valid by BRepCheck (isValid) and closed."
-                        + (f" Where: {', '.join(w['element'] + ' at ' + str(w['at']) for w in where)}." if where else ""))
-                    if where:
-                        s["checkGeometry"]["where"] = where
-                else:
-                    s["problems"] = [f"FreeCAD's Check Geometry: {'; '.join(said[:3])}"] + s["problems"]
-                    s["ok"] = False
-        if not s.get("ok", True):
-            # Bicycle L5 build (21 Nov, finding 4): Refine on a pipe weldment's features
-            try:
-                from . import fusehint
-
-                rt = fusehint.refine_todo(o, " ".join(str(p) for p in s.get("problems") or []))
-            except Exception:
-                rt = None
-            if rt:
-                s["todo"] = rt
-        # Modelling practice (agentlink/practice.py): the same advice the
-        # health check says once, here each time it is asked for.
-        try:
-            from . import practice
-
-            others = max(0, len(FreeCAD.listDocuments()) - 1)
-            pr = [x[3] for x in practice.findings(list(self.doc.Objects), list(self.bodies_in(self.doc)), others,
-                                                  practice.booleans_of(self, self.doc.Name), body=o)]
-        except Exception:
-            pr = []
-        if pr:
-            s["practice"] = pr
+            s["checkGeometry"] = {"errors": list(said or [])}
+            if said:
+                where = geo.bop_where(sh, said)
+                if where:
+                    s["checkGeometry"]["where"] = where
+        else:
+            s["checkGeometry"] = "not run: this FreeCAD's shape has no check"
         line = self.check_line(o, sh, s, touch)
-        return {**({"result": line} if line else {}), "body": o.Label, **s, **self.stats_of(o)}
+        stats = self.stats_of(o)
+        note = geo.box_note(sh)
+        return {**({"result": line} if line else {}), "body": o.Label, **s, **stats, **({"boxNote": note} if note else {})}
 
     @staticmethod
     def check_line(o, sh, s, said):
@@ -1435,7 +1398,7 @@ WORKING = (
     "At a refusal in a batch the calls before it stay, and the answer says which ran (done), which was refused (refused) and which did not run (notRun). "
     "Give only calls at first: batch's other fields are in guide_read { topic: \"batch\" }. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
-    "Words that stand the same from call to call (a tool's own note, the health's advice on an overlap) are given the first time "
+    "Words that stand the same from call to call (a tool's own note) are given the first time "
     "in a conversation; after that the answer names their key in saidBefore, and tool_find { card: name } gives them again (said). "
     "view_render draws the parts from any view, cut open, zoomed "
     "to a spot, or with a map (wall, stress, and those add-ons add); body_check gives FreeCAD's checks of a body. "
@@ -1826,10 +1789,11 @@ def make_tools(session):
                          "It waits up to 90 s for the window's link. Answer: opened, already (it was open), seconds, note.", obj({}), _open_here),
         Tool("report_read", "Read FreeCAD's Report view in the window. last: its last lines (40 by default). problems: true gives only warnings and errors. Each answer also brings "
                             "back new problem lines as \"report\". FreeCAD's own known faults are counted once (\"known\"). When there are problems, first: the first problem line without its time. Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
-        Tool("body_check", "Check if a body is sound: FreeCAD's own Check Geometry, then closed, one solid, no very short edges. Also no sliver faces (less than 0.01 mm wide). It "
-                           "tells where each problem is. A Body with AllowCompound true (FreeCAD's default) can hold several solids. They are counted and each is checked (each); no "
-                           "problem. A BOP-only finding on a shape that BRepCheck calls valid and closed is a warning with where, not a failure. Example: InvalidCurveOnSurface, "
-                           "where a counterbore breaks a chamfer. Answer: result (a one-line summary first), body, valid, closed, solids, volume.", obj({"body": body}), s.body_check),
+        Tool("body_check", "Read FreeCAD's checks of a body. valid: Shape.isValid. closed: every shell is closed. solids: the count. volume: mm³. "
+                           "checkGeometry: FreeCAD's Check Geometry (shape.check with its BOP checks). errors has FreeCAD's own words, and where gives the place. "
+                           "A Body with AllowCompound true (FreeCAD's default) can hold several solids. Then solidsSaid tells if they touch, and each has valid, "
+                           "closed and volume of each solid. Example of a Check Geometry error on a valid, closed shape: InvalidCurveOnSurface, "
+                           "where a counterbore breaks a chamfer. Answer: result (a one-line summary first), body, valid, closed, solids, volume, checkGeometry.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
             "Write a body as STEP or STL, and read it back. tolerance: the chord error, mm, 0.01 by default. verify: gives the volume read and, for STEP, the "
@@ -2596,7 +2560,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 health.drop(m)
                 return None
             if m is None:
-                return {"ok": None, "verdict": "the health check is switched off or did not load: body_check and sketch_state read the result"}
+                return {"facts": "the health check is switched off or did not load"}
             # After sketch calls the sketches are read out as they stand.
             t = server.tools.get(next((x for x in tools if x.startswith("sketch_")), "batch"))
             return health.check(s, t, m)
@@ -3548,8 +3512,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "about 0.4 s and up to 2.5 s for each call. From its fourth changing call, a long batch runs faster. Those calls still show, with a pause of 60 ms. "
                       "That is the person's EchoBatchDelay preference, ms (0 none, -1 the full pause throughout). The last changing call shows at the full pace, so the "
                       "window ends on a readable state. So one batch of 20 calls is much quicker in the window than 20 single calls. writeTo: a .json file that gets the whole "
-                      "answer (relative: in the session's folder). The answer is then one line for each call: ok, the words of a refusal, or the health verdict. A verdict "
-                      "has a standing part, \"N objects still failing from before this call: …\". A line gives it the first time it shows, and again only when it changes. "
+                      "answer (relative: in the session's folder). The answer is then one line for each call: ok, the words of a refusal, or the health's facts. The facts "
+                      "have a standing part, \"N objects still failing from before this call: …\". A line gives it the first time it shows, and again only when it changes. "
                       "healthNote says when later lines leave it out; a line with nothing else reads \"as before\". The batch's own note stays next to it: where it stopped and "
                       "how to continue (next, notRun, heavy). So the answers of a long run stay out of the conversation. Read the result of a call from the file when its "
                       "line needs it. Every batch keeps what ran in its own record, batches/<date>-<time>.json in the session's folder. record in the answer is its path; the "
@@ -3557,7 +3521,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "first. It shows which calls ran: running: true and ran: n while under way, and each call's whole result in results. Run nothing again before that. "
                       "Chaining keeps an answer that one call needs from another out of the conversation. (1) A call can have writeTo: { tool, <its inputs>, writeTo: \"outline.json\" } "
                       "writes the whole answer of that call to the .json file. A relative path is in the session's folder; it is written where tools can write. Its result "
-                      "here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had a verdict }. A refused call writes nothing, "
+                      "here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had facts }. A refused call writes nothing, "
                       "and a rollback leaves the files. (2) Anywhere in the inputs of a call, { \"$file\": \"outline.json\" } becomes the contents of that JSON file. { "
                       "\"$file\": \"outline.json\", \"$at\": \"loops.0.points\" } becomes the part at that dotted path of keys and list indices (from 0; -1 is the last). The file is "
                       "read as the call starts, so an earlier call of this batch can write it. It is read where tools can read. (3) { \"$from\": 2, \"$at\": \"bodies.0.name\" } "
@@ -3576,8 +3540,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "batch stops there as at a refusal (buildFailed: true). With rollback, the whole batch is taken back. guide_read, tool_groups, usage_report and "
                       "job_status run inside a held run without a build. If the person has Skip recomputes on already, nothing is held or built, and buildNote says so. Use "
                       "build for a sketch drawn and constrained in many calls, or many properties set. Not when each call's reading is important. lines: \"refused\" (with writeTo): "
-                      "the answer lists only refused calls and calls whose health is not clean. The others are counts { ok, refused }. Use it for a long run whose answers "
-                      "you read from the file. lines: \"all\" (the default) keeps one line for each call. lines: \"counts\": only the counts. A batch from a file answers that "
+                      "the answer lists only refused calls and calls whose health has recompute errors (health.errors). The others are counts { ok, refused }. "
+                      "lines: \"all\" (the default) keeps one line for each call. lines: \"counts\": only the counts. A batch from a file answers that "
                       "way also without writeTo, from its record. written names it; a line for each call unless lines says otherwise. So does a batch of calls given lines. lines: "
                       "\"full\" gives the whole answer of every call in the answer instead (with writeTo, also written there). record_read { path, at } reads a part of a "
                       "record or a writeTo file back. title: a few words for the person; the record keeps it. A gui_input that "

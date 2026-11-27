@@ -556,14 +556,12 @@ def _owner_ok(own, sub, what):
 
 
 def status_words(o):
-    """FreeCAD's status of a failed object, in plain words where known."""
+    """FreeCAD's status of a failed object, word for word (27 Nov, facts
+    only: no other words are put in its place)."""
     try:
-        raw = o.getStatusString()
+        return o.getStatusString()
     except Exception:
-        raw = "invalid"
-    from .. import fusehint
-
-    return fusehint.plain_error(o, raw)
+        return "invalid"
 
 
 def _planes_there(body):

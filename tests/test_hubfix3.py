@@ -714,7 +714,7 @@ class CompactLineSizes(unittest.TestCase):
         # say: nothing rides on every line beyond those three.
         name = "part_primitive"
         read = {"tool": name, "ok": True, "result": {"volume": 1000.0, "faces": list(range(200)), "ms": 12}}
-        made = {"tool": name, "ok": True, "result": {"body": "Bracket", "around": {"wall": 900}, "health": {"ok": True, "verdict": "Bracket: valid, closed, 1 solid", "msBy": {"shapes": 700}}}}
+        made = {"tool": name, "ok": True, "result": {"body": "Bracket", "around": {"wall": 900}, "health": {"facts": "Bracket: valid, closed, 1 solid", "msBy": {"shapes": 700}}}}
         rep = self.reply([read, made] * 50)
         sizes = [len(compact(r).encode()) for r in rep["results"]]
         self.assertEqual(set(rep["results"][0]), {"i", "tool", "ok"})

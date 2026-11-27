@@ -315,8 +315,8 @@ class Renames(unittest.TestCase):
             self.assertFalse(g[k]["isError"], (k, g[k]))
         self.assertEqual(g["findBatch"]["body"]["results"][0]["result"]["tools"][0]["tool"], "pd_pad")
         self.assertEqual(g["groupsRun"]["body"]["tools"][0]["tool"], "pd_pad")
-        self.assertTrue(g["findFast"]["body"]["fast"].startswith("ok 1 call"))
-        self.assertTrue(g["groupsFast"]["body"]["fast"].startswith("ok 1 call"))
+        self.assertTrue(g["findFast"]["body"]["fast"].startswith("ran 1 call"))
+        self.assertTrue(g["groupsFast"]["body"]["fast"].startswith("ran 1 call"))
 
     def test_job_start_takes_job_in_run_and_its_own_words_in_batch_and_fast(self):
         g = hub()

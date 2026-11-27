@@ -775,13 +775,18 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         if not ok:
             self.verdict.setText("Could not check: " + (out.get("error") or {}).get("message", ""))
             return
-        sound = out.get("ok")
+        # body_check gives FreeCAD's checks as facts (27 Nov): the tab's own
+        # word for the person is made here, from valid, closed and Check Geometry.
+        cg = out.get("checkGeometry") if isinstance(out.get("checkGeometry"), dict) else {}
+        sound = bool(out.get("valid")) and bool(out.get("closed")) and not cg.get("errors")
         colour = self._roles()["ok" if sound else "bad"]
         self.verdict.setText(f"<span style='color:{colour}'>{'SOUND' if sound else 'NOT SOUND'}</span> — {body}" + ("" if hooks_reviewers() else f" ({NO_REVIEWER})"))
         self._last_findings = []
-        for msg in out.get("problems") or []:
+        found = [f"FreeCAD's Check Geometry: {m}" for m in (cg.get("errors") or [])]
+        found += ([] if out.get("valid") else ["The shape is not valid (Shape.isValid)."]) + ([] if out.get("closed") else ["The shape is not closed."])
+        for msg in found:
             self.findings.addTopLevelItem(QtWidgets.QTreeWidgetItem(["✗", str(msg), ""]))
-        if not out.get("problems"):
+        if not found:
             self.findings.addTopLevelItem(QtWidgets.QTreeWidgetItem(["", "Nothing found", ""]))
         self.figures.setText("  ·  ".join(f"{k} {out[k]}" for k in ("solids", "volume", "area") if k in out))
 

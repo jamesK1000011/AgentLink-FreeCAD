@@ -67,7 +67,7 @@ class SameCalls(unittest.TestCase):
         g = flat()
         self.assertEqual([r["result"]["n"] for r in g["batchSame"]["body"]["results"]], [1, 2])
         self.assertFalse(g["fastSame"]["isError"])
-        self.assertTrue(g["fastSame"]["body"]["fast"].startswith("ok 2 calls"))
+        self.assertTrue(g["fastSame"]["body"]["fast"].startswith("ran 2 calls"))
         self.assertEqual(len(g["fastSame"]["body"]["made"]), 2)
 
     def test_fast_and_batch_refuse_do(self):
@@ -84,7 +84,7 @@ class Loops(unittest.TestCase):
         g = flat()
         self.assertEqual([r["result"]["n"] for r in g["eachRun"]["body"]["results"]], [15, 45])
         self.assertEqual(g["eachBatch"]["body"]["done"], [0, 1])
-        self.assertEqual(g["eachFast"]["body"]["fast"].split(" calls")[0], "ok 3")
+        self.assertEqual(g["eachFast"]["body"]["fast"].split(" calls")[0], "ran 3")
 
     def test_the_variable_is_set_as_a_scalar_and_inside_a_list(self):
         seen = {(t, json.dumps(a, sort_keys=True)) for t, a in g_seen()}

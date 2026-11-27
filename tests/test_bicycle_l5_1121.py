@@ -271,25 +271,6 @@ def _feat(label, type_="PartDesign::AdditivePipe", refine=True):
 class RefineOnAWeldment(unittest.TestCase):
     """Finding 4."""
 
-    def test_the_todo_names_refine_off(self):
-        sys.path.insert(0, ROOT)
-        from agentlink import fusehint
-
-        pipes = [_feat(f"Pipe{i:03d}") for i in range(12)]
-        body = types.SimpleNamespace(TypeId="PartDesign::Body", Label="Frame", Group=pipes)
-        t = fusehint.refine_todo(body, "")
-        self.assertIn('Refine off on the features (object_set { object: "Pipe000", values: { Refine: false } } on each: '
-                      "Pipe000, Pipe001, Pipe002, Pipe003, Pipe004 and 7 more), then rebuild (recompute) and body_check { body: \"Frame\" }", t)
-        self.assertIn("a weldment of many tube members (12)", t)
-        # few pipes: only when the check says unorientable
-        few = types.SimpleNamespace(TypeId="PartDesign::Body", Label="Lug", Group=pipes[:2])
-        self.assertIsNone(fusehint.refine_todo(few, "NOT valid"))
-        self.assertIn("Refine off", fusehint.refine_todo(few, "FreeCAD's Check Geometry: Unorientable Shape"))
-        # Refine already off: nothing to say
-        off = types.SimpleNamespace(TypeId="PartDesign::Body", Label="Off", Group=[_feat(f"P{i}", refine=False) for i in range(12)])
-        self.assertIsNone(fusehint.refine_todo(off, "unorientable"))
-        self.assertIsNone(fusehint.refine_todo(types.SimpleNamespace(TypeId="Part::Feature", Label="X"), "unorientable"))
-
     def test_a_pipe_is_made_with_refine_off(self):
         got = sk2('''
             from agentlink.families import feature as F

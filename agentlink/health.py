@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The shared health check: what FreeCAD itself says went red or yellow after
-# a changing call, read from its own state (no screenshot) and returned with
-# the answer as "health": a verdict in words, and short lists of what to fix.
+# The shared health check: what FreeCAD itself reports after a changing
+# call, read from its own state (no screenshot) and returned with the answer
+# as "health". Facts only (27 Nov): health.facts is one text of facts, each
+# with its source first (recompute, state, solver, shape, Check Geometry,
+# measured, window, or a family's name). There is no ok, no verdict, no
+# todo and no advice: nothing in it grades the result.
 #
 #   - object State flags and recompute errors (the tree's red and yellow
 #     badges): which objects failed and FreeCAD's reason, which still need a
@@ -24,8 +27,6 @@
 #     open in edit and its freedom, a task panel and its buttons, the
 #     workbench, tools whose FreeCAD commands are active), said when it is
 #     not what was last said (agentlink/nexthint.py);
-#   - "practice": modelling-practice advice (agentlink/practice.py), said once
-#     for each object and kind, never red.
 #
 # One place runs it (protocol.Server._call, round every changing tool), so a
 # tool gets it without doing anything. It only reads; it has a time budget
@@ -36,7 +37,19 @@ import os
 import re
 import time
 
-from .once import HEALTH_TODOS  # the advice said once a conversation (agentlink/once.py)
+# What health.facts says when no fact is news: the state pass ran on every
+# object and FreeCAD reports no recompute error.
+NOTHING = "recompute: FreeCAD reports no recompute error"
+# Whether the last check read a fault that FreeCAD reports (a recompute
+# error, a shape that is not valid or not closed, conflicting, redundant or
+# malformed constraints, an open dialog): a repeated reading with one is
+# never left out as "nothing new" (agentlink/once.py).
+_last = {"fault": False}
+
+
+def last_fault():
+    return bool(_last.get("fault"))
+
 
 BUDGET_S = 1.5        # the whole check, after which the rest is named as unchecked
 MAX_OBJECTS = 4000    # State flags are read on at most this many objects
@@ -541,9 +554,9 @@ def sketch_reading(sk):
     if red:
         for key in ("conflicting", "redundant", "malformed"):
             if key in lists:
-                ids = ", ".join(f"#{i}" for i in lists[key][:MAX_LIST]) + (" …" if len(lists[key]) > MAX_LIST else "")
+                more = len(lists[key]) - MAX_LIST
+                ids = ", ".join(f"#{i}" for i in lists[key][:MAX_LIST]) + (f" and {more} more ({len(lists[key])} in all)" if more > 0 else "")
                 words.append(f"{key} constraints {ids}")
-        r["todo"] = "sketch_state names each constraint; sketch_edit { deleteConstraints } removes one"
     elif n_geo == 0:
         words.append("empty")
     elif dof == 0:
@@ -554,6 +567,9 @@ def sketch_reading(sk):
         if free:
             r["free"] = free
             words.append(f"{dof} DoF left on {', '.join(free)}{' …' if n > len(free) else ''}")
+        elif n_geo > SKETCH_GEO:
+            # a limit that is used is said: the free geometry is not read
+            words.append(f"{dof} DoF left (the free geometry is not named: {n_geo} geometries, over {SKETCH_GEO})")
         else:
             words.append(f"{dof} DoF left")
     r.update(lists)
@@ -563,7 +579,7 @@ def sketch_reading(sk):
         n_open = sum(1 for w in wires if not w.isClosed())
         if n_open:
             r["open"] = n_open
-            words.append(f"{n_open} open profile{'s' if n_open != 1 else ''}")
+            words.append(f"{n_open} open wire{'s' if n_open != 1 else ''}")
     except Exception:
         pass
     r["red"] = red
@@ -587,7 +603,7 @@ def _faces(sh):
 
 
 def _in_full(o):
-    return f'body_check {{ body: "{_label(o)}" }} runs it in full (as a job: background: true)'
+    return f'body_check {{ body: "{_label(o)}" }} runs it in full'
 
 
 def shape_reading(o, deadline, doc_name=""):
@@ -600,7 +616,7 @@ def shape_reading(o, deadline, doc_name=""):
     except Exception:
         return None
     if sh is None or sh.isNull():
-        r.update(red=True, line=f"{r['object']}: empty shape", todo="the step made nothing: check its inputs, or history_undo")
+        r.update(red=True, line=f"{r['object']}: empty shape")
         return r
     n = _faces(sh)
     words, skipped = [], []
@@ -610,7 +626,7 @@ def shape_reading(o, deadline, doc_name=""):
         solids = []
     slow_valid = was_slow(doc_name, o, "valid")
     if n > FACES_VALID:
-        skipped.append(f"validity ({n} faces, over {FACES_VALID}): body_check as a job")
+        skipped.append(f"validity ({n} faces, over {FACES_VALID})")
     elif slow_valid is not None:
         skipped.append(f"validity (it took {slow_valid:g} s on this shape before): {_in_full(o)}")
     else:
@@ -618,28 +634,6 @@ def shape_reading(o, deadline, doc_name=""):
         words.append("valid" if valid else "NOT valid")
         if not valid:
             r["red"] = True
-            r["todo"] = "the last step left a broken shape: history_undo and rebuild it another way; body_check says where"
-            # An additive step (pad, pipe, revolution, loft) or a fuse: the
-            # step, the design rule and tube bores that end inside the new
-            # solid (bicycle finding 7). Only here, on an invalid shape.
-            try:
-                from . import fusehint
-
-                fh = fusehint.for_invalid(o)
-            except Exception:
-                fh = None
-            if fh:
-                words.append(fh["line"])
-                r["todo"] = fh["todo"]
-                r["fuse"] = {k: fh[k] for k in ("feature", "kind", "bores")}
-            try:
-                from . import fusehint
-
-                rt = fusehint.refine_todo(o, " ".join(str(w) for w in words))
-            except Exception:
-                rt = None
-            if rt:
-                r["todo"] = rt
     if solids:
         try:
             closed = all(s.isClosed() for s in sh.Shells)
@@ -649,11 +643,9 @@ def shape_reading(o, deadline, doc_name=""):
             words.append("closed" if closed else "NOT closed")
             if not closed:
                 r["red"] = True
-                r.setdefault("todo", "open edges: the solid has no inside — body_check names them")
         if len(solids) != 1:
             # FreeCAD 1.1 allows a Body of several solids (AllowCompound, on
-            # by default), so it cannot say whether they are meant: yellow,
-            # never passed over.
+            # by default): the count is said, with the property.
             allowed = False
             try:
                 allowed = bool(getattr(o, "AllowCompound", False)) and o.TypeId == "PartDesign::Body"
@@ -668,10 +660,9 @@ def shape_reading(o, deadline, doc_name=""):
             vol = float(sh.Volume)
         except Exception:
             vol = None
-        if vol is not None and vol <= 1e-9:
-            words.append(f"volume {vol:.4g} mm³: inside out")
+        if vol is not None and vol <= 0:
+            words.append(f"volume {vol:.4g} mm³")  # the measured number: not above 0
             r["red"] = True
-            r.setdefault("todo", "a solid with no positive volume is turned inside out or broken: part_fix { op: \"reverse\" } turns it, or history_undo")
     else:
         try:
             kind = sh.ShapeType.lower()
@@ -685,7 +676,7 @@ def shape_reading(o, deadline, doc_name=""):
     elif n <= FACES_SELF and not r["red"] and slow_self is not None:
         skipped.append(f"FreeCAD's geometry check (it took {slow_self:g} s on this shape before): {_in_full(o)}")
     elif n <= FACES_SELF and not r["red"] and freeform(sh, FREEFORM_MAX) > FREEFORM_MAX:
-        skipped.append(f"FreeCAD's geometry check (large free-form faces, a sweep or a loft: its self-intersection pass can take minutes): {_in_full(o)}")
+        skipped.append(f"FreeCAD's geometry check (free-form faces with more than {FREEFORM_MAX} control points): {_in_full(o)}")
     elif n <= FACES_SELF and not r["red"]:
         try:
             from . import geometry as geo
@@ -704,16 +695,12 @@ def shape_reading(o, deadline, doc_name=""):
 
             ok, said = timed(doc_name, o, "check", run_check)
             said = [ln for ln in said if "found the following errors" not in ln]
-            if ok is False and geo.soft_bop(said):
-                # A tolerance finding on a shape BRepCheck calls valid (a
-                # curve off its surface where two features meet): body_check
-                # words it as a warning, and so it is no red here.
+            if ok is False:
+                # FreeCAD's own words, whatever the finding (body_check gives
+                # them all, with where).
                 r["amber"] = True
-                words.append("a tolerance finding in FreeCAD's geometry check (body_check says where)")
-            elif ok is False:
-                words.append(f"FreeCAD's geometry check: {(said[0] if said else 'failed')[:120]}")
-                r["red"] = True
-                r["todo"] = "body_check names the faces; change the step that made them (a smaller fillet, a profile that does not cross itself)"
+                r["red"] = r["red"] or not geo.soft_bop(said)
+                words.append(f"Check Geometry reports {(said[0] if said else 'an error')[:120]}" + (f" and {len(said) - 1} more" if len(said) > 1 else ""))
         except Exception:
             pass
     elif n > FACES_SELF and n <= FACES_VALID:
@@ -881,14 +868,18 @@ def overlaps(changed, parts, deadline, doc_name=None, keys=None, counts=None):
                     skipped.append(f"{_label(a)} × {_label(b)} (over {FACES_OVERLAP} faces)")
                     counts["skipped"] += 1
                     continue
-                if tried >= MAX_PAIRS or time.time() > deadline:
-                    skipped.append(f"{_label(a)} × {_label(b)} (out of time)")
+                if tried >= MAX_PAIRS:
+                    skipped.append(f"{_label(a)} × {_label(b)} (the pass tests {MAX_PAIRS} pairs at most)")
+                    counts["skipped"] += 1
+                    continue
+                if time.time() > deadline:
+                    skipped.append(f"{_label(a)} × {_label(b)} (out of time: the pass has {OVERLAP_S:g} s)")
                     counts["skipped"] += 1
                     continue
                 # A boolean on large free-form faces (a swept spring) can
                 # take many seconds and cannot be stopped: left to clearance.
                 if weight(a, sa) + weight(b, sb) > FREEFORM_MAX:
-                    skipped.append(f"{_label(a)} × {_label(b)} (large free-form faces)")
+                    skipped.append(f"{_label(a)} × {_label(b)} (free-form faces with more than {FREEFORM_MAX} control points)")
                     counts["skipped"] += 1
                     continue
                 tried += 1
@@ -897,7 +888,7 @@ def overlaps(changed, parts, deadline, doc_name=None, keys=None, counts=None):
                 if vol > 1e-3:
                     box = [round(bb.XLength, 2), round(bb.YLength, 2), round(bb.ZLength, 2)] if bb is not None else [0, 0, 0]
                     out.append({"a": _label(a), "b": _label(b), "volume": round(vol, 2), "box": box,
-                                "line": f"{_label(a)} interferes with {_label(b)}: {round(vol, 2):g} mm³ in a box {box[0]:g} × {box[1]:g} × {box[2]:g} mm"})
+                                "line": f"{_label(a)} and {_label(b)} share {round(vol, 2):g} mm³ in a box {box[0]:g} × {box[1]:g} × {box[2]:g} mm"})
             except Exception:
                 continue
     return out, skipped
@@ -1040,8 +1031,8 @@ def _targets(args):
 
 def check(session, tool, m, args=None):
     """The health of the document after a changing call, or None when the
-    call recomputed nothing and nothing is red (attach() then says "nothing
-    red", so every changing call's answer carries a health). m: mark()'s.
+    call has no fact that is news (attach() then gives NOTHING, so every
+    changing call's answer carries a health). m: mark()'s.
     args: the call's arguments, when known: a sketch tool's call that names
     its sketch reads out that sketch, and the others only when they changed."""
     if m is None:
@@ -1068,7 +1059,7 @@ def check(session, tool, m, args=None):
     changed = [o for o in objs if o.Name in touched_names]  # in the document's order
     left_waiting = waiting(m, doc_name)
 
-    h, lines, todos, unchecked = {}, [], [], []
+    h, lines, unchecked = {}, [], []
     red = False
     by, lap = {}, [time.time()]
 
@@ -1078,24 +1069,13 @@ def check(session, tool, m, args=None):
         lap[0] = now
 
     # 1. State flags and recompute errors.
-    errors, pending, lost = [], [], []
+    errors, pending = [], []
     if len(objs) <= MAX_OBJECTS:
         for o in objs:
             why = _failing(o)
             if why:
-                # FreeCAD's words for a lost face or edge, in plain words (decision 5, 23 Nov).
-                try:
-                    from . import fusehint
-
-                    pl = fusehint.lost_ref(o, why)
-                except Exception:
-                    pl = None
-                if pl:
-                    why = pl["words"]
-                    if o.Name not in before_bad:
-                        lost.append(pl["todo"])
-                errors.append({"object": _label(o), "type": _short(o), "error": why[:200], **({} if o.Name in before_bad else {"new": True}),
-                               **({"plain": True} if pl else {})})
+                # FreeCAD's own reason, word for word.
+                errors.append({"object": _label(o), "type": _short(o), "error": why[:200], **({} if o.Name in before_bad else {"new": True})})
             else:
                 try:
                     # Still touched after the call recomputed it is that
@@ -1111,40 +1091,22 @@ def check(session, tool, m, args=None):
                 except Exception:
                     pass
     else:
-        unchecked.append(f"State flags ({len(objs)} objects, over {MAX_OBJECTS}): recompute lists the failing ones")
+        unchecked.append(f"State flags ({len(objs)} objects, over {MAX_OBJECTS})")
     if errors:
         red = True
         new = [e for e in errors if e.get("new")]
         old = len(errors) - len(new)
         show = (new or errors)[:MAX_LIST]
         if new:
-            # A plain-word reason is said whole and first: it is the cause of those after it.
-            show = sorted(show, key=lambda e: not e.get("plain"))
-            h["errors"] = [{k: v for k, v in e.items() if k != "plain"} for e in show]  # failures that were there before are named, not listed again each call
-            lines.append(f"{len(new)} object{'s' if len(new) != 1 else ''} failed to recompute: "
-                         + "; ".join(e["error"] if e.get("plain") else f"{e['object']} ({e['error'][:80]})" for e in show[:3]) + (" …" if len(new) > 3 else "")
+            h["errors"] = list(show)  # failures that were there before are named, not listed again each call
+            lines.append(f"recompute: {len(new)} object{'s' if len(new) != 1 else ''} failed to recompute: "
+                         + "; ".join(f"{e['object']} ({e['error'][:80]})" for e in show[:3]) + (f" and {len(new) - 3} more" if len(new) > 3 else "")
                          + (f" — {old} more were failing before this call" if old else ""))
-            todos.extend(lost[:1])
-            todos.append("fix the input of the first failed object (those after it fail because of it), or history_undo")
-            # An additive step or a fuse whose result is not a valid solid: the design rule (bicycle finding 7).
-            try:
-                from . import fusehint
-
-                for e in new[:MAX_LIST]:
-                    o = next((x for x in objs if _label(x) == e["object"]), None)
-                    t = fusehint.for_error(o, e["error"]) if o is not None else None
-                    if t:
-                        todos.insert(len(todos) - 1, t)
-                        break
-            except Exception:
-                pass
         else:
-            lines.append(f"{old} object{'s' if old != 1 else ''} still failing from before this call: " + ", ".join(e["object"] for e in show[:3]) + (" …" if old > 3 else ""))
-            todos.append(HEALTH_TODOS["failing"])
+            lines.append(f"recompute: {old} object{'s' if old != 1 else ''} still failing from before this call: " + ", ".join(e["object"] for e in show[:3]) + (f" and {old - 3} more" if old > 3 else ""))
     if pending:
         h["needRecompute"] = pending[:MAX_LIST] + ([f"… {len(pending) - MAX_LIST} more"] if len(pending) > MAX_LIST else [])
-        lines.append(f"{len(pending)} object{'s' if len(pending) != 1 else ''} not recomputed yet")
-        todos.append("recompute brings them up to date")
+        lines.append(f"state: {len(pending)} object{'s' if len(pending) != 1 else ''} not recomputed yet (State Touched)")
 
     failing_now = {e["object"] for e in errors}
     took("state")
@@ -1180,18 +1142,17 @@ def check(session, tool, m, args=None):
                 continue  # made by the call, with nothing to do on it
         if r["red"]:
             red = True
-            lines.append(r["line"])
-            todos.append(r.get("todo"))
+            lines.append("solver: " + r["line"])
             h.setdefault("sketches", []).append({k: r[k] for k in ("sketch", "conflicting", "redundant", "partiallyRedundant", "malformed") if k in r})
         elif r.get("amber"):
             # Which geometry is free, for the first sketch only: the others
             # say their count (sketch_state names it for each).
-            amber.append(r["line"] if not amber_sketches else (r.get("short") or r["line"]))
+            amber.append("solver: " + (r["line"] if not amber_sketches else (r.get("short") or r["line"])))
             amber_sketches += 1
         elif r.get("line"):
-            fine.append(("sketch", r["state"] or "ok", r["line"]))
+            fine.append(("sketch", r["state"] or "read", "solver: " + r["line"]))
     if len(sketches) > MAX_SKETCHES:
-        unchecked.append(f"{len(sketches) - MAX_SKETCHES} more sketches: sketch_state")
+        unchecked.append(f"{len(sketches) - MAX_SKETCHES} more sketches (the check reads {MAX_SKETCHES} at most)")
 
     took("sketches")
 
@@ -1230,23 +1191,22 @@ def check(session, tool, m, args=None):
             continue
         if r["red"]:
             red = True
-            lines.append(r["line"])
-            todos.append(r.get("todo"))
-            if r.get("fuse"):
-                h.setdefault("invalidAfter", []).append({"object": r["object"], **r["fuse"]})
+            lines.append("shape: " + r["line"])
         elif r.get("amber"):
-            amber.append(r["line"])
+            amber.append("shape: " + r["line"])
         else:
-            fine.append(("part", r["line"].split(": ", 1)[1], r["line"]))
+            fine.append(("part", r["line"].split(": ", 1)[1], "shape: " + r["line"]))
         unchecked += [f"{r['object']}: {u}" for u in r.get("unchecked", [])]
-    late += max(0, len(todo_parts) - MAX_SHAPES)
+    over = max(0, len(todo_parts) - MAX_SHAPES)
     if late:
-        unchecked.append(f"{late} more part{'s' if late != 1 else ''}' shapes (out of time): body_check")
+        unchecked.append(f"{late} more part{'s' if late != 1 else ''}' shapes (out of time: the check has {BUDGET_S:g} s)")
+    if over:
+        unchecked.append(f"{over} more part{'s' if over != 1 else ''}' shapes (the check reads {MAX_SHAPES} at most)")
 
     took("shapes")
     lines += amber[:MAX_AMBER]
     if len(amber) > MAX_AMBER:
-        lines.append(f"{len(amber) - MAX_AMBER} more with freedom left or several solids (sketch_state, body_check)")
+        lines.append(f"{len(amber) - MAX_AMBER} more sketch or shape readings are not shown (this text shows {MAX_AMBER}; sketch_state and body_check read each)")
     if len(fine) <= 2:
         lines += [x[2] for x in fine]
     else:
@@ -1254,12 +1214,12 @@ def check(session, tool, m, args=None):
         for kind, state, _line in fine:
             tally[(kind, state)] = tally.get((kind, state), 0) + 1
         plural = {"sketch": "sketches", "part": "parts"}
-        lines += [f"{n} {plural[kind] if n != 1 else kind} {state}" for (kind, state), n in tally.items() if state != "empty"]
+        source = {"sketch": "solver", "part": "shape"}
+        lines += [f"{source[kind]}: {n} {plural[kind] if n != 1 else kind} {state}" for (kind, state), n in tally.items() if state != "empty"]
 
-    # 4. Interference between the changed parts and the others.
-    # Yellow, not red: in Part work a body laid over another is the next
-    # boolean's tool, and only the person or agent knows which it is. An
-    # assembly's overlaps are asm_check's, which knows a thread from a clash.
+    # 4. The volume the changed parts share with the others: a measured
+    # fact, with no word on whether it is meant. An assembly's overlaps are
+    # asm_check's.
     pair_counts = {}
     if todo_parts and len(parts) > 1:
         try:
@@ -1268,12 +1228,11 @@ def check(session, tool, m, args=None):
         except Exception:
             hits, skipped = [], []
         if hits:
-            lines += [x["line"] for x in hits[:2]]
+            lines += ["measured: " + x["line"] for x in hits[:2]]
             if len(hits) > 2:
-                lines.append(f"{len(hits) - 2} more overlaps")
-            todos.append(HEALTH_TODOS["overlap"])
+                lines.append(f"measured: {len(hits) - 2} more pairs of parts share volume (this text shows 2)")
         if skipped:
-            unchecked.append("interference of " + "; ".join(skipped[:3]) + (" …" if len(skipped) > 3 else "") + ": clearance")
+            unchecked.append("shared volume of " + "; ".join(skipped[:3]) + (f" and {len(skipped) - 3} more pairs" if len(skipped) > 3 else ""))
 
     took("overlap")
 
@@ -1282,11 +1241,9 @@ def check(session, tool, m, args=None):
         try:
             for x in fn(session, tool, changed) or []:
                 if x.get("line"):
-                    lines.append(str(x["line"])[:240])
+                    lines.append(f"{_owner}: " + str(x["line"])[:240])
                 if x.get("red"):
                     red = True
-                    if x.get("todo"):
-                        todos.append(x["todo"])
         except Exception:
             continue
 
@@ -1296,14 +1253,13 @@ def check(session, tool, m, args=None):
     w = window()
     if w.get("dialog"):
         red = True
-        lines.append(f"a dialog is open in the window: {w['dialog']}")
-        todos.append("dialog_answer reads it and presses a button")
+        lines.append(f"window: a dialog is open: {w['dialog']}")
     # The Sketcher panel's solver message is the open sketch's standing
     # state, read above when the call recomputed it and no news when it did not.
     task = [t for t in (w.get("task") or []) if not SOLVER_LABEL.search(t)]
     if task:
         h["taskPanel"] = task
-        lines.append("the task panel says: " + " | ".join(task[:2]))
+        lines.append("window: the task panel says: " + " | ".join(task[:2]) + (f" and {len(task) - 2} more (taskPanel)" if len(task) > 2 else ""))
     if w.get("status"):
         h["statusBar"] = w["status"]
 
@@ -1325,49 +1281,17 @@ def check(session, tool, m, args=None):
 
     took("window")
 
-    # 8. Modelling practice (agentlink/practice.py): advice, never red, said
-    # once for each object and kind; nothing when nothing fires.
-    advice = []
-    if changed and len(objs) <= MAX_OBJECTS and time.time() < deadline:
-        try:
-            from . import practice
-
-            name = getattr(tool, "name", tool)
-            if name == "part_boolean":
-                practice.count_booleans(session, doc_name, [_label(o) for o in changed if getattr(o, "TypeId", "") in ("Part::Feature", "PartDesign::Body")
-                                                            and getattr(o, "Visibility", True)])
-            others = 0
-            try:
-                import FreeCAD
-
-                others = max(0, len(FreeCAD.listDocuments()) - 1)
-            except Exception:
-                others = 0
-            found = practice.findings(objs, parts, others, practice.booleans_of(session, doc_name))
-            said = practice.news(session, doc_name, found)
-            advice = said[:practice.MAX_LINES]
-            if len(said) > practice.MAX_LINES:
-                advice.append(f"{len(said) - practice.MAX_LINES} more: body_check names them")
-        except Exception:
-            advice = []
-    took("practice")
-    if not lines and not unchecked and not nxt and not advice:
+    _last["fault"] = bool(red)
+    if not lines and not unchecked and not nxt:
         return None
-    out = {"ok": not red, "verdict": "; ".join(lines) if lines else "nothing red"}
-    if unchecked:
-        # Said in the verdict too: a reading that left a check out is not
-        # the same as one that ran it.
-        out["verdict"] += f"; {len(unchecked)} check{'s' if len(unchecked) != 1 else ''} not run here (unchecked names {'them' if len(unchecked) != 1 else 'it'} and the tool that does)"
+    out = {"facts": "; ".join(lines) if lines else NOTHING}
     if nxt:
         out["next"] = nxt
-    todos = [t for i, t in enumerate(todos) if t and t not in todos[:i]]
-    if todos:
-        out["todo"] = "; ".join(todos[:3])
     out.update(h)
-    if advice:
-        out["practice"] = advice
     if unchecked:
-        out["unchecked"] = unchecked[:MAX_LIST]
+        # Each check that a limit left out, with the limit: a reading that
+        # left a check out is not the same as one that ran it.
+        out["unchecked"] = unchecked[:MAX_LIST] + ([f"and {len(unchecked) - MAX_LIST} more checks not run"] if len(unchecked) > MAX_LIST else [])
     ms = int((time.time() - t0) * 1000)
     if ms >= 200:
         out["ms"] = ms
@@ -1386,9 +1310,8 @@ def check(session, tool, m, args=None):
 def attach(session, tool, m, out, args=None):
     """check() put onto a tool's answer as "health" (a dict answer only; an
     answer that already carries one keeps it): always there after a
-    changing call while the check is on — "nothing red" when there is
-    nothing to say, and the reason when the check itself failed. Never
-    raises."""
+    changing call while the check is on — NOTHING when no fact is news, and
+    the reason when the check itself failed. Never raises."""
     try:
         if m is None or not isinstance(out, dict) or "health" in out:
             _close(m)
@@ -1396,21 +1319,24 @@ def attach(session, tool, m, out, args=None):
                 _timed(session, out.get("health"))  # a batch's own health
             return out
         h = check(session, tool, m, args)
-        # Nothing recomputed and nothing red is said too: an answer of a
-        # changing call with no health at all read as a check that did not
-        # run (a drawing with a section, live).
-        out["health"] = _timed(session, h if h is not None else {"ok": True, "verdict": "nothing red"})
+        # No news is said too: an answer of a changing call with no health
+        # at all read as a check that did not run (a drawing with a
+        # section, live).
+        if h is None:
+            _last["fault"] = False
+        out["health"] = _timed(session, h if h is not None else {"facts": NOTHING})
     except Exception as e:
         _close(m)
         try:
-            out["health"] = {"ok": None, "verdict": f"the health check did not run ({type(e).__name__}: {str(e)[:120]}): recompute lists what is failing; body_check and sketch_state read the result"}
+            _last["fault"] = True
+            out["health"] = {"facts": f"the health check did not run ({type(e).__name__}: {str(e)[:120]})"}
         except Exception:
             pass
     return out
 
 
 def _timed(session, h):
-    """The run's time line at the end of the verdict when a time limit is
+    """The run's time line at the end of health.facts when a time limit is
     set (agentlink/timelimit.py, AGENTLINK_TIME_LIMIT_MIN); a call inside a
     batch leaves it to the batch's own answer. Never raises."""
     try:
@@ -1450,12 +1376,12 @@ def drop(m):
 
 
 def note_report(body, lines):
-    """New Report view problem lines counted in the verdict of an answer in
+    """New Report view problem lines counted in health.facts of an answer in
     hand (they come back whole as "report")."""
     try:
         n = len(lines or [])
         h = body.get("health")
         if n and isinstance(h, dict):
-            h["verdict"] = f"{h.get('verdict', '')}; {n} new Report view line{'s' if n != 1 else ''} (see report)".lstrip("; ")
+            h["facts"] = f"{h.get('facts', '')}; report view: {n} new line{'s' if n != 1 else ''} (see report)".lstrip("; ")
     except Exception:
         pass

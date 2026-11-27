@@ -22,7 +22,7 @@ ROOT = os.path.dirname(TESTS)
 sys.path.insert(0, ROOT)
 sys.path.insert(0, TESTS)
 
-from agentlink import exprs, fusehint  # noqa: E402
+from agentlink import exprs  # noqa: E402
 
 
 def child(*parts):
@@ -128,133 +128,6 @@ class BindByName(unittest.TestCase):
             print(json.dumps(out))
         ''')
         self.assertEqual(got, ["ok", "ok", "ok"])
-
-
-# ---- finding 7: an additive step that leaves the body invalid ------------------------------
-
-class V:
-    def __init__(self, x, y, z):
-        self.x, self.y, self.z = float(x), float(y), float(z)
-
-
-class Cyl:
-    """Part's cylinder surface, as fusehint reads it."""
-
-    def __init__(self, centre, axis, radius):
-        self.Center, self.Axis, self.Radius = V(*centre), V(*axis), radius
-
-
-Cyl.__name__ = "Cylinder"
-
-
-class Face:
-    """A cylinder face of a tube along x from x0 to x1 at y, z = 0: inner
-    (normal to the axis) or outer."""
-
-    def __init__(self, x0, x1, r, inner, along=(1, 0, 0)):
-        self.Surface = Cyl((0, 0, 0), along, r)
-        self.x0, self.x1, self.r, self.inner, self.along = x0, x1, r, inner, along
-        self.ParameterRange = (0.0, 6.283185, x0, x1)
-
-    def valueAt(self, u, v):
-        import math
-
-        a = self.along
-        if a == (1, 0, 0):
-            return V(v, self.r * math.cos(u), self.r * math.sin(u))
-        return V(self.r * math.cos(u), v, self.r * math.sin(u))
-
-    def normalAt(self, u, v):
-        p = self.valueAt(u, v)
-        a = self.along
-        rad = (0, p.y, p.z) if a == (1, 0, 0) else (p.x, 0, p.z)
-        s = -1 if self.inner else 1
-        return V(*(s * c / self.r for c in rad))
-
-
-class Box:
-    """A solid: a box, with faces of its own."""
-
-    def __init__(self, lo, hi, faces=()):
-        self.lo, self.hi, self.Faces = lo, hi, list(faces)
-        self.Solids = [self]
-
-    def isInside(self, p, tol, on):
-        return all(self.lo[i] - tol <= c <= self.hi[i] + tol for i, c in enumerate((p.x, p.y, p.z)))
-
-
-class Feat:
-    def __init__(self, type_, name, label=None, **kw):
-        self.TypeId, self.Name, self.Label = type_, name, label or name
-        self.__dict__.update(kw)
-
-
-class FuseHint(unittest.TestCase):
-    def bike(self, base_faces):
-        tubes = Feat("PartDesign::Pipe", "Pipe", "Tubes", Shape=Box((-60, -60, -60), (60, 60, 60), base_faces))
-        lug = Feat("PartDesign::Pad", "Pad003", "Lug", BaseFeature=tubes, AddSubShape=Box((-10, -10, -10), (10, 10, 10)))
-        return Feat("PartDesign::Body", "Body", "Frame", Tip=lug), lug
-
-    def test_tube_ends_that_meet_inside_the_new_solid_are_named(self):
-        # two tubes, 4 mm bore, both end at x = 0 / y = 0: inside the 20 mm lug
-        faces = [Face(-60, 0, 5, False), Face(-60, 0, 4, True), Face(0, 60, 5, False, (0, 1, 0)), Face(0, 60, 4, True, (0, 1, 0))]
-        body, lug = self.bike(faces)
-        h = fusehint.for_invalid(body)
-        self.assertEqual(h["feature"], "Lug")
-        self.assertEqual(h["kind"], "pad")
-        self.assertEqual([b["face"] for b in h["bores"]], ["Face2", "Face4"])
-        self.assertTrue(all(b["of"] == "Tubes" for b in h["bores"]))
-        self.assertIn("end the tubes at the shell surface, or cut the bore after the fuse", h["todo"])
-        self.assertIn('body_check { body: "Frame" }', h["todo"])
-        self.assertIn("2 tube bores (Tubes Face2, Face4) end inside the new solid of Lug", h["line"])
-
-    def test_no_bore_inside_gives_the_plain_cause(self):
-        # blind QA 26 Nov: no tube bore found, so no tube rule (a crank has no tubes)
-        faces = [Face(-60, -30, 4, True)]      # a bore that ends far from the lug
-        body, _ = self.bike(faces)
-        h = fusehint.for_invalid(body)
-        self.assertEqual(h["bores"], [])
-        self.assertNotIn("tube", h["todo"])
-        self.assertEqual(h["todo"], 'Lug (pad) left the shape invalid: the sketch can have loops that cross or touch (sketch_state names them); '
-                                    'history_undo, change the sketch, then body_check { body: "Frame" } to confirm')
-        self.assertEqual(h["line"], "after Lug (pad)")
-        body.Shape = Box((0, 0, 0), (1, 1, 1))
-        body.Shape.Solids = [1, 2]
-        self.assertTrue(fusehint.for_invalid(body)["todo"].startswith("Lug made 2 solids: the sketch can have loops that cross or touch"))
-
-    def test_part_fuse_of_hollow_tubes(self):
-        a = Feat("Part::Feature", "TubeA", Shape=Box((-60, -5, -5), (0, 5, 5), [Face(-60, 0, 4, True)]))
-        b = Feat("Part::Feature", "TubeB", Shape=Box((-5, 0, -5), (5, 60, 5), [Face(0, 60, 4, True, (0, 1, 0))]))
-        fuse = Feat("Part::MultiFuse", "Fusion", "Joint", Shapes=[a, b])
-        h = fusehint.for_invalid(fuse)
-        self.assertEqual(h["kind"], "fuse")
-        self.assertEqual(len(h["bores"]), 2)
-        self.assertIn('body_check { body: "Joint" }', h["todo"])
-
-    def test_other_steps_get_nothing(self):
-        body = Feat("PartDesign::Body", "Body", "Frame", Tip=Feat("PartDesign::Fillet", "Fillet", Base=None))
-        self.assertIsNone(fusehint.for_invalid(body))
-        self.assertIsNone(fusehint.for_invalid(Feat("Part::Cut", "Cut")))
-        self.assertIsNone(fusehint.for_invalid(None))
-
-    def test_an_error_of_an_additive_step(self):
-        faces = [Face(-60, 0, 5, False), Face(-60, 0, 4, True), Face(0, 60, 5, False, (0, 1, 0)), Face(0, 60, 4, True, (0, 1, 0))]
-        _, lug = self.bike(faces)
-        self.assertIn("cut the bore after the fuse", fusehint.for_error(lug, "Resulting shape is not a valid solid"))
-        plain = fusehint.for_error(Feat("PartDesign::Pad", "Pad"), "Resulting shape is not a valid solid")
-        self.assertNotIn("tube", plain)
-        self.assertIn("loops that cross or touch (sketch_state names them)", plain)
-        fuse = fusehint.for_error(Feat("Part::MultiFuse", "Fusion", Shapes=[]), "Resulting shape is not a valid solid")
-        self.assertEqual(fuse, "Fusion (fuse) left the shape invalid: history_undo, change it, then body_check says where the shape is broken")
-        self.assertIsNone(fusehint.for_error(Feat("PartDesign::Pad", "Pad"), "Sketch is not closed"))
-        self.assertIsNone(fusehint.for_error(Feat("PartDesign::Fillet", "Fillet"), "Resulting shape is invalid"))
-
-    def test_health_uses_it_only_on_an_invalid_shape(self):
-        src = open(os.path.join(ROOT, "agentlink", "health.py"), encoding="utf-8").read()
-        at = src.index("fusehint.for_invalid(")
-        self.assertLess(src.rindex("if not valid:", 0, at), at)      # only after isValid said no
-        self.assertEqual(src.count("fusehint.for_invalid("), 1)
-        self.assertIn("fusehint.for_error(", src)
 
 
 if __name__ == "__main__":

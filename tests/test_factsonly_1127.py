@@ -366,6 +366,62 @@ class OpinionOut(unittest.TestCase):
         self.assertEqual(got, "Base is used by Pad, so this change also changes Pad. Body also has sketches that no feature uses: Free4, Free3, Free2 and 2 more.")
 
 
+class HealthIsWhatFreeCADReports(unittest.TestCase):
+    """Decision 5: no ok, no verdict, no todo, no advice; each fact with its
+    source first; a limit that is used is said."""
+
+    def test_no_grade_and_no_advice_is_left_in_the_health_code(self):
+        h = source("health.py")
+        for gone in ('{"ok"', '"verdict"', "todos", "practice", "fusehint", "HEALTH_TODOS", "history_undo", "inside out", "nothing red"):
+            self.assertNotIn(gone, h, gone)
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "agentlink", "practice.py")))
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "agentlink", "fusehint.py")))
+        for src in ('lines.append(f"recompute: ', 'lines.append("solver: " + r["line"])', 'lines.append("shape: " + r["line"])', '"measured: " + x["line"]',
+                    'f"{_owner}: "', 'f"window: a dialog is open: '):
+            self.assertIn(src, h, src)
+
+    def test_a_limit_that_is_used_is_said_with_the_true_reason(self):
+        h = source("health.py")
+        self.assertIn("(the pass tests {MAX_PAIRS} pairs at most)", h)
+        self.assertIn("(out of time: the pass has {OVERLAP_S:g} s)", h)
+        self.assertIn("(the free geometry is not named: {n_geo} geometries, over {SKETCH_GEO})", h)
+        self.assertIn("more ({len(lists[key])} in all)", h)
+        self.assertIn("(the check reads {MAX_SHAPES} at most)", h)
+
+    def test_the_health_of_a_call_with_no_news(self):
+        from agentlink import health
+
+        self.assertEqual(health.NOTHING, "recompute: FreeCAD reports no recompute error")
+        out = health.attach(types.SimpleNamespace(doc=None), "pd_pad", {"depth": 0}, {})
+        self.assertEqual(out["health"], {"facts": health.NOTHING})
+
+    def test_body_check_reads_freecads_checks_only(self):
+        t = source("tools.py")
+        body = t[t.index("    def body_check(self, a):"):t.index("    def check_line(o, sh, s, said):")]
+        for gone in ("soundness", "narrow", "shortEdges", "practice", "problems", '"ok"', "refine_todo"):
+            self.assertNotIn(gone, body, gone)
+        card = t[t.index('Tool("body_check", "'):t.index("s.body_check),")]
+        self.assertNotIn("sound", card)
+        self.assertNotIn("sliver", card)
+        self.assertIn("checkGeometry", card)
+
+    def test_the_fast_summary_has_no_grade(self):
+        f = source("fastpath.py")
+        for gone in ('"clean"', "not clean", "check ok"):
+            self.assertNotIn(gone, f, gone)
+        self.assertIn('"no recompute error" if not run.health_bad', f)
+
+    def test_lines_refused_keeps_calls_with_a_recompute_error(self):
+        from agentlink import batchrec
+
+        got = {"results": [{"tool": "a", "ok": True, "result": {"health": {"facts": "shape: B: valid, closed, 2 solids"}}},
+                           {"tool": "b", "ok": True, "result": {"health": {"facts": "recompute: 1 object failed to recompute: Pad (x)", "errors": [{"object": "Pad"}]}}},
+                           {"tool": "c", "ok": False, "error": {"code": "failed", "message": "m"}}]}
+        out = batchrec.to_reply(got, 0, "p", 1, lines="refused")
+        self.assertEqual([r["i"] for r in out["results"]], [1, 2])
+        self.assertFalse(hasattr(batchrec, "clean_verdict"))
+
+
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
         self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")
