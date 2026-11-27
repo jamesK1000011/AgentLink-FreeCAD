@@ -2,7 +2,7 @@
 """Refusals that help a small model recover (22 Nov, research on small
 local models): every refusal has a kind and its fixed sentence; a batch
 refusal describes the call and does not paste it back; the server stops a
-tool after REPEAT_STOP refusals with no progress. Plain Python: no FreeCAD."""
+server keeps no count of equal refusals (27 Nov, facts only). Plain Python: no FreeCAD."""
 import json
 import os
 import sys
@@ -11,7 +11,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from agentlink import protocol  # noqa: E402
-from agentlink.protocol import (KIND_WORDS, REPEAT_STOP, Server, Tool, ToolError, failing_keys,  # noqa: E402
+from agentlink.protocol import (KIND_WORDS, Server, Tool, ToolError, failing_keys,  # noqa: E402
                                 refusal_kind, set_kind)
 
 FIX = KIND_WORDS["fixable"]
@@ -81,93 +81,6 @@ class Extractor(unittest.TestCase):
 
     def test_kind_sentence_is_not_a_key(self):
         self.assertEqual(failing_keys("input.x: required. " + FIX), ("input.x",))
-
-
-class Ladder(unittest.TestCase):
-    def server(self, fn=None):
-        def bad(a):
-            missing = [k for k in ("a", "b", "c") if k not in a]
-            if missing:
-                raise ToolError("invalid_input", " ".join(f"input.{k}: required." for k in missing))
-            return {"ok": True}
-
-        obj = {"type": "object", "properties": {k: {"type": "number"} for k in ("a", "b", "c", "n")}}
-        return Server("t", "0", [Tool("pd_pad", "pad.", obj, fn or bad, changes=True),
-                                 Tool("get", "read.", obj, lambda a: (_ for _ in ()).throw(ToolError("invalid_input", "what: required.")))])
-
-    def test_progress_resets_the_count(self):
-        srv = self.server()
-        _, one = call(srv, "pd_pad", {})
-        self.assertNotIn("repeat", one["error"])
-        _, two = call(srv, "pd_pad", {"n": 1})
-        self.assertEqual(two["error"]["repeat"], 2)
-        _, three = call(srv, "pd_pad", {"a": 1})  # a fixed: progress
-        self.assertNotIn("repeat", three["error"])
-        self.assertIn("Progress: 1 of 3 named problems fixed.", three["error"]["message"])
-        self.assertTrue(three["error"]["message"].endswith(FIX))
-
-    def test_reordered_keys_are_the_same_call(self):
-        def fixed_words(a):
-            raise ToolError("not_found", "Sketch 2 has no geometry.")
-
-        srv = self.server(fixed_words)
-        call(srv, "pd_pad", {"a": 1, "b": 2})
-        _, two = call(srv, "pd_pad", {"b": 2, "a": 1})
-        self.assertEqual(two["error"]["repeat"], 2)
-
-    def test_same_call_new_reason_is_progress(self):
-        # 1i (24 Nov, gpt-oss bracket): the same pd_pad call refused for two
-        # different reasons is not "the same refusal".
-        said = iter(["Linked shape object is empty: Sketch 2 has no geometry.", "Pad 2 added no material: it lies inside the body already."])
-
-        def two_reasons(a):
-            raise ToolError("invalid_state", next(said))
-
-        srv = self.server(two_reasons)
-        call(srv, "pd_pad", {"a": 5})
-        _, two = call(srv, "pd_pad", {"a": 5})
-        self.assertNotIn("repeat", two["error"])
-        self.assertNotIn("same refusal", two["error"]["message"])
-
-    def test_fifth_same_refusal_is_stop(self):
-        srv = self.server()
-        for n in range(1, REPEAT_STOP):
-            _, got = call(srv, "pd_pad", {"n": n})
-            self.assertNotEqual(got["error"]["kind"], "stop", n)
-        r, five = call(srv, "pd_pad", {"n": 99})
-        self.assertTrue(r["isError"])
-        err = five["error"]
-        self.assertEqual((err["kind"], err["code"], err["repeat"]), ("stop", "invalid_input", 5))
-        self.assertEqual(err["message"], "No progress after 5 tries of pd_pad. Do not call it again. Report it: input.a: required.")
-        self.assertNotIn("person", err["message"])
-
-    def test_hint_names_the_place_again(self):
-        srv = self.server()
-        for n in range(3):
-            _, got = call(srv, "pd_pad", {"n": n})
-        m = got["error"]["message"]
-        self.assertIn("Refused the same way 3 times: input.a is still wrong.", m)
-        self.assertIn("Try this:", m)
-        self.assertTrue(m.endswith(FIX))
-
-    def test_success_clears(self):
-        srv = self.server()
-        for n in range(4):
-            call(srv, "pd_pad", {"n": n})
-        r, ok = call(srv, "pd_pad", {"a": 1, "b": 2, "c": 3})
-        self.assertFalse(r.get("isError"))
-        _, again = call(srv, "pd_pad", {})
-        self.assertNotIn("repeat", again["error"])
-
-    def test_reads_never_stop(self):
-        srv = self.server()
-        for _ in range(REPEAT_STOP + 1):
-            _, got = call(srv, "get", {})
-        self.assertNotEqual(got["error"]["kind"], "stop")
-        self.assertNotIn("No progress", got["error"]["message"])
-
-    def test_thresholds_are_constants(self):
-        self.assertEqual((protocol.REPEAT_SAME, protocol.REPEAT_HINT, protocol.REPEAT_STOP), (2, 3, 5))
 
 
 class BatchShape(unittest.TestCase):
@@ -282,31 +195,3 @@ if __name__ == "__main__":
     unittest.main()
 
 
-
-class Cascades(unittest.TestCase):
-    """24 Nov QA: with stopOnError: false, the calls after a refused one are
-    most often refused because of it. Those are not counted (the batch sets
-    _repeat_quiet while it runs them); a batch's own calls are counted by
-    their own tool, once."""
-
-    def srv(self):
-        def bad(a):
-            raise ToolError("invalid_input", "input.a: required.")
-
-        obj = {"type": "object", "properties": {"n": {"type": "number"}}}
-        return Server("t", "0", [Tool("pd_pad", "pad.", obj, bad, changes=True)])
-
-    def test_quiet_calls_are_not_counted(self):
-        s = self.srv()
-        s._repeat_quiet = True
-        for n in range(REPEAT_STOP + 1):
-            _, got = call(s, "pd_pad", {"n": n})
-        self.assertNotIn("repeat", got["error"])
-        self.assertNotIn("pd_pad", getattr(s, "_repeats", {}))
-        s._repeat_quiet = False
-        _, got = call(s, "pd_pad", {"n": 1})
-        self.assertNotIn("repeat", got["error"])  # the first counted one
-
-    def test_the_batch_sets_it_only_after_a_refusal(self):
-        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "tools.py"), encoding="utf-8").read()
-        self.assertIn('server._repeat_quiet = quiet or (not stop and any(isinstance(x, dict) and not x.get("ok") for x in results))', src)

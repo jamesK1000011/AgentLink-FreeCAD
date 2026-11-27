@@ -129,7 +129,7 @@ class ThroughTheServer(unittest.TestCase):
         n = [0]
 
         def call():
-            # Each with its own name: doc_new sent again exactly is refused (protocol.again_before).
+            # Each with its own name.
             n[0] += 1
             r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "doc_new", "arguments": {"name": f"P{n[0]}"}}})
             return json.loads(r["result"]["content"][0]["text"])

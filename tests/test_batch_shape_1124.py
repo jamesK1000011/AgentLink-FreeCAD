@@ -273,21 +273,6 @@ class NoToolKey(unittest.TestCase):
         self.assertNotIn('"B"', err)
 
 
-class CascadeNotCounted(unittest.TestCase):
-    """24 Nov QA: with stopOnError: false, the refusals after the first in a
-    batch are not counted toward the repeat stop; the first is."""
-
-    def test_counts(self):
-        got = run('''
-    calls = [mk("A", fail=True)] + [mk("B%d" % i, fail=True) for i in range(6)]
-    b = call("batch", {"calls": calls, "stopOnError": False})
-    print(json.dumps([b[1]["refusedCalls"], srv._repeats.get("probe_make", {}).get("n"), [r["error"].get("repeat") for r in b[1]["results"]]]))
-''')
-        self.assertEqual(got[0], list(range(7)))
-        self.assertEqual(got[1], 1)
-        self.assertEqual(got[2], [None] * 7)
-
-
 class QA1125Words(unittest.TestCase):
     """24 Nov blind QA of series 1125: four refusals that were missing or
     sent the model the wrong way. Read from the data and the source (the

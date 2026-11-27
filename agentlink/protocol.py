@@ -106,7 +106,6 @@ STOP_CODES = frozenset(("held_person_editing", "not_allowed", "refused", "denied
 FIX_CODES = frozenset(("invalid_input", "not_found"))
 # Words of a cause that passes: the same call may then go through.
 TRANSIENT_WORDS = re.compile(r"\b(busy|timed out|time out|timeout|not ready|locked|took no queued call|still running|still starting|try again)\b", re.I)
-STOP_MARK = "No progress after "
 HELD_BY_DIALOG = "has a menu or dialog open"
 
 
@@ -150,9 +149,7 @@ def set_kind(err, kind=None):
     msg = strip_kind(err.get("message", ""))
     kind = kind or refusal_kind(err.get("code"), msg)
     err["kind"] = kind
-    if kind == "stop" and STOP_MARK in msg:
-        err["message"] = msg  # the stop line says it already
-    elif kind == "fixable" and (NAMES_NOTHING in msg or not names_input(msg)):
+    if kind == "fixable" and (NAMES_NOTHING in msg or not names_input(msg)):
         err["message"] = msg  # nothing named to change: the sentence would point nowhere
     else:
         err["message"] = (msg + " " + KIND_WORDS[kind]).strip()
@@ -1287,8 +1284,6 @@ class Server:
                     except Exception:
                         pass
                 self._oriented = False
-                self._ran = []  # a new conversation: no call of it ran yet (again_before)
-                self._batch_kept = []  # nor a batch (tools.ran_before)
                 now = getattr(self, "instructions_now", None)
                 if now is not None:
                     # Made again at each connect: the guide list is read from
@@ -1376,19 +1371,10 @@ class Server:
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
         from . import around
 
-        seen = again_before(self, params)
         with _as_user(s), _acting(s), _hang_trace(s, params.get("name")), _progress_for(self, params):
-            result = seen["refusal"] if seen and seen.get("refusal") else self._call(params)
+            result = self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
-        try:
-            again_after(self, params, result, seen)
-        except Exception:  # noqa: BLE001 - a record only
-            pass
-        try:
-            repeat_words(self, params.get("name"), result, params.get("arguments"))
-        except Exception:  # noqa: BLE001 - words only
-            pass
         with around.part("notice"):
             _add_notice(result)
             _add_rider(result, params.get("name"))
@@ -1519,7 +1505,6 @@ class Server:
             if s is not None:
                 got, sk, before = s.filled_now, s.sketch_now, getattr(s, "sketch_before", None)
                 s.filled_now, s.sketch_now, s.sketch_before = held
-                self._acted = (list(got or ()), sk)  # what the call acted on, for again_after
         if s is not None:
             try:
                 self._sketch_words(params, result, got, sk, before)
@@ -1868,336 +1853,11 @@ class Server:
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
 
 
-# ---- the same changing call again: refused ----------------------------------
+# ---- what a refusal names -----------------------------------------------------
 #
-# Blind QA, 24 Nov: a small local model sent the same sketch_add 13 times; each
-# answered ok and added the same geometry again (DoF 32 → 274), and the repeat
-# stop counts only refusals. Another sent a whole batch again, doc_new too, and
-# had a second document. So a changing call with the same tool and the same
-# arguments (canonical_call) as one of the last AGAIN_WINDOW changing calls that
-# went through and made something (objects, sketch geometry, a document) is
-# refused, and the refusal counts toward the repeat stop. Not for the tools
-# where the same call again is normal (AGAIN_FREE); and an undo, a redo, a
-# restore, a rollback, a removal or another document (AGAIN_CLEARS) clears the
-# record, as does a new conversation. A record whose objects are gone counts
-# no more. The person's calls (session.by "person") are not looked at.
-# The same arguments are the same call only on the same thing (_same_target):
-# the same document; the sketch the call took (named, or the default it would
-# take now); with no sketch, nothing new made in the document since.
-
-AGAIN_WINDOW = 10
-# How the refusal of a call sent again starts (a batch's note reads it: tools.ran_before).
-AGAIN_WORDS = "This call ran before with the same tool and arguments"
-# The same call again is normal: the history (undo, redo …), recompute, saves,
-# the view and the window, toggles and settings, runners of other calls (each
-# of their calls is looked at itself), and a new sketch (a second sketch on
-# the same plane, for the next feature, is a common step).
-AGAIN_FREE = frozenset(("recompute", "doc_save", "doc_save_all",
-                        "selection", "show", "workbench", "menu_run", "cmd_run", "dialog_answer", "queue_go", "batch", "fast", "pick",
-                        "cookbook_run", "sketch_new"))
-AGAIN_FREE_PREFIXES = ("view_", "camera_", "gui_", "window_", "pref_", "history_", "app_", "approve_")
-# A call that went through of one of these, or of any history_ tool (undo,
-# redo, a restore), clears the record.
-AGAIN_CLEARS = frozenset(("doc_new", "doc_switch", "doc_close", "doc_open", "doc_revert", "feature_remove", "object_delete", "sketch_edit"))
-# Looked at though they change no open document: a new document is made.
-AGAIN_ALSO = frozenset(("doc_new",))
-
-
-def _again_looked_at(server, name, args):
-    """Whether a call of tool name with args is one the record looks at."""
-    if not isinstance(name, str) or name in AGAIN_FREE or name.startswith(AGAIN_FREE_PREFIXES):
-        return False
-    if name in AGAIN_ALSO:
-        return True
-    tool = server.tools.get(name)
-    if tool is None:
-        return False
-    try:
-        return bool(tool.changes_for(args if isinstance(args, dict) else {}))
-    except Exception:  # noqa: BLE001
-        return bool(getattr(tool, "changes", False))
-
-
-def _by_person(s):
-    return s is not None and getattr(s, "by", "agent") == "person"
-
-
-def _still_there(made):
-    """Whether what a recorded call made is all still there."""
-    try:
-        import FreeCAD
-
-        docs = FreeCAD.listDocuments()
-        for kind, doc, name, _label, ids in made:
-            d = docs.get(doc)
-            if d is None:
-                return False
-            if kind == "object" and d.getObject(name) is None:
-                return False
-            if kind == "geometry":
-                sk = d.getObject(name)
-                if sk is None or len(getattr(sk, "Geometry", None) or ()) <= max(ids):
-                    return False
-        return True
-    except Exception:  # noqa: BLE001 - not known: kept
-        return True
-
-
-def _made_words(made):
-    """What a recorded call made, short: labels, "Sketch geometry 4-7", a
-    document's name."""
-    parts = []
-    for kind, _doc, _name, label, ids in made:
-        if kind == "document":
-            parts.append(f"document {label}")
-        elif kind == "geometry":
-            ids = sorted(ids)
-            parts.append(f"{label} geometry {ids[0]}" + (f"-{ids[-1]}" if len(ids) > 1 else ""))
-        else:
-            parts.append(label)
-    return ", ".join(parts[:4] + ([f"{len(parts) - 4} more"] if len(parts) > 4 else []))
-
-
-def _remove_words(made):
-    """The calls that take back what a recorded call made, written from the
-    state as it is now, so each one named is a call that its tool takes now
-    (27 Nov QA: "doc_close" for a document with changes not saved, which
-    doc_close refuses without discard). What is not read from the state
-    gets the general words."""
-    out = []
-    geo = [(label, sorted(ids)) for kind, _d, _n, label, ids in made if kind == "geometry"]
-    if geo:
-        out.append(f"sketch_edit {{ sketch: \"{geo[0][0]}\", delete: {geo[0][1]} }}")
-    objs = [m for m in made if m[0] == "object"]
-    if objs:
-        out += _object_removals(objs) or ["feature_remove (a feature of a body) or object_delete"]
-    for m in made:
-        if m[0] == "document":
-            out.append(_doc_removal(m[1]))
-    return " or ".join(out) or "history_undo"
-
-
-def _doc_removal(name):
-    """doc_close for the document of that name as doc_close takes it now:
-    with discard: true when it has changes that are not saved (doc_close
-    refuses it without), and the words say that discard loses them."""
-    try:
-        import FreeCAD
-
-        from .store import is_changed
-
-        d = FreeCAD.listDocuments().get(name)
-        if d is None:
-            return "doc_close"
-        if is_changed(d) or (not d.FileName and len(d.Objects) > 0):
-            return f"doc_close {{ documents: [\"{name}\"], discard: true }} ({d.Label} has changes that are not saved, and discard loses them)"
-        return f"doc_close {{ documents: [\"{name}\"] }}"
-    except Exception:  # noqa: BLE001 - the state is not read: the tool's name only
-        return "doc_close"
-
-
-def _object_removals(objs):
-    """The removal call for each object that a recorded call made, as its
-    tool takes it now: feature_remove for a feature or a sketch of a
-    PartDesign body, object_delete for another object. An object that
-    another made object holds goes with its holder. An object that
-    something uses is refused by both tools: the words name what uses it,
-    to remove first. [] when the state is not read."""
-    try:
-        import FreeCAD
-
-        from .families import pd_common as pc
-
-        docs = FreeCAD.listDocuments()
-        found = []
-        for _kind, doc, name, _label, _ids in objs:
-            d = docs.get(doc)
-            o = d.getObject(name) if d is not None else None
-            if o is None:
-                return []
-            found.append(o)
-        made = {o.Name for o in found}
-        out = []
-        for o in found:
-            if any(getattr(p, "Name", None) in made for p in (getattr(o, "InList", None) or [])):
-                continue  # held or used by another object of the same call: it goes with that one
-            body = pc.body_of(o)
-            t = str(getattr(o, "TypeId", ""))
-            in_body = body is not None and t.startswith(("PartDesign::", "Sketcher::")) and t != "PartDesign::Body"
-            users = [p for p in (getattr(o, "InList", None) or []) if p is not body and getattr(p, "TypeId", "") != "PartDesign::Body"
-                     and (pc.uses(p, o) if in_body else o not in list(getattr(p, "Group", None) or []))]
-            users = list(dict.fromkeys(p.Label for p in users))
-            if in_body:
-                # body: may be left out only when the document has one body
-                whose = f'body: "{body.Label}", ' if len(pc.pd_bodies(o.Document)) > 1 else ""
-                call = "feature_remove { " + whose + f'feature: "{o.Label}"' + " }"
-            else:
-                call = f"object_delete {{ objects: [\"{o.Label}\"] }}"
-            out.append(f"{call} after {', '.join(users)} (which {'uses' if len(users) == 1 else 'use'} {o.Label}) {'is' if len(users) == 1 else 'are'} removed" if users else call)
-        return out[:4] + ([f"{len(out) - 4} more"] if len(out) > 4 else [])
-    except Exception:  # noqa: BLE001 - the state is not read
-        return []
-
-
-def _token(doc):
-    """What tells a document's objects apart from a later state: how many,
-    and the newest one's name."""
-    try:
-        objs = list(doc.Objects)
-        return [len(objs), objs[-1].Name if objs else None]
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _default_sketch(s, doc):
-    """The sketch a call that names none would take now (pd_common.sketch_of:
-    the one open in edit, the one the agent made last, the only one), or None."""
-    try:
-        from .families import pd_common as pc
-
-        sk = [o for o in doc.Objects if getattr(o, "TypeId", "") == "Sketcher::SketchObject"]
-        for o in (pc.sketch_in_edit(doc), pc.made_sketch(s, doc)):
-            if o is not None and any(o is x for x in sk):
-                return o
-        return sk[0] if len(sk) == 1 else None
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _same_target(s, rec, args=None):
-    """Whether a call with a recorded call's arguments acts on the same thing
-    now: the same document; the same sketch (the named one, or the one it
-    takes when none is named); else nothing made in the document since it."""
-    if rec["name"] in AGAIN_ALSO:
-        return True
-    doc = getattr(s, "doc", None)
-    if doc is None or getattr(doc, "Name", None) != rec.get("doc"):
-        return False
-    if rec.get("sketch"):
-        if not rec.get("filled"):
-            # Named in the arguments: the same sketch, unless the name now
-            # means another one (a sketch_new of this batch got "name 2"
-            # because the name was taken; renamed_sketch).
-            ref = args.get("sketch") if isinstance(args, dict) else None
-            if isinstance(ref, str):
-                try:
-                    from .families import pd_common as pc
-
-                    alias = pc.renamed_sketch(s, doc, ref)
-                except Exception:  # noqa: BLE001
-                    alias = None
-                if alias is not None:
-                    return alias.Name == rec["sketch"]
-            return True
-        now = _default_sketch(s, doc)
-        return now is not None and now.Name == rec["sketch"]
-    return rec.get("token") is not None and _token(doc) == rec["token"]
-
-
-def again_before(server, params):
-    """Before a call: the refusal of a changing call sent again exactly
-    (refusal), or what again_after needs to record it. None when the call
-    is not looked at."""
-    s = server.session
-    name = plain_name(server, params.get("name"))
-    if s is None or _by_person(s) or name in LIVE_NAMES_TOOLS:
-        return None
-    server._seq = getattr(server, "_seq", 0) + 1
-    args = params.get("arguments") or {}
-    if not _again_looked_at(server, name, args):
-        return {"seq": server._seq, "name": name, "looked": False}
-    call = canonical_call(args)
-    ran = getattr(server, "_ran", None) or []
-    for rec in reversed(ran):
-        if rec["name"] == name and rec["call"] == call and rec["made"] and _same_target(s, rec, args) and _still_there(rec["made"]):
-            ago = server._seq - rec["seq"]
-            msg = (f"{AGAIN_WORDS}, and answered ok (made: {_made_words(rec['made'])}; "
-                   f"calls since then: {ago - 1}). If it runs again, it adds the same again. Nothing was done. "
-                   f"Change it, or remove what you do not want: {_remove_words(rec['made'])}.")
-            return {"refusal": server.refusal("invalid_state", msg, outcome="not_started")}
-    doc = getattr(s, "doc", None)
-    try:
-        names0 = {o.Name for o in doc.Objects} if doc is not None else set()
-    except Exception:  # noqa: BLE001
-        names0 = None
-    return {"seq": server._seq, "name": name, "looked": True, "call": call, "doc": doc, "names0": names0}
-
-
-def _answer_body(result):
-    content = (result or {}).get("content") or []
-    if not content or content[0].get("type") != "text":
-        return None
-    try:
-        body = json.loads(content[0]["text"])
-    except ValueError:
-        return None
-    return body if isinstance(body, dict) else None
-
-
-def again_after(server, params, result, seen):
-    """After a call: the record cleared (AGAIN_CLEARS, a rollback) or the
-    call put on it with what it made."""
-    if not seen or seen.get("refusal") or not isinstance(result, dict) or result.get("isError"):
-        return
-    name = seen["name"]
-    ran = getattr(server, "_ran", None)
-    if ran is None:
-        ran = server._ran = []
-    body = _answer_body(result) if name in AGAIN_ALSO or seen.get("looked") else None
-    if name in AGAIN_CLEARS or name.startswith("history_"):
-        del ran[:]
-        server._batch_kept = []
-    if not seen.get("looked"):
-        return
-    s = server.session
-    made = []
-    doc = seen.get("doc")
-    if name in AGAIN_ALSO:
-        if body and isinstance(body.get("document"), str):
-            made.append(("document", body["document"], body["document"], body.get("label") or body["document"], ()))
-    elif doc is not None and doc is getattr(s, "doc", None) and seen.get("names0") is not None:
-        try:
-            made += [("object", doc.Name, o.Name, o.Label, ()) for o in doc.Objects if o.Name not in seen["names0"]]
-        except Exception:  # noqa: BLE001
-            pass
-    if body and doc is not None and isinstance(body.get("added"), list) and isinstance(body.get("sketch"), str):
-        sk = next((o for o in getattr(doc, "Objects", ()) if o.Label == body["sketch"] and o.TypeId == "Sketcher::SketchObject"), None)
-        ids = [i for r in body["added"] if isinstance(r, dict) for i in (r.get("ids") or []) if isinstance(i, int)]
-        if sk is not None and ids:
-            made.append(("geometry", doc.Name, sk.Name, sk.Label, ids))
-    filled, sk = getattr(server, "_acted", None) or ([], None)
-    now = getattr(s, "doc", None)
-    ran.append({"name": name, "call": seen["call"], "seq": seen["seq"], "made": made, "doc": getattr(now, "Name", None),
-                "sketch": getattr(sk, "Name", None) if sk is not None else None, "filled": bool(filled), "token": _token(now) if now is not None else None,
-                "step": body.get("step") if isinstance(body, dict) and isinstance(body.get("step"), int) else None})
-    del ran[:-AGAIN_WINDOW]
-
-
-def again_clear(server):
-    """The record cleared: a batch's or a block's rollback took calls back."""
-    if server is not None and getattr(server, "_ran", None):
-        del server._ran[:]
-    if server is not None:
-        server._batch_kept = []
-
-
-# ---- the same refusal again: a stop by progress ----------------------------
-#
-# The server, not the model, says when to stop (research on small local
-# models, 22 Nov; it replaces the model-side "stop after 3 refusals" rule).
-# Per tool (its plain name) it keeps the failing keys of the last refusal
-# (failing_keys: what the message names, with the code) and the call as
-# sent (canonical: the same call with its keys in another order is the same
-# call). A refusal with other or fewer failing keys is progress: the count
-# starts again. The same code and keys again (or the same call with the same
-# words): the count goes up.
-# At REPEAT_SAME the words say so and point to the card; at REPEAT_HINT
-# they give something new to try; at REPEAT_STOP the kind is stop. A call of
-# that tool that goes through clears it. Reads (FORGIVING_READS) never stop.
-
-REPEAT_SAME = 2
-REPEAT_HINT = 3
-REPEAT_STOP = 5
+# Facts only (27 Nov): the server keeps no count of equal refusals and no
+# record of calls that ran. A call sent again runs again, as FreeCAD would
+# run it; a refusal sent again is the same refusal, with the same words.
 
 # What a message names as the place of the problem, in the forms the
 # refusals use: input.<field>, constraints[i], calls.<i>, step do.<n>.
@@ -2226,13 +1886,6 @@ def canonical_call(args):
         return json.dumps(args if args is not None else {}, sort_keys=True, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         return repr(args)
-
-
-def _first_sentence(message):
-    m = strip_kind(message)
-    got = re.match(r"(.+?[.!?])(\s|$)", m, re.S)
-    first = (got.group(1) if got else m).strip()
-    return first if len(first) <= 200 else first[:197] + "…"
 
 
 def named_input(tool, message):
@@ -2326,115 +1979,6 @@ def restart_words(server, code, args, message=""):
     # True also on a first start: the words say when it started, not that it started again.
     return (f" FreeCAD started at {time.strftime('%H:%M', time.localtime(STARTED))} and nothing is made in it yet: "
             "documents and objects from before then are not open (session_state lists what is open).")
-
-
-def _field(keys):
-    """The input field a key names (input.depth → depth), else None."""
-    for k in keys:
-        if k.startswith("input."):
-            return k[len("input."):]
-    return None
-
-
-def _try_next(server, name, keys, n, card):
-    """The words at REPEAT_HINT and after: the place again, and something
-    new to try (the card's example, its value of the field when it has one)."""
-    place = keys[0] if keys and len(keys[0]) <= 60 else "the same problem"
-    words = f" Refused the same way {n} times: {place} is still wrong."
-    example = None
-    try:
-        from . import examples
-
-        if examples.load().get(name):
-            example = (examples.for_tool(name, {}) or {}).get("ready")
-    except Exception:  # noqa: BLE001
-        example = None
-    field = _field(keys)
-    if example is not None:
-        val = example.get(field) if field else None
-        if val is not None:
-            shown = compact(val)
-            words += f" Try this: the card's example gives {field} as {shown if len(shown) <= 160 else shown[:157] + '…'}. Use that form."
-        else:
-            words += f" Try this: copy the card's ready call ({card}) and change only its values."
-    else:
-        words += f" Try this: read the form of {field or place} on the card ({card}), or use another tool for this step."
-    left = REPEAT_STOP - n
-    if left > 0:
-        words += f" After {left} more {'try' if left == 1 else 'tries'} with no progress, the server tells you to stop."
-    return words
-
-
-def repeat_words(server, name, result, args=None):
-    """The progress-based stop (see above) applied to a tools/call result,
-    in place. Words only on a refusal; a call that went through clears."""
-    state = getattr(server, "_repeats", None)
-    if state is None:
-        state = server._repeats = {}
-    name = plain_name(server, name) if isinstance(name, str) else name
-    if getattr(server, "_repeat_quiet", False):
-        # A call of a batch with stopOnError: false that runs after an
-        # earlier call of it was refused: its refusal most often follows
-        # from that one, so it is not counted (24 Nov QA: cascades).
-        return
-    if not result.get("isError"):
-        state.pop(name, None)
-        return
-    content = result.get("content") or []
-    if not content or content[0].get("type") != "text":
-        return
-    body = json.loads(content[0]["text"])
-    err = body.get("error") if isinstance(body, dict) else None
-    if not isinstance(err, dict):
-        return
-    msg = strip_kind(err.get("message", ""))
-    keys = failing_keys(msg)
-    code = err.get("code")
-    call = canonical_call(args)
-    last = state.get(name)
-    progress = ""
-    # The same refusal: the same code and the same failing keys. The same
-    # call counts only when its words (numbers out) are the same too: the
-    # document can change under the same call, and a new reason is progress
-    # (1i, 24 Nov).
-    words = re.sub(r"\d+(\.\d+)?", "#", strip_kind(msg))
-    if last is not None and last["code"] == code and (last["keys"] == keys or (last["call"] == call and last.get("words") == words)):
-        n = last["n"] + 1
-        first = last["first"]
-    else:
-        n = 1
-        first = msg
-        if last is not None and last["code"] == code and set(keys) < set(last["keys"]) and _PLACES.match(last["keys"][0]):
-            fixed = len(set(last["keys"]) - set(keys))
-            progress = f" Progress: {fixed} of {len(last['keys'])} named problems fixed."
-    state[name] = {"code": code, "keys": keys, "call": call, "words": words, "n": n, "first": first}
-    kind = err.get("kind") or refusal_kind(code, msg)
-    if progress:
-        err["message"] = msg + progress
-        set_kind(err, kind)
-        content[0]["text"] = compact(body)
-        return
-    if n < REPEAT_SAME:
-        return
-    err["repeat"] = n
-    card = f'tool_find {{ card: "{name}" }}' if name and name in server.tools else "tool_find { words }"
-    if n >= REPEAT_STOP and name not in FORGIVING_READS:
-        err["message"] = f"{STOP_MARK}{REPEAT_STOP} tries of {name}. Do not call it again. Report it: {_first_sentence(first)}"
-        set_kind(err, "stop")
-    elif kind == "fixable":
-        if n == REPEAT_SAME:
-            try:
-                from . import examples
-
-                has_ex = bool(examples.load().get(name))
-            except Exception:  # noqa: BLE001
-                has_ex = False
-            msg += f" This is the same refusal as before: change what it names. {card} gives the card" + (" and a worked example." if has_ex else ".")
-        else:
-            msg += _try_next(server, name, keys, n, card)
-        err["message"] = msg
-        set_kind(err, kind)
-    content[0]["text"] = compact(body)
 
 
 # ---- progress notifications --------------------------------------------------

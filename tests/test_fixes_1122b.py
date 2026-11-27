@@ -158,39 +158,6 @@ class PocketDepth(unittest.TestCase):
         self.assertIn("input.depth: not a known field", e.exception.message)
 
 
-class Ladder(unittest.TestCase):
-    """The same refusal again says so; the third says what to try next
-    (22 Nov: the card's example, and the place named again)."""
-
-    def server(self):
-        from agentlink.protocol import Server, Tool, ToolError
-
-        def bad(a):
-            raise ToolError("invalid_input", f"rectangle: size [w, h] (step {a.get('n', 1)}).")
-
-        obj = {"type": "object", "properties": {"n": {"type": "integer"}}}
-        return Server("t", "0", [Tool("sketch_add", "add.", obj, bad, changes=True),
-                                 Tool("session_state", "s.", obj, lambda a: {"ok": True})])
-
-    def call(self, srv, name, args):
-        import json
-
-        r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
-        return json.loads(r["content"][0]["text"])
-
-    def test_ladder(self):
-        srv = self.server()
-        one = self.call(srv, "sketch_add", {"n": 1})["error"]
-        self.assertNotIn("repeat", one)
-        self.call(srv, "session_state", {})  # a read between does not reset it
-        two = self.call(srv, "sketch_add", {"n": 7})["error"]  # numbers differ: the same refusal
-        self.assertEqual(two["repeat"], 2)
-        self.assertIn("same refusal as before", two["message"])
-        three = self.call(srv, "sketch_add", {"n": 3})["error"]
-        self.assertEqual(three["repeat"], 3)
-        self.assertIn("Refused the same way 3 times: rectangle is still wrong. Try this:", three["message"])
-
-
 class DoesHits(unittest.TestCase):
     def test_by_what_it_does(self):
         from agentlink.protocol import does_hits

@@ -422,6 +422,50 @@ class HealthIsWhatFreeCADReports(unittest.TestCase):
         self.assertFalse(hasattr(batchrec, "clean_verdict"))
 
 
+class NoRepeatGuard(unittest.TestCase):
+    """Decision 6: a changing call sent again runs again, and the server
+    keeps no count of equal refusals."""
+
+    def test_the_guards_and_their_texts_are_gone(self):
+        from agentlink import protocol
+
+        for name in ("again_before", "again_after", "again_clear", "repeat_words", "REPEAT_SAME", "REPEAT_HINT", "REPEAT_STOP", "AGAIN_WINDOW", "AGAIN_WORDS", "STOP_MARK"):
+            self.assertFalse(hasattr(protocol, name), name)
+        for path, gone in ((("protocol.py",), ("This call ran before", "If it runs again, it adds the same again", "No progress after", "the same refusal as before",
+                                                "Refused the same way", "the server tells you to stop")),
+                           (("tools.py",), ("ran_before", "_batch_kept", "do not send them again", "_repeat_quiet", "ranBefore"))):
+            text = source(*path)
+            for w in gone:
+                self.assertNotIn(w, text, w)
+
+    def test_the_same_changing_call_twice_runs_twice_and_a_refusal_is_not_counted(self):
+        from agentlink.protocol import Server, Tool, ToolError
+
+        ran = []
+
+        def make(a):
+            ran.append(dict(a))
+            return {"made": len(ran)}
+
+        def bad(a):
+            raise ToolError("invalid_input", "length: mm, over 0.")
+
+        schema = {"type": "object", "properties": {"length": {"type": "number"}}, "additionalProperties": False}
+        srv = Server("t", "0", [Tool("probe_make", "Make.", schema, make, changes=False), Tool("probe_bad", "Refuse.", schema, bad, changes=False)])
+        for _ in range(3):
+            r = srv.call({"name": "probe_make", "arguments": {"length": 5}})
+            self.assertFalse(r.get("isError"), r)
+        self.assertEqual(len(ran), 3)
+        said = []
+        for _ in range(7):
+            r = srv.call({"name": "probe_bad", "arguments": {"length": 0}})
+            err = json.loads(r["content"][0]["text"])["error"]
+            said.append((err["kind"], err["message"]))
+            self.assertNotIn("repeat", err)
+        self.assertEqual(len(set(said)), 1)  # the same refusal each time: no count, no stop
+        self.assertEqual(said[0][0], "fixable")
+
+
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
         self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")

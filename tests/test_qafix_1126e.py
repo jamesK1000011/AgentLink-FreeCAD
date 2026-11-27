@@ -141,38 +141,5 @@ print(json.dumps(out))
         self.assertIn("not measured", got[1])
 
 
-class RepeatStopUsesTheBatchAlias(unittest.TestCase):
-    def test_a_renamed_sketch_is_not_the_one_the_earlier_call_used(self):
-        got = in_a_process(SETUP + '''
-    import types
-    from agentlink import protocol
-    class Sk:
-        TypeId = "Sketcher::SketchObject"
-        def __init__(self, name, label):
-            self.Name, self.Label = name, label
-    old, new = Sk("Sketch", "CrankSketch"), Sk("Sketch001", "CrankSketch 2")
-    class Doc:
-        Name = "Crank"
-        Objects = [old, new]
-        def getObject(self, n):
-            return next((o for o in self.Objects if o.Name == n), None)
-    doc = Doc()
-    sys.modules["FreeCAD"].listDocuments = lambda: {"Crank": doc}
-    s = types.SimpleNamespace(doc=doc, by="agent")
-    args = {"sketch": "CrankSketch", "length": 5}
-    rec = {"name": "pd_pad", "call": protocol.canonical_call(args), "seq": 1, "made": [("object", "Crank", "Sketch", "CrankSketch", ())],
-           "doc": "Crank", "sketch": "Sketch", "filled": False, "token": None, "step": None}
-    tool = types.SimpleNamespace(changes_for=lambda a: True, changes=True)
-    server = types.SimpleNamespace(session=s, tools={"pd_pad": tool}, _ran=[rec], _seq=1, refusal=lambda *a, **k: {"isError": True})
-    same = "refusal" in protocol.again_before(server, {"name": "pd_pad", "arguments": args})
-    # A sketch_new of this batch got "CrankSketch 2": the name now means that one.
-    s.__dict__["_batch_aliases"] = {("Crank", "CrankSketch"): "Sketch001"}
-    server._seq = 5
-    renamed = "refusal" in protocol.again_before(server, {"name": "pd_pad", "arguments": args})
-    print(json.dumps([same, renamed]))
-''')
-        self.assertEqual(got, [True, False])  # the same sketch is still refused; the renamed one is not
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -543,65 +543,6 @@ class PartialCut(unittest.TestCase):
 
 # ---- F9: removal calls written from the state ------------------------------------------------
 
-class Removal(unittest.TestCase):
-    def test_no_state_gives_the_general_words(self):
-        # this process has no FreeCAD: the state is not read
-        self.assertEqual(protocol._remove_words([("document", "D", "D", "D", ())]), "doc_close")
-        self.assertEqual(protocol._remove_words([("object", "D", "Pad", "Pad", ())]), "feature_remove (a feature of a body) or object_delete")
-        self.assertEqual(protocol._remove_words([]), "history_undo")
-
-    def test_each_call_is_one_that_its_tool_takes_now(self):
-        got = child("""
-        import FreeCAD
-        from agentlink import protocol, store
-        class Obj:
-            def __init__(s, name, type_, label=None): s.Name, s.Label, s.TypeId, s.InList, s.PropertiesList, s.Group = name, label or name, type_, [], [], []
-            def getTypeIdOfProperty(s, p): return "App::PropertyLink"
-        class Doc:
-            def __init__(s, name, objs=(), file=""):
-                s.Name = s.Label = name; s.Objects = list(objs); s.FileName = file
-                for o in objs: o.Document = s
-            def getObject(s, n): return next((o for o in s.Objects if o.Name == n), None)
-        body = Obj("Body", "PartDesign::Body")
-        pad, pad2, fillet, box = Obj("Pad", "PartDesign::Pad"), Obj("Pad001", "PartDesign::Pad", "Pad 2"), Obj("Fillet", "PartDesign::Fillet"), Obj("Box", "Part::Box")
-        body.Group = [pad, pad2, fillet]
-        for o in (pad, pad2, fillet): o.InList = [body]
-        fillet.PropertiesList, fillet.Base = ["Base"], pad2
-        pad2.InList.append(fillet)                       # the fillet uses Pad 2
-        work = Doc("Work", [body, pad, pad2, fillet, box])
-        clean = Doc("Clean", [], "/tmp/clean.FCStd")
-        docs = {"Work": work, "Clean": clean}
-        FreeCAD.listDocuments = lambda: dict(docs)
-        changed = {"Work": True, "Clean": False}
-        store.is_changed = lambda d: changed[d.Name]
-        pc.body_of = lambda o: body if o in body.Group else None
-        pc.pd_bodies = lambda d: [body]
-        m = lambda kind, o, d="Work": (kind, d, getattr(o, "Name", o), getattr(o, "Label", o), ())
-        out = {"unsaved": protocol._remove_words([m("document", "Work")]), "saved": protocol._remove_words([m("document", "Clean", "Clean")]),
-               "gone": protocol._remove_words([m("document", "Nope", "Nope")]),
-               "feature": protocol._remove_words([m("object", pad)]), "used": protocol._remove_words([m("object", pad2)]),
-               "plain": protocol._remove_words([m("object", box)]),
-               "held": protocol._remove_words([m("object", body), m("object", pad)])}
-        other = Obj("Body001", "PartDesign::Body", "Body 2")
-        pc.pd_bodies = lambda d: [body, other]
-        out["twoBodies"] = protocol._remove_words([m("object", pad)])
-        print(json.dumps(out))
-        """)
-        self.assertEqual(got["unsaved"], 'doc_close { documents: ["Work"], discard: true } (Work has changes that are not saved, and discard loses them)')
-        self.assertEqual(got["saved"], 'doc_close { documents: ["Clean"] }')
-        self.assertEqual(got["gone"], "doc_close")
-        self.assertEqual(got["feature"], 'feature_remove { feature: "Pad" }')
-        self.assertEqual(got["used"], 'feature_remove { feature: "Pad 2" } after Fillet (which uses Pad 2) is removed')
-        self.assertEqual(got["plain"], 'object_delete { objects: ["Box"] }')
-        self.assertEqual(got["held"], 'object_delete { objects: ["Body"] }')  # the pad goes with the body that holds it
-        self.assertEqual(got["twoBodies"], 'feature_remove { body: "Body", feature: "Pad" }')
-
-    def test_the_named_inputs_are_the_tools_own(self):
-        for name, fields in (("doc_close", ("documents", "discard")), ("feature_remove", ("body", "feature")), ("object_delete", ("objects",))):
-            for f in fields:
-                self.assertIn(f, schema(name)["properties"], (name, f))
-
-
 # ---- the pd_body_new example -----------------------------------------------------------------
 
 class BodyExample(unittest.TestCase):

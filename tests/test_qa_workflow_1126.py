@@ -42,36 +42,6 @@ RESEND = QA_SERVER + '''
 
 
 class AResentBatch(unittest.TestCase):
-    def test_the_note_names_what_ran_and_sends_only_the_rest(self):
-        got = in_a_process(RESEND + '''
-    out = {}
-    out["first"] = call("batch", {"calls": [c("doc_new", name="P"), c("probe_make", x=1), c("probe_make", x=2), c("probe_pad", name="Base"), c("probe_make", x=3)]})[1]
-    again = [c("doc_new", name="P"), c("probe_make", x=1), c("probe_make", x=2), c("probe_pad", x=5), c("probe_make", x=3)]
-    out["again"] = call("batch", {"calls": again})[1]
-    out["third"] = call("batch", {"calls": again})[1]
-    out["docs"] = len(docs)
-    print(json.dumps(out))
-''')
-        self.assertEqual(got["first"]["done"], [0, 1, 2])
-        b = got["again"]
-        self.assertEqual(b["refused"]["call"], 0)
-        self.assertTrue(b["refused"]["error"].startswith(protocol.AGAIN_WORDS), b["refused"]["error"])
-        note = b["note"]
-        self.assertIn("Calls 0-2 (doc_new, probe_make, probe_make) ran before and are kept: do not send them again.", note)
-        self.assertIn("Next: send a new batch with only calls 3, 4, in order: probe_pad, probe_make.", note)
-        self.assertNotIn("(fixed)", note)
-        # The record stays after a refused batch that made nothing: the same list again is caught again.
-        self.assertTrue(got["third"]["refused"]["error"].startswith(protocol.AGAIN_WORDS))
-        self.assertIn("only calls 3, 4", got["third"]["note"])
-
-    def test_a_list_of_only_calls_that_ran(self):
-        got = in_a_process(RESEND + '''
-    calls = [c("doc_new", name="Q"), c("probe_make", x=1)]
-    call("batch", {"calls": calls})
-    print(json.dumps(call("batch", {"calls": calls})[1]))
-''')
-        self.assertIn("Calls 0, 1 (doc_new, probe_make) ran before and are kept", got["note"])
-        self.assertIn("Next: nothing of this list is left to send.", got["note"])
 
     def test_a_plain_refusal_keeps_its_note(self):
         _, b, _ = run('''

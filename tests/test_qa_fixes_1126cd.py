@@ -299,23 +299,6 @@ class TakenName(unittest.TestCase):
         self.assertIn({"do": "=note_sketch(sk, a.get('name'))"}, entries()["sketch_new"]["steps"])
 
 
-class RanBefore(unittest.TestCase):
-    def test_before_with_its_steps(self):
-        got = in_a_process(SETUP + '''
-    from agentlink import tools
-    calls = [{"tool": "sketch_new"}, {"tool": "sketch_add"}, {"tool": "pd_pad"}]
-    ref = {"tool": "sketch_new", "status": "not_started"}
-    out = {"done": []}
-    a = tools._refused_note(ref, [], calls, 0, 0, out, {"ranBefore": [0, 1], "ranBeforeSteps": [9, 6]})
-    b = tools._refused_note(ref, [], calls, 0, 0, out, {"ranBefore": [0, 1]})
-    print(json.dumps([a, b, tools._row_step({"result": {"step": 4}}), tools._row_step({"result": {}})]))
-''')
-        self.assertIn("Calls 0, 1 (sketch_new, sketch_add) ran before (steps 6, 9) and are kept: do not send them again.", got[0])
-        self.assertIn("Calls 0, 1 (sketch_new, sketch_add) ran before and are kept", got[1])
-        self.assertNotIn("last batch", got[0] + got[1])
-        self.assertEqual(got[2:], [4, None])
-
-
 PAD = {"type": "object", "properties": {"extent": {"type": "string", "description": "length (default), through_all, up_to_first or up_to_face."},
                                         "length": {"type": "number"}}, "additionalProperties": False}
 
