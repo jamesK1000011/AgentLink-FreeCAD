@@ -388,12 +388,11 @@ class Readers(unittest.TestCase):
         finally:
             timelimit.configure("")
 
-    def test_pd_common_puts_check_geometrys_line_in_the_result(self):
-        import re
-
+    def test_pd_common_reads_no_health_text(self):
+        # 28 Nov merge: Check Geometry's finding stays in health.shapes[].checkErrors; the result record does not repeat it.
         src = open(os.path.join(ROOT, "agentlink", "families", "pd_common.py"), encoding="utf-8").read()
         self.assertNotIn('h.get("facts")', src)
-        self.assertIsNotNone(re.search(r'sh\.get\("checkErrors"\)', src))
+        self.assertNotIn("def check_in_result", src)
 
 
 class NoFactsText(unittest.TestCase):

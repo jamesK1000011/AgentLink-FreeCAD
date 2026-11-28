@@ -74,6 +74,12 @@ def axes_line(fr):
             f"the normal points {nw}: {way}. [0, 0] is at world ({', '.join(num(c) for c in o)}).")
 
 
+def axes_rec(fr):
+    """A sketch's frame { origin, xAxis, yAxis, normal } as a record: { x:
+    "+X", y: "+Z", normal: "-Y" } (axis_word of each)."""
+    return {"x": axis_word(fr["xAxis"]), "y": axis_word(fr["yAxis"]), "normal": axis_word(fr["normal"])}
+
+
 def up_key(up):
     """The world axis an up input names, as a unit tuple; ValueError for another value."""
     k = up.strip().lower() if isinstance(up, str) else None

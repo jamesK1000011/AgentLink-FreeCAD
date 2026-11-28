@@ -963,9 +963,10 @@ def _run(server, session, steps, a):
         # one is open (live, 22 Nov: a block that saved and closed its
         # document reported the volume of the person's other document).
         v1 = _volume(s, vol_doc) if _open(vol_doc) else None
-        # The result lines of the calls, in order, first: the short answer's body.
-        lines = _resultline.fast_lines([(r["step"], r["tool"], r.get("result")) for r in run.rows if r.get("ok")])
-        out = {**({"result": lines} if lines else {}), "fast": _summary(run, True, secs, v0, v1)}
+        # One record for each call that ran, in order, first: the short answer's
+        # body (protocol.step_line: call, tool, object, volumeChange, historyStep …).
+        steps = _resultline.fast_steps([(r["step"], r["tool"], r.get("result")) for r in run.rows if r.get("ok")])
+        out = {**({"result": steps} if steps else {}), "fast": _summary(run, True, secs, v0, v1)}
         if run.made_rows:
             out["made"] = run.made_rows[:40]
         if run.checks:

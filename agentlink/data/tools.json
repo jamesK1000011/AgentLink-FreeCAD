@@ -11329,7 +11329,66 @@
     ],
     "returns": {
      "result": {
-      "means": "A one-line summary first; what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "The feature made"
@@ -11547,7 +11606,66 @@
     ],
     "returns": {
      "result": {
-      "means": "a one-line summary first; says what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "the feature"
@@ -11714,7 +11832,66 @@
     ],
     "returns": {
      "result": {
-      "means": "what changed and where, a one-line summary first"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "the feature made"
@@ -11814,7 +11991,66 @@
     },
     "returns": {
      "result": {
-      "means": "A one-line summary first; says what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "The feature"
@@ -12030,7 +12266,66 @@
     ],
     "returns": {
      "result": {
-      "means": "what changed and where, a one-line summary first"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "the feature made"
@@ -12260,13 +12555,37 @@
     ],
     "returns": {
      "on": {
-      "means": "count of the outside and inside edges"
-     },
-     "edges": {
-      "means": "each edge with its direction, length, mid-point and side"
+      "means": "each edge given: { edge, kind (line | circle | arc), along (a line) or about (a circle or arc) as an axis name or [x, y, z], radius (mm), length (mm), mid [x, y, z] (mm), side (outside | inside) }"
      },
      "result": {
-      "means": "a one-line summary first; what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.edgesGiven": {
+      "means": "edges FreeCAD was given"
+     },
+     "result.edgesChanged": {
+      "means": "edges whose mid-point is not on the body's surface after the call"
+     },
+     "result.size": {
+      "means": "the radius of a fillet, or the size of a chamfer",
+      "unit": "mm"
+     },
+     "result.size2": {
+      "means": "a chamfer of two distances: the second",
+      "unit": "mm"
+     },
+     "result.angle": {
+      "means": "a chamfer of a distance and an angle: the angle",
+      "unit": "deg"
+     },
+     "result.edgesNotShown": {
+      "means": "edges given that on does not list"
+     },
+     "result.sideLimit": {
+      "means": "given when more edges than this were given: on has no side"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
      },
      "feature": {
       "means": "the feature made"
@@ -12392,12 +12711,38 @@
     ],
     "effects": [
      "On an inside corner it adds material; on an outside corner it removes material",
-     "The answer adds a count of the outside and inside edges",
-     "The answer then gives each edge with its direction, length, mid-point and side"
+     "The answer lists each edge as a record in on"
     ],
     "returns": {
      "result": {
-      "means": "A one-line summary first; says what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.edgesGiven": {
+      "means": "edges FreeCAD was given"
+     },
+     "result.edgesChanged": {
+      "means": "edges whose mid-point is not on the body's surface after the call"
+     },
+     "result.size": {
+      "means": "the radius of a fillet, or the size of a chamfer",
+      "unit": "mm"
+     },
+     "result.size2": {
+      "means": "a chamfer of two distances: the second",
+      "unit": "mm"
+     },
+     "result.angle": {
+      "means": "a chamfer of a distance and an angle: the angle",
+      "unit": "deg"
+     },
+     "result.edgesNotShown": {
+      "means": "edges given that on does not list"
+     },
+     "result.sideLimit": {
+      "means": "given when more edges than this were given: on has no side"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
      },
      "feature": {
       "means": "The feature"
@@ -12420,6 +12765,9 @@
      },
      "health": {
       "means": "Health of the shape"
+     },
+     "on": {
+      "means": "each edge given: { edge, kind (line | circle | arc), along (a line) or about (a circle or arc) as an axis name or [x, y, z], radius (mm), length (mm), mid [x, y, z] (mm), side (outside | inside) }"
      }
     },
     "refusalNotes": [
@@ -12539,7 +12887,66 @@
     ],
     "returns": {
      "result": {
-      "means": "what changed and where, a one-line summary first"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "the feature made"
@@ -12654,7 +13061,66 @@
     },
     "returns": {
      "result": {
-      "means": "A one-line summary first; what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "The feature made"
@@ -12764,7 +13230,66 @@
     ],
     "returns": {
      "result": {
-      "means": "a one-line summary first; says what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "the feature"
@@ -12928,7 +13453,66 @@
     ],
     "returns": {
      "result": {
-      "means": "A one-line summary first; says what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "The feature"
@@ -13084,7 +13668,66 @@
     },
     "returns": {
      "result": {
-      "means": "a one-line summary first; what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "the feature made"
@@ -13224,7 +13867,66 @@
     ],
     "returns": {
      "result": {
-      "means": "a one-line summary first; what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "the feature made"
@@ -13362,7 +14064,66 @@
     ],
     "returns": {
      "result": {
-      "means": "A one-line summary first; says what changed and where: the material, the body before, each axis, the contact, the solids"
+      "means": "the facts of the change that no other key has; the keys beside it"
+     },
+     "result.material": {
+      "means": "added or removed: the sign of volumeChange"
+     },
+     "result.bodyBefore": {
+      "means": "the body's box before the call, { x: [min, max], y, z }",
+      "unit": "mm"
+     },
+     "result.againstBefore": {
+      "means": "the box of the new or removed material against bodyBefore, on each axis: past { side: mm } or inside { side: mm }",
+      "unit": "mm"
+     },
+     "result.pieces": {
+      "means": "one box for each separate piece of the new or removed material, when there are several",
+      "unit": "mm"
+     },
+     "result.piecesNotShown": {
+      "means": "pieces past the cap"
+     },
+     "result.touches": {
+      "means": "added material against the body before: { touching, faces it lies on, gap, facesNotLooked }",
+      "unit": "mm"
+     },
+     "result.opensNotLooked": {
+      "means": "faces of the removed material that were not looked at for opens"
+     },
+     "result.solidsWas": {
+      "means": "solids of the body before the call"
+     },
+     "result.normalSpan": {
+      "means": "the first feature of a body: { sketch, span [min, max] } the body along the sketch normal; 0 is the sketch plane, + is the way the normal points",
+      "unit": "mm"
+     },
+     "result.toolSpan": {
+      "means": "volumeChange 0: { sketch, span } the feature's own solid (AddSubShape) along the sketch normal",
+      "unit": "mm"
+     },
+     "result.sketchAlsoProfileOf": {
+      "means": "volumeChange 0: the other features that use the same sketch as profile"
+     },
+     "result.outline": {
+      "means": "volumeChange 0: { sketch, x|y|z: { outline [min, max], body [min, max] } } on each axis of the sketch plane where the two do not overlap",
+      "unit": "mm"
+     },
+     "result.profileCount": {
+      "means": "profiles of the sketch, given with the next three keys"
+     },
+     "result.partialProfilePercent": {
+      "means": "for each profile that did a part: the share of the volume its area gives over the same depth",
+      "unit": "%"
+     },
+     "result.idleProfiles": {
+      "means": "profiles that did nothing"
+     },
+     "result.profilesMeasured": {
+      "means": "profiles measured, when fewer than profileCount"
+     },
+     "result.featureKind": {
+      "means": "additive or subtractive: the feature's type, given when volumeChange has the other sign"
      },
      "feature": {
       "means": "The feature"
@@ -14342,7 +15103,8 @@
     ],
     "effects": [
      "Face and edge numbers can change when an earlier feature changes",
-     "A pad grows along the normal, and a pocket or a hole cuts against it",
+     "A pad grows along the normal, and a pocket or a hole cuts against it: toward the normal is +, and 0 is the sketch plane in bodyExtent",
+     "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)",
      "A face sketch aligns with the world: the tool sets AttachmentOffset for that",
      "Its origin is the foot of the world origin on the face plane, not the face centre",
      "On a standing face, y runs up +Z",
@@ -14350,14 +15112,11 @@
      "Example: on face { side: \"+z\" } of a 50 x 40 x 4 plate centred on XY, bodyExtent is { x: [-25.0, 25.0], y: [-20.0, 20.0] }"
     ],
     "returns": {
-     "result": {
-      "means": "a one-line summary first"
-     },
      "sketch": {
       "means": "its label"
      },
      "axes": {
-      "means": "the frame in words"
+      "means": "the world axis that sketch x, sketch y and the normal run along: { x, y, normal }, as +X or mostly +Z (12° off)"
      },
      "frame": {
       "means": "where the sketch x/y and its origin are in the world"
@@ -14369,7 +15128,14 @@
       "means": "on a face, the form that picks it again"
      },
      "bodyExtent": {
-      "means": "the box of the body's solid in the sketch's own frame, { x: [min, max], y: [min, max], normal: [min, max] }; normal is along the sketch normal: 0 is the sketch plane, + is the way the normal points; not there when the body has no solid; a sketch_add rectangle { corner: [-25, -20], size: [10, 10] } there is a block on one corner of the plate",
+      "means": "the box of the body's solid in the sketch's own frame, { x: [min, max], y: [min, max], normal: [min, max] }; a sketch_add rectangle { corner: [-25, -20], size: [10, 10] } there is a block on one corner of the plate",
+      "unit": "mm"
+     },
+     "bodySolid": {
+      "means": "false when the body has no solid; bodyExtent is then not there"
+     },
+     "faceExtent": {
+      "means": "on a face: the face in the sketch's own frame, { x: [min, max], y: [min, max] }",
       "unit": "mm"
      }
     },
@@ -14484,10 +15250,10 @@
      ]
     },
     {"refuse": {"fmt": "The sketch would not attach to {what}. Nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset. FreeCAD said: {status_words(sk)}"}, "code": "failed", "when": "=not sk.isValid()"},
-    {"let": {"ext": "=body_extent(b, sk)", "said": "=face_said(b, link, what) if 'face' in a else what"}},
+    {"let": {"ext": "=body_extent(b, sk)", "fext": "=face_extent(link, sk) if 'face' in a else None", "said": "=face_said(b, link, what) if 'face' in a else what"}},
     {"do": "=note_sketch(sk, a.get('name'))"}
    ],
-   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"result": "=new_result(sk, b, said, link)", "sketch": "=sk.Label", "body": "=b.Label", "on": "=on_words(said, world_pl(sk)) if 'face' in a else what", "face": {"when": "=pick", "value": "=pick"}, "picked": {"when": "=picked", "value": "=picked"}, "offset": {"when": "=off", "value": "=off"}, "axes": "=axes(world_pl(sk))", "frame": "=frame(world_pl(sk))", "attachment": "=attachment(sk, wrote)", "bodyPlacement": {"when": "=placement_fact(b)", "value": "=placement_fact(b)"}, "bodyExtent": {"when": "=ext", "value": "=ext"}, "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
+   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=on_words(said, world_pl(sk)) if 'face' in a else what", "face": {"when": "=pick", "value": "=pick"}, "picked": {"when": "=picked", "value": "=picked"}, "offset": {"when": "=off", "value": "=off"}, "axes": "=axes(world_pl(sk))", "frame": "=frame(world_pl(sk))", "attachment": "=attachment(sk, wrote)", "bodyPlacement": {"when": "=placement_fact(b)", "value": "=placement_fact(b)"}, "bodyExtent": {"when": "=ext", "value": "=ext"}, "bodySolid": {"when": "=not body_has_solid(b)", "value": false}, "faceExtent": {"when": "=fext", "value": "=fext"}}}
   },
   "sketch_add": {
    "group": "sketch",
@@ -14836,7 +15602,18 @@
     ],
     "returns": {
      "result": {
-      "means": "a one-line summary first"
+      "means": "what was measured of the shapes: { shapes, lies, openEnds }"
+     },
+     "result.shapes": {
+      "means": "one record for each item of added, in order: circle { center, radius }, arc { start, middle, end }, line { from, to }, sketchExtent { x, y }, worldBox { x, y, z }",
+      "unit": "mm"
+     },
+     "result.lies": {
+      "means": "where the call's shapes lie against the sketch's face and the body: { against, box, axes: { x|y|z: past { side: mm } | inside { side: mm } } }",
+      "unit": "mm"
+     },
+     "result.openEnds": {
+      "means": "open ends of the sketch's wires"
      },
      "added": {
       "means": "[{ ids, constraints, dims }]"
@@ -14847,8 +15624,11 @@
      "added.constraints": {
       "means": "[first, last] ids"
      },
+     "added.notGiven": {
+      "means": "{ input: value } of each place or value the call left out and the tool took"
+     },
      "constraintList": {
-      "means": "each constraint the shape came with, as its id, FreeCAD's type and its refs"
+      "means": "each constraint the shape came with: { id, type, refs [[geometry, vertex]], value, name, driving }"
      },
      "state": {
       "means": "dof, wires, closedWires, openVertices, points, wiresMeet"
@@ -15018,7 +15798,7 @@
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)", "it": "={k: v for k, v in a.items() if k != 'sketch'}", "items": "=[it]"}},
     {"let": {"out": "=[]"}},
-    {"each": "it", "in": "=items", "steps": [{"try": [{"let": {"G, C, D": "=build(it)", "cons": "=bool(it.get('construction'))", "ids": "=[]", "cids": "=[]", "dims": "={}"}}, {"each": "g", "in": "=G", "steps": [{"push": {"ids": "=sk.addGeometry(g[1], True) if is_tuple(g) else sk.addGeometry(g, cons)"}}]}, {"each": "t", "in": "=C", "steps": [{"push": {"cids": "=sk.addConstraint(constraint(remap(t, ids)))"}}]}, {"when": "=it.get('dims')", "then": [{"each": "name, t", "in": "=D", "steps": [{"let": {"ci": "=sk.addConstraint(constraint(remap(t, ids)))"}}, {"do": "=sk.renameConstraint(ci, str(it.name) + '_' + name)", "when": "=it.get('name')"}, {"do": "=dims.update({name: ci})"}]}]}, {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}}, {"put": {"byDefault": "=by_default(it)"}, "into": "r", "when": "=by_default(it)"}, {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"}, {"put": {"constraintList": "=con_brief(sk, cids)"}, "into": "r", "when": "=cids"}, {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"}, {"put": {"dimsNote": "=str(it.get('kind')) + ': no size to dimension here; sketch_constrain adds one.'"}, "into": "r", "when": "=it.get('dims') and not dims"}, {"push": {"out": "=r"}}], "on": "error", "except": [{"do": "=item_error(error)"}]}]},
+    {"each": "it", "in": "=items", "steps": [{"try": [{"let": {"G, C, D": "=build(it)", "cons": "=bool(it.get('construction'))", "ids": "=[]", "cids": "=[]", "dims": "={}"}}, {"each": "g", "in": "=G", "steps": [{"push": {"ids": "=sk.addGeometry(g[1], True) if is_tuple(g) else sk.addGeometry(g, cons)"}}]}, {"each": "t", "in": "=C", "steps": [{"push": {"cids": "=sk.addConstraint(constraint(remap(t, ids)))"}}]}, {"when": "=it.get('dims')", "then": [{"each": "name, t", "in": "=D", "steps": [{"let": {"ci": "=sk.addConstraint(constraint(remap(t, ids)))"}}, {"do": "=sk.renameConstraint(ci, str(it.name) + '_' + name)", "when": "=it.get('name')"}, {"do": "=dims.update({name: ci})"}]}]}, {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}}, {"put": {"notGiven": "=by_default(it)"}, "into": "r", "when": "=by_default(it)"}, {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"}, {"put": {"constraintList": "=con_list(sk, cids)"}, "into": "r", "when": "=cids"}, {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"}, {"put": {"dimsNote": "=str(it.get('kind')) + ': no size to dimension here; sketch_constrain adds one.'"}, "into": "r", "when": "=it.get('dims') and not dims"}, {"push": {"out": "=r"}}], "on": "error", "except": [{"do": "=item_error(error)"}]}]},
     {"do": "=doc().recompute()"},
     {"let": {"st": "=state_of(sk)"}}
    ],
@@ -15372,7 +16152,24 @@
     ],
     "returns": {
      "result": {
-      "means": "A one-line summary first"
+      "means": "what was measured of the call: { constraints, dofBefore, moved, joinsNotShown, sketchExtent }"
+     },
+     "result.constraints": {
+      "means": "each constraint added: { id, type, refs [[geometry, vertex]], value, name, driving }"
+     },
+     "result.dofBefore": {
+      "means": "degrees of freedom before the call; state has them after"
+     },
+     "result.moved": {
+      "means": "each join that moved: { join [[geometry, vertex], [geometry, vertex]], moved: [{ ref, mm }] }",
+      "unit": "mm"
+     },
+     "result.joinsNotShown": {
+      "means": "joins that moved, past the cap"
+     },
+     "result.sketchExtent": {
+      "means": "the sketch's shapes after the solve: { x: [min, max], y: [min, max] }",
+      "unit": "mm"
      },
      "added": {
       "means": "Constraint ids from 0"
@@ -15484,7 +16281,7 @@
       "means": "Its frame in the world, as vectors"
      },
      "axes": {
-      "means": "Its frame in words"
+      "means": "the world axis that sketch x, sketch y and the normal run along: { x, y, normal }, as +X or mostly +Z (12° off)"
      }
     }
    },
@@ -38818,7 +39615,7 @@
       "means": "the new sketch, by its label"
      },
      "axes": {
-      "means": "its frame in words"
+      "means": "the world axis that sketch x, sketch y and the normal run along: { x, y, normal }, as +X or mostly +Z (12° off)"
      }
     }
    },
@@ -38889,7 +39686,7 @@
       "means": "the new sketch's label"
      },
      "axes": {
-      "means": "Its frame in words"
+      "means": "the world axis that sketch x, sketch y and the normal run along: { x, y, normal }, as +X or mostly +Z (12° off)"
      }
     }
    },
@@ -39028,7 +39825,7 @@
     ],
     "returns": {
      "axes": {
-      "means": "the frame in words"
+      "means": "the world axis that sketch x, sketch y and the normal run along: { x, y, normal }, as +X or mostly +Z (12° off)"
      },
      "on": {
       "means": "what it is on"

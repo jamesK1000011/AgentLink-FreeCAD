@@ -935,26 +935,24 @@ EDGES_SHOWN = 12  # edges an answer describes one by one; the rest are counted
 EDGES_SIDED = 200  # edges sorted into outside and inside; past this, not
 
 
-def _num_word(x):
-    x = round(float(x), 2)
-    return str(int(x)) if x == int(x) else f"{x:g}"
-
-
-def _dir_word(d):
-    """"x", "-z" … for a direction along an axis (within 1°), else [x, y, z]."""
+def _dir_rec(d):
+    """"x", "z" … for a direction along an axis (within 1°), else [x, y, z] (numbers)."""
     for i, ax in enumerate("xyz"):
         if abs(d[i]) >= math.cos(math.radians(1.0)):
             return ax
-    return "[" + ", ".join(_num_word(c) for c in d) + "]"
+    return [rl.n2(c) for c in d]
 
 
 def edge_words(shape, names, cap=EDGES_SHOWN):
-    """Each edge of names on shape in a short line: "Edge9: line along y,
-    60 mm, mid [40, 0, 0]" (24 Nov QA: an answer that named the edges only
-    let a wrong choice of edges pass unseen). At most cap lines, then how
-    many more there are. Each line ends with outside or inside when it is
-    known (26 Nov QA), and the first line counts them: "8 edges: 4 outside
-    (lose material), 4 inside (gain material)"."""
+    """Each edge of names on shape as a record (28 Nov: answers are
+    records): { edge: "Edge9", kind: "line", along: "y", length: 60, mid:
+    [40, 0, 0], side: "outside" | "inside" } and for a circle or an arc
+    { kind: "circle" | "arc", radius, about: the axis }. along and about are
+    an axis name ("x") when the direction is along it within 1 degree, else
+    [x, y, z]. side is left out when it is not known (smooth edge, or more
+    than EDGES_SIDED edges). At most cap records (24 Nov QA: an answer that
+    named the edges only let a wrong choice of edges pass unseen); how many
+    were given is the result's edgesGiven and edgesNotShown."""
     from .measure import describe_edge
 
     edges = shape.Edges
@@ -965,24 +963,22 @@ def edge_words(shape, names, cap=EDGES_SHOWN):
             i = int(str(n)[4:])
             d = describe_edge(edges[i - 1], i)
         except Exception:  # noqa: BLE001 - a name that is not an edge stays as it is
-            out.append(str(n))
+            out.append({"edge": str(n)})
             continue
         t = d.get("type", "edge")
+        rec = {"edge": str(n)}
         if t == "line" and d.get("dir"):
-            what = f"line along {_dir_word(d['dir'])}"
+            rec.update(kind="line", along=_dir_rec(d["dir"]))
         elif "radius" in d:
-            what = f"{'circle' if d.get('closed') else 'arc'} r {_num_word(d['radius'])} mm about {_dir_word(d['axis'])}"
+            rec.update(kind="circle" if d.get("closed") else "arc", radius=rl.n2(d["radius"]), about=_dir_rec(d["axis"]))
         else:
-            what = t
-        side = f", {sides[k]}" if sides and sides[k] else ""
-        out.append(f"{n}: {what}, {_num_word(d['length'])} mm, mid [{', '.join(_num_word(c) for c in d['mid'])}]{side}")
-    if len(names) > cap:
-        out.append(f"… and {len(names) - cap} more edges ({len(names)} in all)")
-    head = sides_line(sides)
-    if not sides and len(names) > EDGES_SIDED:
-        # a limit that is used is said (27 Nov)
-        head = f"{len(names)} edges: outside and inside are not worked out for more than {EDGES_SIDED} edges"
-    return ([head] if head else []) + out
+            rec["kind"] = t
+        rec["length"] = rl.n2(d["length"])
+        rec["mid"] = [rl.n2(c) for c in d["mid"]]
+        if sides and sides[k]:
+            rec["side"] = sides[k]
+        out.append(rec)
+    return out
 
 
 def edge_sides(shape, names):
@@ -1000,23 +996,6 @@ def edge_sides(shape, names):
         except Exception:  # noqa: BLE001 - not an edge: not known
             out.append(None)
     return out
-
-
-def sides_line(sides):
-    """"8 edges: 4 outside (lose material), 4 inside (gain material)", or
-    "" when no edge's side is known."""
-    o, i = sides.count("outside"), sides.count("inside")
-    if not o and not i:
-        return ""
-    parts = []
-    if o:
-        parts.append(f"{o} outside (lose material)")
-    if i:
-        parts.append(f"{i} inside (gain material)")
-    rest = len(sides) - o - i
-    if rest:
-        parts.append(f"{rest} smooth or not known")
-    return f"{len(sides)} edge{'s' if len(sides) != 1 else ''}: " + ", ".join(parts)
 
 
 def find_faces(shape, queries, names=()):
@@ -1183,7 +1162,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
         if feat is not None and out["volumeChange"] == 0:
             # FreeCAD kept a feature that changed no volume: where its sketch
             # lies against the body, as measured (no word on what was meant).
-            lies = sketch_lies_words(feat, body)
+            lies = sketch_lies(feat, body)
             if lies:
                 keep["lies"] = lies
         if feat is not None:
@@ -1194,33 +1173,24 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
                 head = {k: out[k] for k in ("feature", "type") if k in out}
                 out = {**head, "where": out["where"], **{k: v for k, v in out.items() if k not in head and k != "where"}}
     out = with_changed(session, body, out, before)
-    line = result_line(feat, body, tool, out.get("volumeChange"), keep, seen, out.get("where"))
+    rec = result_line(feat, body, tool, out.get("volumeChange"), keep, seen)
     note = geo.box_note(body.Shape) if "box" in out else ""
     if note:
         out["boxNote"] = note
-    if line and keep.get("fills"):
-        line += " " + keep["fills"][0].upper() + keep["fills"][1:] + "."
-    if line and keep.get("lies"):
-        line += " " + keep["lies"]
-    elif line and feat is not None and keep.get("old") is None:
-        # The first feature of a body: which side of its sketch it went.
-        along = normal_span_words(feat, body)
-        if along:
-            line += " " + along
-    if line and placed:
-        line += (f" {body.Label}'s Placement is at {placed['at']}, axis {placed['axis']}, angle {placed['angle']} deg: "
-                 "the boxes here are with this Placement, and the body's planes and axes are placed so.")
+    if rec and feat is not None:
+        if keep.get("lies"):
+            rec.update(keep["lies"])
+        elif keep.get("old") is None:
+            # The first feature of a body: which side of its sketch it went.
+            along = normal_span(feat, body)
+            if along:
+                rec["normalSpan"] = along
     held = geo.container_fact(body)
     if held:
         out["containerPlacement"] = held
-        if line:
-            line += (f" {body.Label} is in a container with a Placement of its own (at {held['at']}, axis {held['axis']}, angle {held['angle']} deg): "
-                     "the boxes here do not have that Placement.")
-    if line and valid is False:
-        line += " FreeCAD's shape check (isValid) says that the body's shape is not valid. FreeCAD gave no error."
-    if line:
-        out = {"result": line, **out}
-    return check_in_result(picks.finish(session, tool, out, recompute=False))
+    if rec:
+        out = {"result": rec, **out}
+    return picks.finish(session, tool, out, recompute=False)
 
 
 def pipe_wire_words(feat):
@@ -1285,24 +1255,6 @@ def fills_cuts(feat, body, reg, tol=0.01):
         return "; ".join(out)
     except Exception:  # noqa: BLE001 - a reading only
         return ""
-
-
-def check_in_result(out):
-    """The answer with Check Geometry's finding of its health put in the
-    result line too (s1127f QA: "Check Geometry reports Error in Edge:
-    BOPAlgo SelfIntersect" was in health only). Never raises."""
-    try:
-        h = out.get("health") if isinstance(out, dict) else None
-        if isinstance(h, dict) and isinstance(out.get("result"), str):
-            for sh in h.get("shapes") or []:
-                said = sh.get("checkErrors") if isinstance(sh, dict) else None
-                if said:
-                    out["result"] = (out["result"].rstrip() + f" Check Geometry reports {str(said[0])[:120].rstrip('.')}"
-                                     + (f" and {len(said) - 1} more" if len(said) > 1 else "") + ".")
-                    break
-    except Exception:  # noqa: BLE001 - a reading only
-        pass
-    return out
 
 
 # ---- what FreeCAD stored (facts only, 27 Nov) ---------------------------------------------
@@ -1618,13 +1570,13 @@ def _profile_rec(keep):
     return keep.setdefault("profiles", {})
 
 
-def _profiles_line(keep, cut):
-    """The result line's words for the profiles that did a part or nothing
-    (resultline.profiles_text), from what profile_results measured; ""."""
+def _profiles_rec(keep):
+    """The result record's profile counts (resultline.profiles_rec), from
+    what profile_results measured; {}."""
     rec = keep.get("profiles") if isinstance(keep, dict) else None
     if not rec or "n" not in rec:
-        return ""
-    return rl.profiles_text(rec["n"], rec["looked"], rec["part"], rec["none"], cut)
+        return {}
+    return rl.profiles_rec(rec["n"], rec["looked"], rec["part"], rec["none"])
 
 
 PIECES_SHOWN = 4  # separate pieces of one cut said one by one
@@ -1635,39 +1587,40 @@ def _dim(q):
     return float(getattr(q, "Value", q))
 
 
-def _size_words(feat):
-    """A fillet's radius or a chamfer's size, read from the feature."""
+def _size_rec(feat):
+    """A fillet's radius or a chamfer's size, read from the feature, as
+    { size } ({ size, size2 } for two distances, { size, angle } for a
+    distance and an angle; mm and degrees); {} when not read."""
     t = getattr(feat, "TypeId", "")
     try:
         if t == "PartDesign::Fillet":
-            return f"radius {rl.num(_dim(feat.Radius))} mm"
+            return {"size": rl.n2(_dim(feat.Radius))}
         if t == "PartDesign::Chamfer":
-            kind, size = str(getattr(feat, "ChamferType", "")), rl.num(_dim(feat.Size))
+            kind, size = str(getattr(feat, "ChamferType", "")), rl.n2(_dim(feat.Size))
             if kind == "Two distances":
-                return f"sizes {size} and {rl.num(_dim(feat.Size2))} mm"
+                return {"size": size, "size2": rl.n2(_dim(feat.Size2))}
             if kind == "Distance and Angle":
-                return f"size {size} mm and angle {rl.num(_dim(feat.Angle))} deg"
-            return f"size {size} mm"
+                return {"size": size, "angle": rl.n2(_dim(feat.Angle))}
+            return {"size": size}
     except Exception:  # noqa: BLE001 - not read: not said
-        return ""
-    return ""
+        return {}
+    return {}
 
 
-def result_line(feat, body, tool, delta, keep, seen=None, where_text=None):
-    """The result line of a feature (agentlink/resultline.py feature_result),
-    from the shapes before and after and what where_went measured (keep).
-    "" when there is no feature. A fact that cannot be measured is left out;
-    never raises."""
+def result_line(feat, body, tool, delta, keep, seen=None):
+    """The result record of a feature (agentlink/resultline.py
+    feature_result), from the shapes before and after and what where_went
+    measured (keep). {} when there is no feature. A fact that cannot be
+    measured is left out; never raises."""
     if feat is None:
-        return ""
-    label = getattr(feat, "Label", "") or tool
+        return {}
     try:
-        return sign_facts(feat, body, tool, label, delta, _result_line(feat, body, tool, label, delta, keep, seen, where_text))
+        return sign_facts(feat, delta, _result_line(feat, body, tool, delta, keep, seen))
     except Exception:  # noqa: BLE001 - a reading only
         try:
-            return rl.feature_head(label, tool, delta)
+            return {k: v for k, v in {"material": rl.material(tool, delta)}.items() if v}
         except Exception:  # noqa: BLE001
-            return ""
+            return {}
 
 
 def add_sub(feat):
@@ -1683,27 +1636,18 @@ def add_sub(feat):
     return None
 
 
-def sign_facts(feat, body, tool, label, delta, line):
-    """The result line with the feature's type said where the measured
-    change has the other sign (s1127e QA, H2: "Pipe removed material" for an
-    AdditivePipe), and the body's volume said where it is below 0 (a solid
-    whose faces point inward). Both are measured or read; nothing is
-    guessed about why."""
+def sign_facts(feat, delta, rec):
+    """The result record with featureKind where the measured change has the
+    other sign than the feature's type (s1127e QA, H2: "Pipe removed
+    material" for an AdditivePipe): "additive" or "subtractive", read from
+    the type. Nothing is guessed about why."""
     kind = add_sub(feat)
-    head = rl.feature_head(label, tool, delta)
-    if kind and delta is not None and rl.num(delta) != "0" and (delta > 0) != (kind == "additive") and line.startswith(head):
-        line = (f"{label} ({getattr(feat, 'TypeId', '')}, a {kind} type): volume change {rl.signed(delta)} mm³."
-                + line[len(head):])
-    try:
-        vol = float(body.Shape.Volume)
-        if vol < 0 and rl.num(vol) != "0":
-            line += f" The volume of {getattr(body, 'Label', 'the body')} is {rl.num(vol)} mm³, below 0."
-    except Exception:  # noqa: BLE001 - not read: not said
-        pass
-    return line
+    if kind and delta is not None and rl.num(delta) != "0" and (delta > 0) != (kind == "additive"):
+        rec = {**rec, "featureKind": kind}
+    return rec
 
 
-def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
+def _result_line(feat, body, tool, delta, keep, seen):
     new = body.Shape
     new_ok = new is not None and not new.isNull()
     old = keep.get("old") if "old" in keep else None
@@ -1718,21 +1662,20 @@ def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
             names = list(feat.Base[1])
         except Exception:  # noqa: BLE001
             names = []
-        lines = seen
-        if lines is None and have_old and names:
-            lines = edge_words(old, names)
-        return rl.dressup_result(label, tool, delta, len(names), _size_words(feat), list(lines or []), solids, was,
-                                 changed=edges_changed(old, new, names) if have_old and new_ok else None,
-                                 body_box=exact_box(new) if new_ok else None)
-    new_box = exact_box(new) if new_ok else None
+        edges = seen
+        if edges is None and have_old and names:
+            edges = edge_words(old, names)
+        out = rl.dressup_result(len(names), _size_rec(feat), list(edges or []), solids, was,
+                                changed=edges_changed(old, new, names) if have_old and new_ok else None)
+        if len(names) > EDGES_SIDED:
+            out["sideLimit"] = EDGES_SIDED  # outside and inside are not worked out for more edges
+        return out
     if not have_old:
-        return rl.feature_result(label, tool, delta, body_box=new_box, solids=solids)
+        return rl.feature_result(tool, delta)
     old_box = exact_box(old)
     reg = keep.get("reg")
-    note = where_text if isinstance(where_text, str) and where_text.startswith("not worked out") else ""
-    note = (note[0].upper() + note[1:] + ".") if note and not note.endswith(".") else note
     if reg is None:
-        return rl.feature_result(label, tool, delta, old_box=old_box, body_box=new_box, solids=solids, solids_was=was, note=note)
+        return rl.feature_result(tool, delta, old_box=old_box, solids=solids, solids_was=was)
     cut = bool(keep.get("cut"))
     tol = keep.get("tol", 0.01)
     pieces = [x for x in reg.Solids if x.Volume > tol] or [reg]
@@ -1757,9 +1700,9 @@ def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
                 touching = gap <= TOUCH
             except Exception:  # noqa: BLE001 - not measured: nothing is said
                 gap = touching = None
-    return rl.feature_result(label, tool, delta, region=boxes, region_more=more, old_box=old_box, cut=cut, faces=faces,
-                             faces_more=unlooked, gap=gap, touching=touching, looked=looked, solids=solids, solids_was=was, note=note,
-                             profiles=_profiles_line(keep, cut))
+    return rl.feature_result(tool, delta, region=boxes, region_more=more, old_box=old_box, cut=cut, faces=faces,
+                             faces_more=unlooked, gap=gap, touching=touching, looked=looked, solids=solids, solids_was=was,
+                             profiles=_profiles_rec(keep))
 
 
 def _lids(reg, skin, diag, flip=False):
@@ -2060,107 +2003,110 @@ def _profile_of(o):
 
 
 def outside_words(sk, bb, n):
-    """Words when the sketch's outline lies beside the body along an axis
-    of the sketch's plane (world axes, the normal's axis left out), or ""."""
+    """Where the sketch's outline lies beside the body along an axis of the
+    sketch's plane (world axes, the normal's axis left out), as
+    outside_rec's record; {} when it overlaps on each."""
     try:
         pb = geo.world_shape(sk).BoundBox
     except Exception:  # noqa: BLE001
-        return ""
-    return outside_text(sk.Label, (pb.XMin, pb.XMax, pb.YMin, pb.YMax, pb.ZMin, pb.ZMax),
-                        (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax), (n.x, n.y, n.z))
+        return {}
+    return outside_rec((pb.XMin, pb.XMax, pb.YMin, pb.YMax, pb.ZMin, pb.ZMax),
+                       (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax), (n.x, n.y, n.z))
 
 
-def outside_text(label, prof, body, normal, tol=1e-6):
-    """Plain-number form of outside_words (profile and body boxes as
-    xmin, xmax, ymin, ymax, zmin, zmax; normal x, y, z): the measured
-    spans of the outline and of the body on each axis of the sketch's plane
-    where the two do not overlap; "" when they overlap on each."""
-    words = []
+def outside_rec(prof, body, normal, tol=1e-6):
+    """The measured spans of the outline and of the body on each axis of the
+    sketch's plane where the two do not overlap, as { x: { outline: [lo, hi],
+    body: [lo, hi] } } (mm; profile and body boxes as xmin, xmax, ymin, ymax,
+    zmin, zmax; normal x, y, z); {} when they overlap on each."""
+    out = {}
     for i, ax in enumerate("xyz"):
         if abs(normal[i]) > 0.9:  # the axis the cut goes along
             continue
         plo, phi, blo, bhi = prof[2 * i], prof[2 * i + 1], body[2 * i], body[2 * i + 1]
         if phi < blo - tol or plo > bhi + tol:
-            words.append(f"the outline lies at {ax} {plo:g} to {phi:g}; the body spans {ax} {blo:g} to {bhi:g}")
-    if not words:
-        return ""
-    return f"The sketch {label}: " + "; ".join(words) + "."
+            out[ax] = {"outline": [rl.n2(plo), rl.n2(phi)], "body": [rl.n2(blo), rl.n2(bhi)]}
+    return out
 
 
-def normal_span_words(feat, body):
-    """"Along the normal of sketch S the body spans 0..10 (0 is the sketch
-    plane; + is the way the normal points)." for a feature with a sketch;
-    "" when there is none or it cannot be read."""
+def _normal_frame(sk):
+    """(the sketch's frame for resultline.frame_ranges, its normal) in the world."""
+    pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+    import FreeCAD
+
+    n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+    return pl, n, ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
+
+
+def normal_span(feat, body):
+    """{ sketch: "Sketch", span: [0, 10] } for a feature with a sketch: the
+    body's span along the sketch's normal (mm; 0 is the sketch plane; + is
+    the way the normal points: the card says it); {} when there is no sketch
+    or it cannot be read."""
     try:
         prof = getattr(feat, "Profile", None)
         sk = prof[0] if isinstance(prof, (list, tuple)) else prof
         if sk is None or not hasattr(sk, "Placement"):
-            return ""
-        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
-        import FreeCAD
-
-        n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
-        frame = ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
+            return {}
+        _pl, _n, frame = _normal_frame(sk)
         along = rl.frame_ranges(frame, exact_box(geo.world_shape(body)))[2]
-        return f"Along the normal of sketch {sk.Label} the body spans {rl.span(*along)} (0 is the sketch plane; + is the way the normal points)."
+        return {"sketch": sk.Label, "span": rl.range_rec(along)}
     except Exception:  # noqa: BLE001 - a reading only
-        return ""
+        return {}
 
 
-def tool_span_words(feat, body, sk, pl):
-    """"Along the normal of sketch S the feature's own solid (its
-    AddSubShape) spans -25..0." for a feature that changed no volume: where
-    FreeCAD put the solid it adds or cuts, measured, beside the body's span
-    (s1127e QA, H7: a hole drilled away from the body said only "volume
-    change 0"). "" when the feature has no AddSubShape or it is not read."""
+def tool_span(feat, body, sk, pl):
+    """{ sketch, span } of the feature's own solid (its AddSubShape) along the
+    sketch's normal, for a feature that changed no volume: where FreeCAD put
+    the solid it adds or cuts, measured, beside the body's span (s1127e QA,
+    H7: a hole drilled away from the body said only "volume change 0").
+    {} when the feature has no AddSubShape or it is not read."""
     try:
         tool = getattr(feat, "AddSubShape", None)
         if tool is None or tool.isNull() or not tool.Solids:
-            return ""
+            return {}
         import FreeCAD
 
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
         frame = ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
         placed = geo.world_shape(body, in_body_frame(body, tool) or tool)
         along = rl.frame_ranges(frame, exact_box(placed))[2]
-        return f"Along the normal of sketch {sk.Label} the feature's own solid (its AddSubShape) spans {rl.span(*along)}."
+        return {"sketch": sk.Label, "span": rl.range_rec(along)}
     except Exception:  # noqa: BLE001 - a reading only
-        return ""
+        return {}
 
 
-def sketch_lies_words(feat, body):
+def sketch_lies(feat, body):
     """Where the sketch of a feature that changed no volume lies against the
-    body, as measured: the features that share the sketch as their profile,
-    the body's span along the sketch's normal (0 is the sketch plane), and
-    the axes of the sketch's plane on which the outline and the body do not
-    overlap. "" for a feature with no sketch, or when it cannot be read.
-    No word says what the caller meant or what to change."""
+    body, as measured, as record keys of the result: sketchAlsoProfileOf
+    (the features that share the sketch as their profile), normalSpan (the
+    body's span along the sketch's normal), toolSpan (the feature's own
+    solid), outline (the axes of the sketch's plane on which the outline and
+    the body do not overlap). {} for a feature with no sketch, or when it
+    cannot be read. No word says what the caller meant or what to change."""
     try:
         prof = getattr(feat, "Profile", None)
         sk = prof[0] if isinstance(prof, (list, tuple)) else prof
         if sk is None or not hasattr(sk, "Placement"):
-            return ""
-        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
-        import FreeCAD
-
-        out = []
+            return {}
+        pl, n, _frame = _normal_frame(sk)
+        out = {}
         others = [o for o in (getattr(sk, "InList", None) or ()) if o is not feat and _profile_of(o) is sk]
         if others:
-            out.append(f"Sketch {sk.Label} is also the profile of {', '.join(o.Label for o in others)}.")
-        n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+            out["sketchAlsoProfileOf"] = [o.Label for o in others]
         bb = geo.bound_box(geo.world_shape(body))
-        along = normal_span_words(feat, body)
+        along = normal_span(feat, body)
         if along:
-            out.append(along)
-        tool_along = tool_span_words(feat, body, sk, pl)
+            out["normalSpan"] = along
+        tool_along = tool_span(feat, body, sk, pl)
         if tool_along:
-            out.append(tool_along)
+            out["toolSpan"] = tool_along
         off = outside_words(sk, bb, n)
         if off:
-            out.append(off)
-        return " ".join(out)
+            out["outline"] = {"sketch": sk.Label, **off}
+        return out
     except Exception:  # noqa: BLE001 - a reading only
-        return ""
+        return {}
 
 
 def uses(o, f):

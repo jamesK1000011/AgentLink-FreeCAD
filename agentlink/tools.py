@@ -955,10 +955,10 @@ class Session:
         return out
 
     @staticmethod
-    def solids_said(sh):
-        """The solids of a shape as measured: how many, and whether they
-        touch (the least distance between each two, from the shape). It
-        says nothing of intent: AllowCompound is FreeCAD's default."""
+    def solids_gap(sh):
+        """The least distance between two solids of a shape, mm, as measured
+        (distToShape of each two); None when it is not measured. It says
+        nothing of intent: AllowCompound is FreeCAD's default."""
         solids = list(sh.Solids)
         n = len(solids)
         gap = None
@@ -969,11 +969,7 @@ class Session:
                     gap = d if gap is None else min(gap, d)
         except Exception:
             gap = None
-        if gap is None:
-            return f"{n} separate solids"
-        if gap <= 1e-7:  # FreeCAD's own confusion tolerance
-            return f"{n} separate solids; at least two touch"
-        return f"{n} separate solids that do not touch (nearest gap {gap:.3g} mm)"
+        return gap
 
     @staticmethod
     def allows_compound(o):
@@ -1055,9 +1051,9 @@ class Session:
         o = self.body(a.get("body"))
         sh = o.Shape
         s = geo.shape_facts(sh)
-        touch = self.solids_said(sh) if len(sh.Solids) > 1 else None
-        if touch:
-            s["solidsSaid"] = touch
+        several = len(sh.Solids) > 1
+        gap = self.solids_gap(sh) if several else None
+        if several:
             s["allowCompound"] = bool(self.allows_compound(o))
             s["each"] = geo.each_solid(sh)
         ok, said = geo.core_check(sh)
@@ -1073,31 +1069,23 @@ class Session:
                     s["checkGeometry"]["where"] = where
         else:
             s["checkGeometry"] = "not run: this FreeCAD's shape has no check"
-        line = self.check_line(o, sh, s, touch)
+        rec = self.check_rec(gap)
         stats = self.stats_of(o)
         note = geo.box_note(sh)
-        return {**({"result": line} if line else {}), "body": o.Label, **s, **stats, **({"boxNote": note} if note else {})}
+        return {**({"result": rec} if rec else {}), "body": o.Label, **s, **stats, **({"boxNote": note} if note else {})}
 
     @staticmethod
-    def check_line(o, sh, s, said):
-        """body_check's result line (agentlink/resultline.py): the solids
-        (whether they touch, when there are several), valid, closed, the box
-        in the world, the volume. A reading that fails is left out."""
+    def check_rec(gap):
+        """body_check's result record (agentlink/resultline.py): for several
+        solids, whether two touch and the least distance between two. The
+        rest (valid, closed, solids, volume, bounds, checkGeometry) are keys
+        of the answer."""
         from . import resultline
 
         try:
-            bb = geo.bound_box(sh)
-            box = (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax)
+            return resultline.body_check_result(gap)
         except Exception:  # noqa: BLE001
-            box = None
-        try:
-            volume = float(sh.Volume)
-        except Exception:  # noqa: BLE001
-            volume = None
-        try:
-            return resultline.body_check_result(o.Label, len(sh.Solids), said, s.get("valid"), s.get("closed"), box, volume, s.get("checkGeometry"))
-        except Exception:  # noqa: BLE001
-            return ""
+            return {}
 
     def _mesh_named(self, ref):
         """A mesh object (Mesh::Feature) by name or label, or None."""
@@ -1780,9 +1768,9 @@ def make_tools(session):
                             "back new problem lines as \"report\". FreeCAD's own known faults are counted once (\"known\"). When there are problems, first: the first problem line without its time. Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
         Tool("body_check", "Read FreeCAD's checks of a body. valid: Shape.isValid. closed: every shell is closed. solids: the count. volume: mm³. "
                            "checkGeometry: FreeCAD's Check Geometry (shape.check with its BOP checks). errors has FreeCAD's own words, and where gives the place. "
-                           "A Body with AllowCompound true (FreeCAD's default) can hold several solids. Then solidsSaid tells if they touch, and each has valid, "
+                           "A Body with AllowCompound true (FreeCAD's default) can hold several solids. Then result gives nearestGap and solidsTouch, and each has valid, "
                            "closed and volume of each solid. Example of a Check Geometry error on a valid, closed shape: InvalidCurveOnSurface, "
-                           "where a counterbore breaks a chamfer. Answer: result (a one-line summary first), body, valid, closed, solids, volume, checkGeometry.", obj({"body": body}), s.body_check),
+                           "where a counterbore breaks a chamfer. Answer: body, valid, closed, solids, volume, checkGeometry; for several solids result { nearestGap (mm), solidsTouch }, allowCompound and each.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
             "Write a body as STEP or STL, and read it back. tolerance: the chord error, mm, 0.01 by default. verify: gives the volume read and, for STEP, the "

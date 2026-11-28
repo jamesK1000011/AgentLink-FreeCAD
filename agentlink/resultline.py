@@ -1,39 +1,34 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""The result line: the first field of a tool's answer (plain Python).
+"""The result record: the `result` field of a tool's answer (plain Python).
 
-Every answer of a tool that changes the model starts with `result`: one
-short text, made by code from numbers that were measured, by the same rule
-for every part and every feature. A reader who cannot see the model must be
-able to picture it from this line.
-
-The rules (owner, 27 Nov):
-  - A fixed sentence pattern for each fact. No shape word, no verdict, no
-    guess. Where a number was not measured, the sentence is left out.
+Owner, 28 Nov: answers are records. `result` is a dict of the facts that a
+measure gave and that no other key of the same answer has: typed numbers
+and names, boxes as { x: [min, max], y: [min, max], z: [min, max] } (mm),
+no sentence. A fact that is another key of the answer (volumeChange,
+solids, bounds, where, opens, notGiven …) is not said again here. The rules:
   - Numbers in mm, rounded to 2 places. World axes are X, Y and Z.
   - The only tolerance is the equality tolerance TOL that the answers
-    already used (beyond_sides, added_sentence): 1e-3 mm. A volume change
-    is said as its number rounded to 2 places; the words "added" and
-    "removed" follow the sign of that rounded number, and a change that
-    rounds to 0 is said as "volume change 0 mm³".
+    already used (beyond_sides): 1e-3 mm. The words "added" and "removed"
+    follow the sign of the volume change rounded to 2 places; a change that
+    rounds to 0 has no material word.
   - A cap that hides items says how many are not shown.
-  - A box against another box uses one set of words everywhere (against):
-    "past -x by 5", "inside (10 from -x, 20 from +x)". World axes.
+  - A box against another box uses one record everywhere (against_rec):
+    { x: { past: { "-x": 5 } } } or { x: { inside: { "-x": 10, "+x": 20 } } }.
 
 This module has only small pure functions: they take measured numbers and
-return a sentence. The code that measures (families/pd_common.py,
-families/sketch.py, tools.py) calls them. Tests: tests/test_result_line_1127.py.
+return a record. The code that measures (families/pd_common.py,
+families/sketch.py, tools.py) calls them. Tests:
+tests/test_result_records_1128.py.
 """
 
 TOL = 1e-3  # mm: two numbers this near are equal (the tolerance of beyond_sides)
 
 # What a tool did when the volume change is not known; the sign of a measured
-# volume change decides the words otherwise (feature_head).
-TOOL_PHRASE = {
-    "pd_pad": "added material", "pd_revolution": "added material",
-    "pd_pocket": "removed material", "pd_hole": "removed material", "pd_groove": "removed material",
+# volume change decides the word otherwise (material).
+TOOL_MATERIAL = {
+    "pd_pad": "added", "pd_revolution": "added",
+    "pd_pocket": "removed", "pd_hole": "removed", "pd_groove": "removed",
 }
-# Dress-ups name their edges: the verb is the tool's, whatever the sign.
-EDGE_VERB = {"pd_fillet": "rounded", "pd_chamfer": "bevelled"}
 
 
 # ---- numbers ---------------------------------------------------------------------------------
@@ -66,78 +61,11 @@ def plural(n, word):
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
-def and_(items):
-    items = list(items)
-    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
-
-
-# ---- RL-F: a solid feature -------------------------------------------------------------------
-
-def feature_head(label, tool, delta):
-    """The tool's verb and the signed volume change: "Pad added material,
-    volume change +6000 mm³." The sign of a measured change decides the
-    words; the tool's own words are used when there is none."""
-    if delta is None:
-        return f"{label} {TOOL_PHRASE.get(tool, 'changed the body')}."
-    if num(delta) == "0":  # the number as it is said: no other limit
-        return f"{label}: volume change 0 mm³."
-    word = "added" if delta > 0 else "removed"
-    return f"{label} {word} material, volume change {signed(delta)} mm³."
-
-
-def against(new, old, tol=TOL, axes=(0, 1, 2)):
-    """The new box against the old box on each axis: "x inside (10 from -x,
-    20 from +x); y past +y by 5; z past -z by 20 and past +z by 15". Boxes
-    as (xmin, xmax, ymin, ymax, zmin, zmax). Every axis of axes is said. An
-    axis that is inside says the measured distance to each side of the old
-    box (27 Nov QA: "x inside" did not say where along x)."""
-    out = []
-    for i in axes:
-        ax = "xyz"[i]
-        parts = []
-        if new[2 * i] < old[2 * i] - tol:
-            parts.append(f"past -{ax} by {num(old[2 * i] - new[2 * i])}")
-        if new[2 * i + 1] > old[2 * i + 1] + tol:
-            parts.append(f"past +{ax} by {num(new[2 * i + 1] - old[2 * i + 1])}")
-        if parts:
-            out.append(f"{ax} {' and '.join(parts)}")
-        else:
-            lo, hi = max(new[2 * i] - old[2 * i], 0.0), max(old[2 * i + 1] - new[2 * i + 1], 0.0)
-            out.append(f"{ax} inside ({num(lo)} from -{ax}, {num(hi)} from +{ax})")
-    return "; ".join(out)
-
-
-def lies_text(name, new, old, flat=False):
-    """Where a box lies against a named box: "Against the body (x 0..60, y
-    0..30, z 0..5): x past -x by 2.5; y inside (5 from -y, 10 from +y); z
-    inside (5 from -z, 0 from +z)." The old box is said, so the reader has
-    what was compared. flat: the old box is a flat face's; an axis along
-    which it has no size (within TOL) is left out."""
-    axes = [i for i in range(3) if not (flat and abs(old[2 * i + 1] - old[2 * i]) <= TOL)]
-    if not axes:
+def solids_text(now, was=None):
+    """"The body is 2 solids (was 1)." """
+    if now is None:
         return ""
-    return f"Against {name} ({box_text(old)}): {against(new, old, axes=axes)}."
-
-
-def profiles_text(n, looked, part, none, cut=True):
-    """The profiles of a feature's sketch that did not do all that their
-    area gives: "2 of 2 profiles cut in part (75% and 25% of the volume that
-    each area gives over the same depth)." "1 of 2 profiles cut nothing."
-    part: the measured shares (percent) of those that did a part; none: how
-    many did nothing; looked: how many of the n profiles were measured. ""
-    when every measured profile did all of it."""
-    verb, zero = ("cut", "cut nothing") if cut else ("added", "added nothing")
-    of = f"of {n} profile{'' if n == 1 else 's'}"
-    out = []
-    if part:
-        shares = and_([f"{float(p):.4g}%" for p in part])
-        each = "its area gives" if len(part) == 1 else "each area gives"
-        out.append(f"{len(part)} {of} {verb} in part ({shares} of the volume that {each} over the same depth).")
-    if none:
-        out.append(f"{none} {of} {zero}.")
-    if out and looked < n:
-        out.append(f"{looked} {of} were measured.")
-    return " ".join(out)
+    return f"The body is {plural(now, 'solid')}" + (f" (was {was})." if was is not None else ".")
 
 
 def body_change_text(body, vol0, vol1, box0=None, box1=None, solids0=None, solids1=None):
@@ -145,7 +73,9 @@ def body_change_text(body, vol0, vol1, box0=None, box1=None, solids0=None, solid
     before and after: "This call changed Body: volume change -196.35 mm³,
     now 14053.65 mm³." or "After this call the volume of Body is 14250 mm³:
     volume change 0 mm³." Then the two boxes when they differ, and the
-    solids when their count differs."""
+    solids when their count differs. (Not part of the result record: it is
+    the words of used_change, the answer of a call that changed a sketch
+    that a feature uses.)"""
     delta = vol1 - vol0
     if num(delta) == "0":  # the number as it is said: no other limit
         out = [f"After this call the volume of {body} is {num(vol1)} mm³: volume change 0 mm³."]
@@ -158,113 +88,165 @@ def body_change_text(body, vol0, vol1, box0=None, box1=None, solids0=None, solid
     return " ".join(out)
 
 
-def region_text(boxes, more, cut):
-    """The world box of the new or the removed material; one box for each
-    separate piece, then how many pieces are not shown."""
-    what = "The removed material is" if cut else "The new material is"
-    if len(boxes) == 1 and not more:
-        return f"{what} {box_text(boxes[0])}."
-    n = len(boxes) + more
-    said = "; ".join(box_text(b) for b in boxes)
-    return f"{what} in {n} pieces: {said}" + (f"; {more} more not shown." if more else ".")
+def n2(x):
+    """A number in mm as a number: 2 places at most, never -0.0."""
+    return round(float(x), 2) + 0.0
 
 
-def touch_text(faces, more, gap, touching):
-    """What the new material meets of the body before. faces: the side
-    words of the body's faces it lies on ("+z at z 5"); more: faces not
-    looked at (a cap); gap: the least distance to the body, mm, or None
-    when not measured; touching: whether that distance is zero, or None."""
+def box_rec(box):
+    """A box (xmin, xmax, ymin, ymax, zmin, zmax) as { x: [min, max], y: [min, max], z: [min, max] } (mm)."""
+    return {ax: [n2(box[2 * i]), n2(box[2 * i + 1])] for i, ax in enumerate("xyz")}
+
+
+def range_rec(pair):
+    """(min, max) as [min, max] (mm)."""
+    return [n2(pair[0]), n2(pair[1])]
+
+
+
+
+# ---- RL-F: a solid feature -------------------------------------------------------------------
+
+def material(tool, delta):
+    """"added" or "removed": the sign of the volume change as it is rounded to
+    2 places; the tool's own word when the change is not known; None when the
+    change rounds to 0 (the volumeChange key says 0)."""
+    if delta is None:
+        return TOOL_MATERIAL.get(tool)
+    if num(delta) == "0":
+        return None
+    return "added" if delta > 0 else "removed"
+
+
+def against_rec(new, old, tol=TOL, axes=(0, 1, 2)):
+    """The new box against the old box on each axis, as a record: on an axis
+    that goes past, { x: { past: { "-x": 5, "+x": 2 } } } (the sides that it
+    goes past, mm); on an axis that is inside, { x: { inside: { "-x": 10,
+    "+x": 20 } } } (the distance to each side of the old box). Boxes as
+    (xmin, xmax, ymin, ymax, zmin, zmax)."""
+    out = {}
+    for i in axes:
+        ax = "xyz"[i]
+        past = {}
+        if new[2 * i] < old[2 * i] - tol:
+            past[f"-{ax}"] = n2(old[2 * i] - new[2 * i])
+        if new[2 * i + 1] > old[2 * i + 1] + tol:
+            past[f"+{ax}"] = n2(new[2 * i + 1] - old[2 * i + 1])
+        if past:
+            out[ax] = {"past": past}
+        else:
+            out[ax] = {"inside": {f"-{ax}": n2(max(new[2 * i] - old[2 * i], 0.0)), f"+{ax}": n2(max(old[2 * i + 1] - new[2 * i + 1], 0.0))}}
+    return out
+
+
+def lies_rec(name, new, old, flat=False):
+    """Where a box lies against a named box: { against: "body", box: {…
+    the old box}, axes: against_rec's }. flat: the old box is a flat face's;
+    an axis along which it has no size (within TOL) is left out. {} when no
+    axis is left."""
+    axes = [i for i in range(3) if not (flat and abs(old[2 * i + 1] - old[2 * i]) <= TOL)]
+    if not axes:
+        return {}
+    return {"against": name, "box": box_rec(old), "axes": against_rec(new, old, axes=axes)}
+
+
+def profiles_rec(n, looked, part, none):
+    """The profiles of a feature's sketch that did not do all that their area
+    gives: { profileCount, partialProfilePercent: [75, 25] (the share of the
+    volume that each such area gives over the same depth), idleProfiles: how
+    many did nothing, profilesMeasured (when fewer than profileCount) }. {}
+    when every measured profile did all of it."""
+    out = {}
+    if part:
+        out["partialProfilePercent"] = [float(f"{p:.4g}") for p in part]
+    if none:
+        out["idleProfiles"] = int(none)
+    if out:
+        out["profileCount"] = n
+        if looked < n:
+            out["profilesMeasured"] = looked
+    return out
+
+
+def touch_rec(faces, more, gap, touching):
+    """What the new material meets of the body before: { touching: true,
+    faces: ["+z at z 5"], facesNotLooked: 3 } or { touching: true, faces: []
+    } (touches, shares no face) or { touching: false, gap: 12.5 }. faces:
+    the side words of the body's faces it lies on; more: faces not looked at
+    (a cap); gap: the least distance to the body, mm, or None; touching:
+    whether that distance is zero, or None (not measured: {})."""
     if faces:
-        return f"It touches the body on {and_(faces)}." + unlooked_text(more, "new")
+        out = {"touching": True, "faces": list(faces)}
+        if more:
+            out["facesNotLooked"] = more
+        return out
     if touching is True:
-        return "It touches the body but shares no face with it." + unlooked_text(more, "new")
+        return {"touching": True, "faces": []}
     if touching is False:
-        return "It touches the body nowhere" + (f" (nearest gap {num(gap)} mm)." if gap is not None else ".")
-    return ""
+        return {"touching": False, **({"gap": n2(gap)} if gap is not None else {})}
+    return {}
 
 
-def opens_text(faces, more, looked=True):
-    """Where a cut opens the body (the faces of the body before that the
-    removed material lies on)."""
-    if faces:
-        return f"It opens on {and_(faces)}." + unlooked_text(more, "removed")
-    if not looked:
-        return ""
-    if more:
-        return "It opens on no face of the body that was looked at." + unlooked_text(more, "removed")
-    return "It opens on no face of the body: it is closed inside it."
-
-
-def unlooked_text(more, what):
-    """" 8 faces of the removed material were not looked at." The faces
-    past the cap are not looked at for where they lie: the count is of
-    those faces, not of sides not said."""
-    if not more:
-        return ""
-    return f" {more} face{'' if more == 1 else 's'} of the {what} material {'was' if more == 1 else 'were'} not looked at."
-
-
-def solids_text(now, was=None):
-    """"The body is 2 solids (was 1)." """
-    if now is None:
-        return ""
-    return f"The body is {plural(now, 'solid')}" + (f" (was {was})." if was is not None else ".")
-
-
-def feature_result(label, tool, delta, region=None, region_more=0, old_box=None, body_box=None, cut=False,
-                   faces=None, faces_more=0, gap=None, touching=None, looked=True, solids=None, solids_was=None, note="", profiles=""):
-    """The result line of a solid feature, in the fixed order:
-    1 verb and volume change; 2 the box of the new or removed material (for
-    the first feature, the body's box); 3 the body's box before; 4 the
-    region against it on x, y, z; 5 contact (a cut: where it opens);
-    6 solids now and before. region: a list of boxes (one for each piece);
-    old_box None: there was no body before. note: a fact that was not
-    measured and why, said as it came. profiles: profiles_text's words
-    (a profile that did a part, or nothing), said after 5."""
-    out = [feature_head(label, tool, delta)]
-    if region and old_box is not None:
-        out.append(region_text(region, region_more, cut))
-        out.append(f"The body before is {box_text(old_box)}.")
-        union = (min(b[0] for b in region), max(b[1] for b in region), min(b[2] for b in region),
-                 max(b[3] for b in region), min(b[4] for b in region), max(b[5] for b in region))
-        out.append(f"Against the body before: {against(union, old_box)}.")
-        out.append(opens_text(faces or [], faces_more, looked) if cut else touch_text(faces or [], faces_more, gap, touching))
-    elif old_box is None and body_box is not None:
-        if solids is not None:
-            return " ".join([out[0], f"The body is {plural(solids, 'solid')}, {box_text(body_box)}."])
-        out.append(f"The body is {box_text(body_box)}.")
-    elif old_box is not None:
-        out.append(f"The body before is {box_text(old_box)}.")
-        if body_box is not None:
-            out.append(f"The body now is {box_text(body_box)}.")
+def feature_result(tool, delta, region=None, region_more=0, old_box=None, cut=False, faces=None, faces_more=0,
+                   gap=None, touching=None, looked=True, solids=None, solids_was=None, profiles=None):
+    """The result record of a solid feature: the facts that its answer has no
+    other key for. material: "added" | "removed"; pieces: one box for each
+    separate piece of the new or removed material when there are several
+    (the one box is the answer's added or removed key), piecesNotShown;
+    bodyBefore: the body's box before (the answer's bounds is the body now);
+    againstBefore: the region's box against it (against_rec); touches: for
+    added material (touch_rec); opensNotLooked: faces of the removed material
+    that were not looked at (the answer's opens lists where it opens);
+    solidsWas; profile counts (profiles_rec's keys). A fact that was not
+    measured is left out. region: a list of boxes (one for each piece);
+    old_box None: there was no body before."""
+    out = {}
+    m = material(tool, delta)
+    if m:
+        out["material"] = m
+    if old_box is not None:
+        out["bodyBefore"] = box_rec(old_box)
+        if region:
+            if len(region) > 1 or region_more:
+                out["pieces"] = [box_rec(b) for b in region]
+                if region_more:
+                    out["piecesNotShown"] = region_more
+            union = (min(b[0] for b in region), max(b[1] for b in region), min(b[2] for b in region),
+                     max(b[3] for b in region), min(b[4] for b in region), max(b[5] for b in region))
+            out["againstBefore"] = against_rec(union, old_box)
+            if cut:
+                if faces_more:
+                    out["opensNotLooked"] = faces_more
+                if not looked:
+                    out["opensLooked"] = False
+            else:
+                got = touch_rec(faces or [], faces_more, gap, touching)
+                if got:
+                    out["touches"] = got
     if profiles:
-        out.append(profiles)
-    if note:
-        out.append(note)
-    out.append(solids_text(solids, solids_was))
-    return " ".join(t for t in out if t)
+        out.update(profiles)
+    if solids is not None and solids_was is not None:
+        out["solidsWas"] = solids_was
+    return out
 
 
-def dressup_result(label, tool, delta, n_edges, size_words, edge_lines, solids=None, solids_was=None, changed=None, body_box=None):
-    """The result line of a fillet or a chamfer: how many edges the feature
-    holds (what FreeCAD was given), how many of them the result changed
-    (changed: a measured count, or None when not measured: an edge counts
-    when its mid-point is not on the body's surface after the feature),
-    the radius or size read from the feature, the edge words that the
-    answer already had, and the body's box after (body_box)."""
-    head = f"{label}: FreeCAD was given {plural(n_edges, 'edge')}"
+def dressup_result(n_edges, size=None, edges=None, solids=None, solids_was=None, changed=None):
+    """The result record of a fillet or a chamfer: edgesGiven (what FreeCAD
+    was given), edgesChanged (a measured count, or None when not measured:
+    an edge counts when its mid-point is not on the body's surface after the
+    feature), the size read from the feature (size, size2, angle: mm and
+    degrees), edgesNotShown (when the answer's `on` lists fewer edges than
+    were given), solidsWas. The edge records are the answer's `on`: they are
+    not said again."""
+    out = {"edgesGiven": n_edges}
     if changed is not None:
-        head += f"; the result changed {changed} of them"
-    if size_words:
-        head += f", {size_words}"
-    head += f", volume change {signed(delta)} mm³." if delta is not None else "."
-    out = [head]
-    if edge_lines:
-        out.append("Edges: " + "; ".join(edge_lines) + ".")
-    if body_box is not None:
-        out.append(f"The body now is {box_text(body_box)}.")
-    out.append(solids_text(solids, solids_was))
-    return " ".join(t for t in out if t)
+        out["edgesChanged"] = changed
+    out.update(size or {})
+    if edges and n_edges > len(edges):
+        out["edgesNotShown"] = n_edges - len(edges)
+    if solids is not None and solids_was is not None:
+        out["solidsWas"] = solids_was
+    return out
 
 
 # ---- the sketch frame ------------------------------------------------------------------------
@@ -299,188 +281,99 @@ def world_box(frame, xr, yr):
     return tuple(v for i in range(3) for v in (min(p[i] for p in pts), max(p[i] for p in pts)))
 
 
-def sketch_ranges_text(xr, yr):
-    return f"x {span(*xr)}, y {span(*yr)}"
-
-
-# ---- RL-SN: sketch_new -----------------------------------------------------------------------
-
-def sketch_new_result(label, support, axes, body=None, face=None):
-    """"Sketch Base is on XY. x runs +X; … The body spans sketch x -40..40,
-    y -30..30, and along the normal 0..10." support: where it is (plane
-    name or face words); axes: orient.axes_line's words; body: ((xmin, xmax),
-    (ymin, ymax), (nmin, nmax)) in the sketch frame or None; face: the
-    same for the face the sketch is on (its x and y are said)."""
-    out = [f"Sketch {label} is on {support}.", axes]
-    if body is not None:
-        out.append(f"The body spans sketch x {span(*body[0])}, y {span(*body[1])}, and along the normal {span(*body[2])}"
-                   " (0 is the sketch plane; + is the way the normal points).")
-    else:
-        out.append("The body has no solid yet.")
-    if face is not None:
-        out.append(f"The face spans sketch x {span(*face[0])}, y {span(*face[1])}.")
-    return " ".join(out)
+def extent_rec(xr, yr):
+    """The sketch's x and y ranges as { x: [min, max], y: [min, max] } (mm)."""
+    return {"x": range_rec(xr), "y": range_rec(yr)}
 
 
 # ---- RL-SA: sketch_add -----------------------------------------------------------------------
 
-def id_text(ids):
-    """"ids 0-3", "id 4", "ids 0, 2 and 5": runs of three or more joined with a dash."""
-    ids = sorted(int(i) for i in ids)
-    if not ids:
-        return "no ids"
-    runs, start = [], 0
-    for k in range(1, len(ids) + 1):
-        if k == len(ids) or ids[k] != ids[k - 1] + 1:
-            runs.append(ids[start:k])
-            start = k
-    words = []
-    for r in runs:
-        words += [f"{r[0]}-{r[-1]}"] if len(r) >= 3 else [str(i) for i in r]
-    return ("id " if len(ids) == 1 else "ids ") + and_(words)
+def pt_rec(p):
+    return [n2(p[0]), n2(p[1])]
 
 
-def pt(p):
-    return f"({num(p[0])}, {num(p[1])})"
-
-
-def default_text(default):
-    """"center not given, so center is [0, 0]": an input that places the
-    shape, which the call did not give, and the value the tool used."""
-    def word(v):
-        if isinstance(v, bool):
-            return "true" if v else "false"
-        if isinstance(v, (list, tuple)):
-            return f"[{', '.join(num(c) for c in v)}]"
-        return num(v)
-
-    return "; ".join(f"{k} not given, so {k} is {word(v)}" for k, v in (default or {}).items())
-
-
-def shape_text(kind, ids, xr=None, yr=None, world=None, circle=None, arc=None, line=None, default=None):
-    """One shape of a sketch_add call: "rectangle, ids 0-3: sketch x 0..30,
-    y 5..45; world x -30..0, y 30, z 5..45." circle: (centre, radius); arc:
-    (start, middle, end); line: (start, end). The middle point of an arc is
-    the point halfway along it: it shows the side the arc bulges to.
-    default: {input: value} of a place that the call did not give (said
-    first)."""
-    head = f"{kind}, {id_text(ids)}"
-    facts = []
-    if default:
-        facts.append(default_text(default))
+def shape_rec(xr=None, yr=None, world=None, circle=None, arc=None, line=None):
+    """One shape of a sketch_add call, as a record of what was measured:
+    circle { center, radius }, arc { start, middle, end } (the middle point
+    is the point halfway along the arc: it shows the side the arc bulges
+    to), line { from, to }, sketchExtent { x, y } and worldBox (mm). circle:
+    (centre, radius); arc: (start, middle, end); line: (start, end). The
+    ids, the kind and the inputs that were not given are the answer's added."""
+    out = {}
     if circle is not None:
-        facts.append(f"centre {pt(circle[0])}, radius {num(circle[1])}")
+        out["circle"] = {"center": pt_rec(circle[0]), "radius": n2(circle[1])}
     if arc is not None:
-        facts.append(f"start {pt(arc[0])}, middle {pt(arc[1])}, end {pt(arc[2])}")
+        out["arc"] = {"start": pt_rec(arc[0]), "middle": pt_rec(arc[1]), "end": pt_rec(arc[2])}
     if line is not None:
-        facts.append(f"from {pt(line[0])} to {pt(line[1])}")
+        out["line"] = {"from": pt_rec(line[0]), "to": pt_rec(line[1])}
     if xr is not None and yr is not None:
-        facts.append(f"sketch {sketch_ranges_text(xr, yr)}")
+        out["sketchExtent"] = extent_rec(xr, yr)
     if world is not None:
-        facts.append(f"world {box_text(world)}")
-    return head + (": " + "; ".join(facts) if facts else "") + "."
+        out["worldBox"] = box_rec(world)
+    return out
 
 
-def wires_text(wires, closed, open_ends):
-    """"The sketch has 1 wire, 1 closed, 0 open ends." Any count may be None."""
-    parts = []
-    if wires is not None:
-        parts.append(plural(wires, "wire"))
-    if closed is not None:
-        parts.append(f"{closed} closed")
+def sketch_add_result(shapes, open_ends=None, lies=()):
+    """The result record of sketch_add: shapes (shape_rec for each added
+    item, in the order of the answer's added), lies (lies_rec of the call's
+    shapes against the sketch's face and the body), openEnds (the sketch's
+    open ends; wires and closedWires are the answer's state)."""
+    out = {"shapes": list(shapes)}
+    if lies:
+        out["lies"] = [x for x in lies if x]
     if open_ends is not None:
-        parts.append(plural(open_ends, "open end"))
-    return "The sketch has " + ", ".join(parts) + "." if parts else ""
-
-
-def sketch_add_result(shapes, wires=None, closed=None, open_ends=None, lies=()):
-    """The result line of sketch_add: its shapes (shape_text), where the
-    call's shapes lie against the sketch's face and the body (lies_text's
-    sentences), then the wires."""
-    return " ".join(t for t in [*shapes, *lies, wires_text(wires, closed, open_ends)] if t)
+        out["openEnds"] = open_ends
+    return out
 
 
 # ---- RL-SC: sketch_constrain -----------------------------------------------------------------
 
-def moves_text(moves, more=0):
-    """Each join that moved geometry, with the distance each of its points
-    moved (mm): moves is [(words of the join, [(words of a point, mm), …])]
-    with the points that moved only. No lower limit but TOL."""
-    out = [f"The join of {join} moved " + " and ".join(f"{p} by {num(d)} mm" for p, d in pts) + "." for join, pts in moves]
+def constraint_result(constraints, dof_before=None, moves=(), spans=None, more=0):
+    """The result record of sketch_constrain. constraints: describe_con's
+    records { id, type, refs, … } of the constraints added; dof_before:
+    FreeCAD's degrees of freedom before (the answer's state has them after);
+    moves: [{ join: [[geo, vertex], [geo, vertex]], moved: [{ ref: [geo,
+    vertex], mm }] }] for each join that moved geometry (the points that
+    moved only; no lower limit but MOVE_TOL); spans: ((xmin, xmax), (ymin,
+    ymax)) of the sketch's shapes after the solve, or None; more: joins not
+    shown (a cap)."""
+    out = {"constraints": list(constraints)}
+    if dof_before is not None:
+        out["dofBefore"] = dof_before
+    if moves:
+        out["moved"] = list(moves)
     if more:
-        out.append(f"{more} more joins not shown.")
-    return " ".join(out)
-
-
-def constraint_result(added, dof_before, dof_after, moves=(), spans=None, more=0):
-    """The result line of sketch_constrain. added: the constraints in words
-    (con_words); dof_before and dof_after: FreeCAD's degrees of freedom or
-    None; moves: moves_text's; spans: ((xmin, xmax), (ymin, ymax)) of the
-    sketch's shapes after the solve, or None; more: joins not shown (a cap)."""
-    out = [f"Added {and_(added)}." if added else "Added no constraint."]
-    if dof_before is not None and dof_after is not None:
-        out.append(f"Degrees of freedom: {dof_before} before, {dof_after} after.")
-    elif dof_after is not None:
-        out.append(f"Degrees of freedom after: {dof_after}.")
-    m = moves_text(moves, more)
-    if m:
-        out.append(m)
+        out["joinsNotShown"] = more
     if spans is not None:
-        out.append(f"After the solve the sketch's shapes span sketch {sketch_ranges_text(*spans)}.")
-    return " ".join(out)
+        out["sketchExtent"] = extent_rec(*spans)
+    return out
 
 
 # ---- RL-BC: body_check -----------------------------------------------------------------------
 
-def body_check_result(label, solids, solids_said=None, valid=None, closed=None, box=None, volume=None, check=None):
-    """The result line of body_check: "Body is 2 separate solids that do not
-    touch (nearest gap 12.5 mm); valid, closed; box x 0..60, y …; volume 9000
-    mm³." solids_said: the words that say whether the solids touch (given
-    when there are several)."""
-    first = solids_said if solids_said else (plural(solids, "solid") if solids is not None else None)
-    parts = []
-    if first:
-        parts.append(first)
-    flags = []
-    if valid is not None:
-        flags.append("valid" if valid else "not valid")
-    if closed is not None:
-        flags.append("closed" if closed else "not closed")
-    if flags:
-        parts.append(", ".join(flags))
-    if box is not None:
-        parts.append(f"box {box_text(box)}")
-    if volume is not None:
-        parts.append(f"volume {num(volume)} mm³" + (" (below 0)" if volume < 0 and num(volume) != "0" else ""))
-    if isinstance(check, dict):
-        # Check Geometry's errors are in the line too (s1127e QA, H10: "valid,
-        # closed" was said of a solid with two BOPAlgo SelfIntersect errors).
-        # A line that ends in ":" is FreeCAD's heading ("BOP check found the
-        # following errors:"), not an error.
-        errs = [str(e) for e in check.get("errors") or [] if not str(e).rstrip().endswith(":")]
-        heads = len(check.get("errors") or []) - len(errs)
-        n = (check.get("errorsInAll") - heads) if check.get("errorsInAll") else len(errs)
-        if errs:
-            kinds = []
-            for e in errs:
-                k = e.rsplit(":", 1)[-1].strip()
-                if k and k not in kinds:
-                    kinds.append(k)
-            parts.append(f"Check Geometry: {plural(int(n), 'error')} ({', '.join(kinds[:4])})")
-        else:
-            parts.append("Check Geometry: no error")
-    return f"{label} is " + "; ".join(parts) + "." if parts else f"{label} was read."
+def body_check_result(gap=None):
+    """The result record of body_check: what its other keys (valid, closed,
+    solids, volume, bounds, checkGeometry) do not have: for several solids,
+    the least distance between two of them (mm) and whether two touch
+    (FreeCAD's confusion tolerance, 1e-7 mm). {} for one solid."""
+    if gap is None:
+        return {}
+    return {"nearestGap": n2(gap), "solidsTouch": gap <= 1e-7}
 
 
 # ---- fast ------------------------------------------------------------------------------------
 
-def fast_lines(rows):
-    """The result lines of a fast block's calls, in order: rows is [(step,
-    tool, the call's answer)]; a call whose answer has no result string has
-    no line."""
+def fast_steps(rows):
+    """One record for each call of a fast block that ran and has a result of
+    its own, in order (the records of session_state's steps,
+    protocol.step_line: { call, tool, object, volumeChange, historyStep …
+    }): rows is [(step, tool, the call's answer)]. A call whose answer has
+    no result (a read) has no record: the block's answer stays short."""
+    from .protocol import step_line
+
     out = []
     for step, tool, answer in rows:
         r = answer.get("result") if isinstance(answer, dict) else None
-        if isinstance(r, str) and r:
-            out.append(f"{step} {tool}: {r}")
+        if r:
+            out.append(step_line(step, tool, answer))
     return out

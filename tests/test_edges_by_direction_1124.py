@@ -116,10 +116,11 @@ for e in sh.Edges:
     e.Edges = [e]
 print(json.dumps({"few": pc.edge_words(sh, ["Edge1", "Edge2", "Edge3"]), "many": pc.edge_words(sh, ["Edge%d" % i for i in range(1, 19)])}))
 ''')
-        self.assertEqual(got["few"], ["Edge1: line along z, 10 mm, mid [0, 0, 5]", "Edge2: line along y, 60 mm, mid [40, 0, 0]",
-                                      "Edge3: line along [0.6, 0.8, 0], 5 mm, mid [1.5, 2, 0]"])
-        self.assertEqual(len(got["many"]), 13)
-        self.assertEqual(got["many"][-1], "… and 6 more edges (18 in all)")
+        self.assertEqual(got["few"], [{"edge": "Edge1", "kind": "line", "along": "z", "length": 10.0, "mid": [0.0, 0.0, 5.0]},
+                                      {"edge": "Edge2", "kind": "line", "along": "y", "length": 60.0, "mid": [40.0, 0.0, 0.0]},
+                                      {"edge": "Edge3", "kind": "line", "along": [0.6, 0.8, 0.0], "length": 5.0, "mid": [1.5, 2.0, 0.0]}])
+        self.assertEqual(len(got["many"]), 12)  # the cap; the result's edgesNotShown counts the rest
+        self.assertEqual(got["many"][-1]["edge"], "Edge12")
 
     def test_fillet_answer_lists_the_edges(self):
         got = child('''
@@ -137,8 +138,9 @@ print(json.dumps(out))
 ''')
         # 27 Nov: edges is one selector (here the nearest edge) or a list of references (two edges)
         for n in ("pd_fillet", "pd_chamfer"):
-            self.assertEqual(got[n], ["Edge2: line along x, 1 mm, mid [1.5, 0, 0]"], n)
-            self.assertEqual(got[n + "List"], ["Edge2: line along x, 1 mm, mid [1.5, 0, 0]", "Edge3: line along x, 1 mm, mid [2.5, 0, 0]"], n)
+            self.assertEqual(got[n], [{"edge": "Edge2", "kind": "line", "along": "x", "length": 1.0, "mid": [1.5, 0.0, 0.0]}], n)
+            self.assertEqual(got[n + "List"], [{"edge": "Edge2", "kind": "line", "along": "x", "length": 1.0, "mid": [1.5, 0.0, 0.0]},
+                                               {"edge": "Edge3", "kind": "line", "along": "x", "length": 1.0, "mid": [2.5, 0.0, 0.0]}], n)
 
 
 SETTLE = '''

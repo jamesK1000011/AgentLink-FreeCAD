@@ -352,7 +352,7 @@ def _child(case):
         # 27 Nov: each call's answer starts with result, in run, in batch and in fast (the stand-in tools answer as the real ones: result first).
         def probe_result(a):
             doc.add(f"R{a.get('n')}", "Part::Feature")
-            return {"result": f"Probe {a.get('n')} made one object.", "n": a.get("n")}
+            return {"result": {"objects": 1}, "n": a.get("n"), "volumeChange": 5.0}
 
         srv.add(Tool("probe_result", "A change that says its result.", num, probe_result, changes=True))
         out["run"] = run1({"tool": "probe_result", "n": 1})

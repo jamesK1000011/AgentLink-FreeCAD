@@ -85,14 +85,15 @@ class NothingRefusedThatFreeCADKept(unittest.TestCase):
         out = {}
         for kind, tool, must in (("Pad", "pd_pad", "add"), ("Pocket", "pd_pocket", "cut"), ("Fillet", "pd_fillet", "changed"), ("Thickness", "pd_thickness", "cut")):
             r = pc.settle(sess, body, feat(kind), tool, 100.0, must)
-            out[kind] = [r["volumeChange"], r["result"], r.get("valid")]
+            out[kind] = [r["volumeChange"], r.get("result", {}), r.get("valid")]
         print(json.dumps(out))
         ''')
         for kind in ("Pad", "Pocket", "Fillet", "Thickness"):
             self.assertEqual(got[kind][0], 0.0, kind)
             self.assertEqual(got[kind][2], True, kind)
-        self.assertTrue(got["Pad"][1].startswith("Pad: volume change 0 mm³."), got["Pad"][1])
-        self.assertTrue(got["Pocket"][1].startswith("Pocket: volume change 0 mm³."), got["Pocket"][1])
+        self.assertNotIn("material", got["Pad"][1])  # a change that rounds to 0 has no material word: volumeChange says 0
+        self.assertNotIn("material", got["Pocket"][1])
+        self.assertIn("edgesGiven", got["Fillet"][1])
 
     def test_a_dress_up_with_a_shape_that_is_not_valid_is_answered_with_the_fact(self):
         got = child(SETTLE + '''
@@ -103,7 +104,7 @@ class NothingRefusedThatFreeCADKept(unittest.TestCase):
         print(json.dumps([r["valid"], r["result"], big, pc.shape_valid(types.SimpleNamespace(Shape=None))]))
         ''')
         self.assertIs(got[0], False)
-        self.assertTrue(got[1].endswith("FreeCAD's shape check (isValid) says that the body's shape is not valid. FreeCAD gave no error."), got[1])
+        self.assertIsInstance(got[1], dict)  # the fact is the answer's valid: false, not a sentence
         self.assertEqual(got[2], "not checked: the shape has 5000 faces, and the check runs for 3000 at most")  # a limit that is used is said
         self.assertIsNone(got[3])
 
@@ -237,8 +238,6 @@ class SketchAddDefaults(unittest.TestCase):
         self.assertEqual(got[1], {"center": [0, 0], "sides": 6, "rotation": 0})
         self.assertEqual(got[2], {"closed": False, "degree": 3, "construction": False})
         self.assertIsNone(got[3])
-        self.assertEqual(rl.default_text({"center": [0, 0], "sides": 6, "closed": False, "rotation": 0}),
-                         "center not given, so center is [0, 0]; sides not given, so sides is 6; closed not given, so closed is false; rotation not given, so rotation is 0")
 
 
 class BlindfoldGaps(unittest.TestCase):
@@ -285,10 +284,11 @@ class BlindfoldGaps(unittest.TestCase):
         from agentlink.families import sketch
         C = lambda t, a, ap, b=-2000, bp=0, v=None: types.SimpleNamespace(Type=t, Name="", First=a, FirstPos=ap, Second=b, SecondPos=bp, Third=-2000, ThirdPos=0, Driving=True, Value=v)
         sk = types.SimpleNamespace(Constraints=[C("Coincident", 0, 2, 1, 1), C("Horizontal", 0, 0), C("Radius", 4, 0, v=5.0)])
-        print(json.dumps(sketch.con_brief(sk, [0, 1, 2, 9])))
+        print(json.dumps(sketch.con_list(sk, [0, 1, 2, 9])))
         ''')
-        self.assertEqual(got, ["0 Coincident [0, 2] [1, 1]", "1 Horizontal [0, 0]", "2 Radius [4, 0] = 5"])
-        self.assertIn('"constraintList": "=con_brief(sk, cids)"', json.dumps(entries()["sketch_add"]["steps"]))
+        self.assertEqual(got, [{"id": 0, "type": "Coincident", "refs": [[0, 2], [1, 1]]}, {"id": 1, "type": "Horizontal", "refs": [[0, 0]]},
+                               {"id": 2, "type": "Radius", "value": 5.0, "refs": [[4, 0]]}])
+        self.assertIn('"constraintList": "=con_list(sk, cids)"', json.dumps(entries()["sketch_add"]["steps"]))
 
     def test_the_first_feature_says_which_side_of_its_sketch_it_went(self):
         got = child('''
@@ -301,9 +301,9 @@ class BlindfoldGaps(unittest.TestCase):
         pl = types.SimpleNamespace(Base=V3(0.0, 0.0, 0.0), Rotation=types.SimpleNamespace(multVec=lambda v: V3(0.0, 0.0, 1.0)))
         sk = types.SimpleNamespace(Label="Base", Placement=pl)
         feat = types.SimpleNamespace(Profile=(sk, []))
-        print(json.dumps(pc.normal_span_words(feat, types.SimpleNamespace(Shape=shape))))
+        print(json.dumps(pc.normal_span(feat, types.SimpleNamespace(Shape=shape))))
         ''')
-        self.assertEqual(got, "Along the normal of sketch Base the body spans -5..0 (0 is the sketch plane; + is the way the normal points).")
+        self.assertEqual(got, {"sketch": "Base", "span": [-5.0, 0.0]})
 
     def test_export_says_the_tolerance_used_and_the_unit(self):
         f = entries()["export"]["answer"]["fields"]
@@ -406,7 +406,7 @@ class HealthIsWhatFreeCADReports(unittest.TestCase):
 
     def test_body_check_reads_freecads_checks_only(self):
         t = source("tools.py")
-        body = t[t.index("    def body_check(self, a):"):t.index("    def check_line(o, sh, s, said):")]
+        body = t[t.index("    def body_check(self, a):"):t.index("    def check_rec(gap):")]
         for gone in ("soundness", "narrow", "shortEdges", "practice", "problems", '"ok"', "refine_todo"):
             self.assertNotIn(gone, body, gone)
         card = t[t.index('Tool("body_check", "'):t.index("s.body_check),")]
@@ -495,8 +495,8 @@ class LimitsAndRewritesAreSaid(unittest.TestCase):
         self.assertTrue(line.endswith("; and 3 more (session_state gives them)"), line)
         self.assertEqual(options.line(opts, limit=1000).count("pd_pad"), 4)
         self.assertEqual(options._cut_value("a=" + "x" * 50, 10), "a=xxxxxxxx…")
-        self.assertIn("more edges ({len(names)} in all)", source("families", "pd_common.py"))
-        self.assertIn("outside and inside are not worked out for more than {EDGES_SIDED} edges", source("families", "pd_common.py"))
+        self.assertIn('out["edgesNotShown"] = n_edges - len(edges)', source("resultline.py"))
+        self.assertIn('out["sideLimit"] = EDGES_SIDED', source("families", "pd_common.py"))
         self.assertIn('f" and {len(names) - PLANES_SHOWN} more"', source("families", "pd_common.py"))
 
     def test_a_box_that_is_not_exact_says_so(self):
@@ -771,7 +771,7 @@ class ReviewFixes(unittest.TestCase):
         pd = source("families", "pd_common.py")
         self.assertEqual(pd.count('in_body_frame(body, getattr(base, "Shape", None) if base is not None else None)'), 2)
         self.assertNotIn("the boxes here are the world's", pd)
-        self.assertIn("the boxes here do not have that Placement.", pd)
+        self.assertIn('out["containerPlacement"] = held', pd)
 
     def test_a5_a6_steps_mark_a_rollback_and_list_form_and_check_refusals(self):
         from agentlink import protocol
@@ -912,7 +912,7 @@ class LiveProof1127(unittest.TestCase):
         for said in ("=axes(world_pl(sk))", "=frame(world_pl(sk))", "on_words(said, world_pl(sk))", "face_frame(sk.Placement, a.get('up'), holder_pl(sk))"):
             self.assertIn(said, tj, said)
         self.assertNotIn("=axes(sk.Placement)", json.dumps(entries()))
-        self.assertIn("rl.sketch_new_result(sk.Label, what, axes(world_pl(sk))", source("families", "sketch.py"))
+        self.assertIn("return orient.axes_rec(frame(pl))", source("families", "sketch.py"))
 
     def test_every_point_where_two_wires_meet(self):
         got = child('''
@@ -958,15 +958,14 @@ class LiveProof1127(unittest.TestCase):
 
 class Sentences(unittest.TestCase):
     def test_a_volume_change_is_its_rounded_number(self):
-        self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.004), "Pad: volume change 0 mm³.")
-        self.assertEqual(rl.feature_head("Pad", "pd_pad", 0.006), "Pad added material, volume change +0.01 mm³.")
-        self.assertEqual(rl.feature_head("Pocket", "pd_pocket", -0.006), "Pocket removed material, volume change -0.01 mm³.")
+        self.assertIsNone(rl.material("pd_pad", 0.004))
+        self.assertEqual(rl.material("pd_pad", 0.006), "added")
+        self.assertEqual(rl.material("pd_pocket", -0.006), "removed")
         self.assertEqual(rl.body_change_text("Body", 72.0, 72.0), "After this call the volume of Body is 72 mm³: volume change 0 mm³.")
 
     def test_a_dress_up_says_edges_given_and_edges_changed(self):
-        got = rl.dressup_result("Fillet", "pd_fillet", -3.4, 12, "radius 2 mm", [], 1, 1, changed=4, body_box=(0, 60, 0, 30, 0, 5))
-        self.assertEqual(got, "Fillet: FreeCAD was given 12 edges; the result changed 4 of them, radius 2 mm, volume change -3.4 mm³. "
-                              "The body now is x 0..60, y 0..30, z 0..5. The body is 1 solid (was 1).")
+        got = rl.dressup_result(12, {"size": 2.0}, [], 1, 1, changed=4)
+        self.assertEqual(got, {"edgesGiven": 12, "edgesChanged": 4, "size": 2.0, "solidsWas": 1})
 
     def test_edges_changed_is_measured_on_the_new_shape(self):
         got = child('''
@@ -1045,7 +1044,7 @@ class LiveProofB3fc1d0(unittest.TestCase):
             body = src[src.index(fn):src.index("\ndef ", src.index(fn) + 5)]
             self.assertIn("geo.world_shape(", body)
         pdc = source("families", "pd_common.py")
-        for fn in ("def outside_words", "def normal_span_words", "def sketch_lies_words"):
+        for fn in ("def outside_words", "def normal_span", "def sketch_lies"):
             body = pdc[pdc.index(fn):pdc.index("\ndef ", pdc.index(fn) + 5)]
             self.assertIn("geo.world_shape(", body)
 
@@ -1056,12 +1055,11 @@ class LiveProofB3fc1d0(unittest.TestCase):
         self.assertLess(body.index("in_body_frame(body, f)"), body.index("prism = "))
 
     def test_d_the_count_after_the_sides_is_of_the_faces_not_looked_at(self):
-        self.assertEqual(rl.opens_text(["+z at z 30"], 8), "It opens on +z at z 30. 8 faces of the removed material were not looked at.")
-        self.assertEqual(rl.opens_text(["+z at z 30"], 0), "It opens on +z at z 30.")
-        self.assertEqual(rl.opens_text([], 1), "It opens on no face of the body that was looked at. 1 face of the removed material was not looked at.")
-        self.assertEqual(rl.touch_text(["+z at z 5"], 2, None, True), "It touches the body on +z at z 5. 2 faces of the new material were not looked at.")
-        for t in (rl.opens_text(["+z at z 30"], 686), rl.touch_text(["+z at z 5"], 7, None, True)):
-            self.assertNotIn("more not shown", t)
+        old = (0, 9, 0, 4, 0, 2)
+        cut = rl.feature_result("pd_pocket", -1, region=[(1, 2, 1, 2, 0, 2)], old_box=old, cut=True, faces=["+z at z 30"], faces_more=686, solids=1, solids_was=1)
+        self.assertEqual(cut["opensNotLooked"], 686)
+        add = rl.feature_result("pd_pad", 1, region=[(1, 2, 1, 2, 2, 3)], old_box=old, faces=["+z at z 5"], faces_more=7, touching=True, solids=1, solids_was=1)
+        self.assertEqual(add["touches"], {"touching": True, "faces": ["+z at z 5"], "facesNotLooked": 7})
 
     def test_e_fit_not_given_says_freecads_stored_word(self):
         got = child('''
@@ -1108,25 +1106,22 @@ class QaS1127e(unittest.TestCase):
         self.assertEqual(got, [0, {"volumeChange": 0.0, "holeSpots": 2}, 2, {"volumeChange": -50.0, "holeSpots": 3}, 2, {"volumeChange": -50.0}])
         self.assertIn("holes is the number of holes that removed material (0 when the volume change is 0 mm³)", _cw(entries()["pd_hole"]))
 
-    def test_2_the_words_follow_the_measured_change_and_the_type(self):
+    def test_2_the_kind_follows_the_type_where_the_measured_change_has_the_other_sign(self):
         got = child('''
         feat = types.SimpleNamespace(TypeId="PartDesign::AdditivePipe", Label="Pipe")
-        body = types.SimpleNamespace(Label="Body", Shape=types.SimpleNamespace(Volume=-678.58))
-        line = pc.sign_facts(feat, body, "pd_pipe", "Pipe", -678.58, pc.rl.feature_head("Pipe", "pd_pipe", -678.58) + " The body is 1 solid.")
+        line = pc.sign_facts(feat, -678.58, {"material": "removed"})
         pad = types.SimpleNamespace(TypeId="PartDesign::Pad", Label="Pad")
-        ok = pc.sign_facts(pad, types.SimpleNamespace(Label="Body", Shape=types.SimpleNamespace(Volume=10.0)), "pd_pad", "Pad", 10.0, pc.rl.feature_head("Pad", "pd_pad", 10.0))
+        ok = pc.sign_facts(pad, 10.0, {"material": "added"})
         print(json.dumps([line, ok, pc.add_sub(feat), pc.add_sub(types.SimpleNamespace(TypeId="PartDesign::Hole")), pc.add_sub(types.SimpleNamespace(TypeId="PartDesign::Fillet"))]))
         ''')
-        self.assertEqual(got[0], "Pipe (PartDesign::AdditivePipe, a additive type): volume change -678.58 mm³. The body is 1 solid. The volume of Body is -678.58 mm³, below 0.")
-        self.assertEqual(got[1], "Pad added material, volume change +10 mm³.")
+        self.assertEqual(got[0], {"material": "removed", "featureKind": "additive"})
+        self.assertEqual(got[1], {"material": "added"})
         self.assertEqual(got[2:], ["additive", "subtractive", None])
 
-    def test_2_body_check_line_has_the_check_geometry_errors_and_the_sign(self):
-        cg = {"errors": ["BOP check found the following errors:", "Error in Edge: BOPAlgo SelfIntersect", "Error in Edge: BOPAlgo SelfIntersect"]}
-        self.assertEqual(rl.body_check_result("Body", 1, None, True, True, (-44, 6, 0, 24, -3, 3), -678.58, cg),
-                         "Body is 1 solid; valid, closed; box x -44..6, y 0..24, z -3..3; volume -678.58 mm³ (below 0); Check Geometry: 2 errors (BOPAlgo SelfIntersect).")
-        self.assertTrue(rl.body_check_result("B", 1, None, True, True, None, 5.0, {"errors": []}).endswith("volume 5 mm³; Check Geometry: no error."))
-        self.assertIn('s.get("checkGeometry"))', source("tools.py"))
+    def test_2_body_check_gives_the_gap_of_several_solids_as_a_record(self):
+        self.assertEqual(rl.body_check_result(12.5), {"nearestGap": 12.5, "solidsTouch": False})
+        self.assertEqual(rl.body_check_result(None), {})
+        self.assertIn("checkGeometry", source("tools.py"))
 
     def test_3_a_hole_profile_says_the_volume_it_drilled_not_an_area_share(self):
         pdc = source("families", "pd_common.py")
@@ -1206,7 +1201,7 @@ class QaS1127e(unittest.TestCase):
         for t in ("LinearPattern", "PolarPattern", "Mirrored", "MultiTransform"):
             self.assertIn(f'"PartDesign::{t}": ("Originals"', pdc)
         # H7: the solid a zero-change feature put, measured
-        self.assertIn("tool_span_words(feat, body, sk, pl)", pdc)
+        self.assertIn("tool_span(feat, body, sk, pl)", pdc)
         # H11: sketch_attach's face has its form
         self.assertIn("A face by its name is text in plane", entries()["sketch_attach"]["inputSchema"]["properties"]["face"]["description"])
         # H12: fast names the health fact
@@ -1270,14 +1265,9 @@ class QaS1127f(unittest.TestCase):
         self.assertIn('FEATURE_KEY = {"part_primitive": "feature"}', source("families", "model.py"))
         self.assertIn("Answer: feature (the Part feature's label)", _cw(entries()["part_primitive"]))
 
-    def test_5_check_geometry_goes_in_the_result_line(self):
-        got = child('''
-        out = {"result": "Pipe added material, volume change +1328.89 mm³.", "health": {"recompute": "ok", "fault": True, "shapes": [{"object": "Body", "valid": True, "closed": True, "solids": 1, "checkErrors": ["Error in Edge: BOPAlgo SelfIntersect", "a", "b", "c"]}], "time": "2 of 15 minutes used"}}
-        quiet = {"result": "Pad added material.", "health": "nothing new"}
-        print(json.dumps([pc.check_in_result(out)["result"], pc.check_in_result(quiet)["result"]]))
-        ''')
-        self.assertEqual(got[0], "Pipe added material, volume change +1328.89 mm³. Check Geometry reports Error in Edge: BOPAlgo SelfIntersect and 3 more.")
-        self.assertEqual(got[1], "Pad added material.")
+    def test_5_check_geometry_stays_in_health(self):
+        # 28 Nov: the finding is the answer's health facts; the result record does not say it again
+        self.assertNotIn("def check_in_result", source("families", "pd_common.py"))
 
     def test_5_a_pipe_wire_failure_says_each_inputs_wires_and_a_fill_names_the_cut(self):
         pdc = source("families", "pd_common.py")
