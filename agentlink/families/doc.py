@@ -430,6 +430,24 @@ def unit_of(fmt):
     return None if fmt in ("wrl", "x3d") else "mm"
 
 
+VERIFY_UNITS = {"size": "mm", "sizeOfBodies": "mm", "volume": "mm³", "volumeDiff": "mm³", "volumeOfBody": "mm³", "volumeRead": "mm³",
+                "triangles": "count", "trianglesWritten": "count", "objects": "count", "solids": "count", "faces": "count"}
+
+
+def verify_units(verify):
+    """{ key: unit } for each number of an export's verify (27 Nov live
+    proof: a glb's file is in metres and its read-back sizes are in mm). A
+    key whose unit is not known here is named with "not known"."""
+    out = {}
+    for k, v in (verify or {}).items():
+        if isinstance(v, bool) or not isinstance(v, (int, float, list)):
+            continue
+        if isinstance(v, list) and not all(isinstance(x, (int, float)) for x in v):
+            continue
+        out[k] = VERIFY_UNITS.get(k, "not known")
+    return out
+
+
 def modified_state(d):
     """Whether the document has changes since its save: FreeCAD's own flags
     (App touched, the window's "*"), and the objects still marked touched."""
@@ -1242,7 +1260,7 @@ def tools(session):
         "new_doc": new_doc, "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
         "listed_docs": lambda: FreeCAD.listDocuments(), "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
         "unsaved": unsaved, "touched_marks": touched_marks, "current_name": current_name, "back_to": back_to, "recent_files": recent_files, "open_at": open_at,
-        "unit_of": unit_of, "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "agent_file": agent_file, "note_agent_file": note_agent_file, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
+        "unit_of": unit_of, "verify_units": verify_units, "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "agent_file": agent_file, "note_agent_file": note_agent_file, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
         # files
         "isfile": os.path.isfile, "exists": os.path.exists, "abspath": os.path.abspath, "basename": os.path.basename, "dirname": os.path.dirname,
         "makedirs": lambda p: os.makedirs(p, exist_ok=True), "filesize": os.path.getsize, "stem": lambda p: os.path.splitext(os.path.basename(p))[0],

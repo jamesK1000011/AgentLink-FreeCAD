@@ -438,7 +438,7 @@ def tools(s):
                 commit = (got or "").split()[0] if got else None
                 if not commit:
                     raise ToolError("unavailable", f"The commit of {name} at {src or 'the catalog'} ({br or 'its default branch'}) could not be read (git ls-remote). "
-                                                   "The approval names the exact version, so nothing was changed. Check the network and the address, then call again.")
+                                                   "The approval names the exact version, so nothing was changed.")
                 fp = "commit:" + commit
                 ver, _a = _package_facts(where) if action == "update" else (None, None)
                 shown = {"source": src, "version": f"commit {commit}" + (f" (branch {br})" if br else ""), "author": _owner(src) or "not given"}

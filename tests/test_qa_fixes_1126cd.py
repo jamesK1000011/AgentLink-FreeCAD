@@ -79,15 +79,14 @@ class FarJoins(unittest.TestCase):
     sk.Geometry[0] = ArcOfCircle()
     joins = sketch.join_points(sk, [("Coincident", 0, 2, 3, 1), ("Distance", 0, 30.0)])
     pts[(0, 2)] = pts[(3, 1)] = P(85, 4)   # the solve joined them half way
-    st = sketch.join_move_words({"todo": "close the open wires"}, sk, joins)
+    st = sketch.join_move_words({"openEnds": ["close the open wires"]}, sk, joins)
     near = sketch.join_points(sk, [("Coincident", 0, 2, 3, 1)])   # now together
-    same = sketch.join_move_words({"todo": "x"}, sk, near)       # nothing moved: nothing said
-    print(json.dumps([len(joins), st["todo"], same["todo"]]))
+    same = sketch.join_move_words({"openEnds": ["x"]}, sk, near)       # nothing moved: nothing said
+    print(json.dumps([len(joins), st["moved"], st["openEnds"], "moved" in same]))
 ''')
         self.assertEqual(got[0], 1)
-        self.assertEqual(got[1], "coincident joined the end of arc 0 (0.9, 20) and the start of line 3 (170.7, -12.5), 172.882 mm apart: "
-                                 "the shape moved; close the open wires")
-        self.assertEqual(got[2], "x")
+        self.assertEqual(got[1], ["coincident joined the end of arc 0 (0.9, 20) and the start of line 3 (170.7, -12.5), 172.882 mm apart: the shape moved"])
+        self.assertEqual(got[2:], [["close the open wires"], False])
 
     def test_the_card_reads_them_before_the_constraints_go_in(self):
         steps = json.dumps(entries()["sketch_constrain"]["steps"])

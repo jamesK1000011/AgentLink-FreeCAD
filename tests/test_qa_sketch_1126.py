@@ -187,8 +187,8 @@ class Ready(unittest.TestCase):
         self.assertEqual((got["wires"], got["closedWires"]), (2, 1))
         self.assertNotIn("openVertices", got)
         self.assertNotIn("readyForFeature", got)
-        self.assertEqual(got["todo"], "lines 0, 1 and 6 meet at (50, 0): a wire branches there; "
-                                      "lines 3, 4 and 6 meet at (50, 50)")
+        self.assertEqual(got["branches"], ["lines 0, 1 and 6 meet at (50, 0): a wire branches there", "lines 3, 4 and 6 meet at (50, 50)"])
+        self.assertNotIn("todo", got)  # 27 Nov live proof: the facts have fact names
 
     def test_loops_that_cross_are_not_ready(self):
         got = in_a_process(STATE + '''
@@ -199,7 +199,7 @@ class Ready(unittest.TestCase):
         self.assertEqual((got["wires"], got["closedWires"]), (2, 2))
         self.assertNotIn("readyForFeature", got)
         self.assertEqual((got["wiresMeet"], got["selfCrossing"]), (1, "not tested"))
-        self.assertEqual(got["todo"], "circle 0 meets circle 1 at (10, 0)")
+        self.assertEqual(got["meets"], ["circle 0 meets circle 1 at (10, 0)"])
 
     def test_a_loop_inside_another_and_one_loop_are_ready(self):
         got = in_a_process(STATE + '''
@@ -207,7 +207,7 @@ class Ready(unittest.TestCase):
     nested = sketch.state_of(sketch_of(geo, [circle_wire(geo[0]), circle_wire(geo[1])], 57.0))
     one = sketch.state_of(sketch_of({0: geo[0]}, [circle_wire(geo[0])], 57.0))
     none = sketch.state_of(sketch_of({}, [], 0.0))
-    print(json.dumps([nested["wiresMeet"], one["wiresMeet"], "wiresMeet" in none, none.get("todo"), "readyForFeature" in nested]))
+    print(json.dumps([nested["wiresMeet"], one["wiresMeet"], "wiresMeet" in none, none.get("meets"), "readyForFeature" in nested]))
 ''')
         # facts only (27 Nov): no word on ready; a sketch with no wire has no todo and no crossing test
         self.assertEqual(got, [0, 0, False, None, False])
@@ -219,10 +219,8 @@ class Ready(unittest.TestCase):
     sk = sketch_of(geo, [circle_wire(geo[0]), circle_wire(geo[1]), lines_wire(geo, [2]), lines_wire(geo, [3])], 76.7)
     print(json.dumps(sketch.state_of(sk)))
 ''')
-        self.assertNotIn("coincident joins them", got["todo"])
-        self.assertEqual(got["todo"], "line 2 meets circle 0 at (0, -10): a wire branches there; "
-                                      "line 2 meets circle 1 at (60, -6); line 3 meets circle 1 at (60, 6); "
-                                      "line 3 meets circle 0 at (0, 10)")
+        self.assertEqual(got["branches"], ["line 2 meets circle 0 at (0, -10): a wire branches there",
+                                           "line 2 meets circle 1 at (60, -6)", "line 3 meets circle 1 at (60, 6)", "line 3 meets circle 0 at (0, 10)"])
 
 
 class Words(unittest.TestCase):

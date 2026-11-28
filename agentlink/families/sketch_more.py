@@ -16,7 +16,7 @@ from .. import runners
 from . import pd_common as pc
 from . import picks
 from ..protocol import ToolError
-from .sketch import SOLVE, axes, ext_count
+from .sketch import SOLVE, axes, ext_count, world_pl as sk_world_pl
 
 GROUP = "sketch"
 INFO = ("Sketches: bodies, sketches on planes and faces, geometry and constraints, offset, external edges, fillet/trim/split/mirror, "
@@ -392,7 +392,7 @@ def tools(session):
     doc = lambda: s.doc  # noqa: E731
 
     # What the tools' entries (agentlink/data/tools.json) call by name.
-    helpers = {"doc": doc, "finish": lambda tool, read: picks.finish(s, tool, read, recompute=False), "unique": lambda label, *own: s.unique(label, *own),
+    helpers = {"world_pl": sk_world_pl, "doc": doc, "finish": lambda tool, read: picks.finish(s, tool, read, recompute=False), "unique": lambda label, *own: s.unique(label, *own),
                "sketch_of": lambda ref: pc.sketch_of(doc(), ref, None, s), "broken": pc.newly_broken, "plane_ref": lambda *x: pc.plane_ref(*x),
                "find_edges": lambda *x: pc.find_edges(*x), "edges_form": pc.edges_form, "support_prop": pc.support_prop, "version": lambda: ".".join(FreeCAD.Version()[:3]),
                # FreeCAD's own

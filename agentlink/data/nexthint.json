@@ -760,7 +760,7 @@
     },
     {
      "tool": "sketch_edit",
-     "why": "what its todo names",
+     "why": "its open ends, branches and meets",
      "arguments": {
       "sketch": "=facts.sketchName"
      },

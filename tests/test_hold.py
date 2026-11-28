@@ -78,7 +78,7 @@ class Plan(unittest.TestCase):
 
 class HeldAnswer(unittest.TestCase):
     def test_no_stale_reading_is_left_in(self):
-        body = {"sketch": "S", "added": [1], "state": {"solver": "solved", "dof": 2, "wires": 1, "closedWires": 1, "openVertices": [[0, 0]], "wiresMeet": 0, "selfCrossing": "not tested", "todo": "close"},
+        body = {"sketch": "S", "added": [1], "state": {"solver": "solved", "dof": 2, "wires": 1, "closedWires": 1, "openVertices": [[0, 0]], "wiresMeet": 0, "selfCrossing": "not tested", "openEnds": ["close"], "meets": ["m"], "moved": ["x"]},
                 "bodyAfter": {"volume": 10}, "health": {"facts": "S: fully constrained"}}
         out = H.held_answer("sketch_edit", body)
         self.assertEqual(out["state"], {"solver": "solved", "dof": 2})

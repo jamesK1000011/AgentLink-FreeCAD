@@ -168,14 +168,13 @@ class KindSentence(unittest.TestCase):
     def test_no_fixable_sentence_where_nothing_is_named(self):
         e = set_kind({"code": "failed", "message": "Fillet (Fillet) failed: BRep_API: command not done — nothing was kept. " + NAMES_NOTHING})
         self.assertEqual(e["kind"], "fixable")
-        self.assertNotIn(KIND_WORDS["fixable"], e["message"])
         self.assertTrue(e["message"].endswith(NAMES_NOTHING))
         # Once only, again and again.
         self.assertEqual(set_kind(dict(e))["message"], e["message"])
 
     def test_the_fixable_sentence_stays_where_a_change_is_named(self):
         e = set_kind({"code": "invalid_input", "message": "radius: mm, over 0."})
-        self.assertTrue(e["message"].endswith(KIND_WORDS["fixable"]))
+        self.assertEqual(e["message"], "radius: mm, over 0.")  # 27 Nov: the kind has no sentence of its own
 
 
 if __name__ == "__main__":

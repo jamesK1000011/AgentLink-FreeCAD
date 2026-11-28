@@ -64,11 +64,11 @@ class StartWords(unittest.TestCase):
 
 class FixableSentence(unittest.TestCase):
     def test_only_where_the_error_names_an_input(self):
-        self.assertEqual(KIND_WORDS["fixable"], "Change what the error names and call again.")
+        self.assertEqual(KIND_WORDS["fixable"], "")  # 27 Nov live proof: no advice sentence
         named = set_kind({"code": "invalid_input", "message": "input.depth: a number, not text."})
-        self.assertTrue(named["message"].endswith(KIND_WORDS["fixable"]))
+        self.assertEqual(named["message"], "input.depth: a number, not text.")
         lead = set_kind({"code": "invalid_input", "message": "edges: no edge there."})
-        self.assertTrue(lead["message"].endswith(KIND_WORDS["fixable"]))
+        self.assertEqual(lead["message"], "edges: no edge there.")
         plain = set_kind({"code": "invalid_state", "message": "No strength study: fea_setup { body } first."})
         self.assertEqual(plain["message"], "No strength study: fea_setup { body } first.")
         self.assertEqual(plain["kind"], "fixable")

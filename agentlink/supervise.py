@@ -75,7 +75,7 @@ def queue_admit(tool):
         waited = time.time() - t0
         why = "macOS reports the Mac is throttling for heat" if th else f"macOS reports memory pressure ({pr})"
         if waited >= QUEUE_WAIT:
-            return f"{tool} waited {int(waited)} s and did not start: {why}. Try again in a while, or a rough pass (smaller)."
+            return f"{tool} waited {int(waited)} s and did not start: {why}."
         time.sleep(min(15.0, max(1.0, QUEUE_WAIT - waited)))
     def admit(q):
         q["running"] = [{"tool": tool, "start": time.time(), "pid": os.getpid()}]
@@ -1542,7 +1542,7 @@ def run(script, argv):
                         got = window.unstick()
                         what = front_words(pop)
                         keep.log_watchdog({"event": "popup", "tool": c["tool"], "title": pop.get("title"), "closed": bool(got and got.get("closed"))})
-                        tail = (f" Agent Link closed it (gui_unstick), so the window takes calls again; {c['tool']} may not have finished: check, then call it again."
+                        tail = (f" Agent Link closed it (gui_unstick), so the window takes calls again; {c['tool']} may not have finished."
                                 if got and got.get("closed") else " Closing it did not work: gui_unstick, or app_force_restart if the window stays stuck.")
                         window.abandon(f"Blocked by {what} in the FreeCAD window: {c['tool']} waited behind it for {int(held)} s." + tail, code="busy")
                         continue

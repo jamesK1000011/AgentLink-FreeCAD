@@ -229,8 +229,7 @@ def refusal(tool, args, session, gui=None, mine=None):
     if doc is None or getattr(doc, "Name", None) != pe["doc"]:
         return None  # another document: not held
     e = pe["object"]
-    after = ("Nothing changed. Wait until the person closes the task panel, then call again. Or ask the person to close it. "
-             "Reads, other bodies and other documents are not held.")
+    after = "Nothing changed. Reads, other bodies and other documents are not held."
     if e is None:
         return (f"Held: a task panel is open in {pe['doc']}, and it does not let the document change. "
                 f"{name} would change this document, so it did not start. " + after)

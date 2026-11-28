@@ -601,7 +601,7 @@ def tools(session):
         before = tgt.Shape
         after = {"fuse": lambda: before.fuse(result), "cut": lambda: before.cut(result), "common": lambda: before.common(result)}[op]()
         if not changed(before, after):
-            raise ToolError("failed", f"op {op} into {tgt.Label} changed nothing: the made solid does not reach it (least distance {before.distToShape(result)[0]:.3f} mm) — check the direction and length.")
+            raise ToolError("failed", f"op {op} into {tgt.Label} changed nothing: the made solid does not reach it (least distance {before.distToShape(result)[0]:.3f} mm).")
         o = picks.bake(s, tgt, after, a.get("name"))
         for c in consumed:
             if c is not None and hasattr(c, "Visibility"):

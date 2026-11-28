@@ -533,7 +533,7 @@ def approve(name, sha256=None, tool_names=(), ask=None):
     if sha256 is not None and sha256 != sha:
         raise Refused("invalid_state", f"{name} changed after it was shown (sha256 {sha[:12]}…, not {str(sha256)[:12]}…). Show it again with cookbook_show. Nothing was changed.")
     if problems:
-        raise Refused("invalid_input", f"{name} has faults, so it cannot be approved: " + "; ".join(problems[:5]) + ". Correct the file and import it again.")
+        raise Refused("invalid_input", f"{name} has faults, so it cannot be approved: " + "; ".join(problems[:5]) + ".")
     addon_fp = addon_print(doc)
     if state(name, sha, doc) == "approved":
         return {"approved": name, "sha256": sha, "note": "It was approved already. cookbook_run runs its entries."}
@@ -818,7 +818,7 @@ def resolve_function(module, name):
         raise Refused("refused", f"{module}: the module that loaded is not a file of the add-on {top}. Nothing was run.")
     fn = vars(mod).get(name)
     if not inspect.isfunction(fn):
-        raise Refused("not_found", f"{module}.{name}: no such plain Python function in the installed add-on. Check the add-on's version. Nothing was run.")
+        raise Refused("not_found", f"{module}.{name}: no such plain Python function in the installed add-on. Nothing was run.")
     fmod = getattr(fn, "__module__", "") or ""
     ffile = os.path.realpath(getattr(getattr(fn, "__code__", None), "co_filename", "") or "")
     if not (fmod == top or fmod.startswith(top + ".")) or not any(inside(ffile, d) for d in pkg_dirs):

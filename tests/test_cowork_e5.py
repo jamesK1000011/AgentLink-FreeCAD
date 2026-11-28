@@ -249,7 +249,8 @@ class Hold(unittest.TestCase):
     def test_same_body_is_held(self):
         w = self.said({"sketch": "Sketch"})
         self.assertIn("Held: the person is editing Sketch in Body in Model", w)
-        self.assertIn("closes the task panel", w)
+        self.assertNotIn("closes the task panel", w)  # 27 Nov: no advice tail
+        self.assertIn("Nothing changed.", w)
         self.assertTrue(self.said({"feature": "Pad"}))  # another feature of the same body
         self.assertTrue(self.said({"object": "Body"}))
 

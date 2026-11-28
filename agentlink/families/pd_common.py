@@ -246,8 +246,7 @@ def sketch_of(doc, ref, body=None, session=None):
     # list as say-which, and where the names come from.
     if not sk:
         raise ToolError("not_found", f"sketch {ref!r}: no such sketch — there is none yet: sketch_new makes one.")
-    raise ToolError("not_found", f"sketch {ref!r}: no such sketch. The sketches, unused first and newest first: {sketch_list(sk)}. "
-                                 "Use a name exactly as sketch_new's answer gives it (sketch) or as now lists it.")
+    raise ToolError("not_found", f"sketch {ref!r}: no such sketch. The sketches, unused first and newest first: {sketch_list(sk)}.")
 
 
 def profile_users(sk):

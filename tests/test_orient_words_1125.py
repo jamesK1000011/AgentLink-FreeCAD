@@ -161,7 +161,7 @@ class Cards(unittest.TestCase):
     def test_axes_on_every_answer_that_makes_or_moves_a_sketch(self):
         tj = tools_json()
         for name in ("sketch_new", "sketch_attach", "sketch_mirror", "sketch_merge", "sketch_state"):
-            self.assertIn("=axes(sk.Placement)", json.dumps(tj[name]), name)
+            self.assertIn("=axes(world_pl(sk))", json.dumps(tj[name]), name)  # 27 Nov live proof: the world frame
 
     def test_view_names_in_words_follow_the_camera(self):
         from agentlink import render

@@ -25,7 +25,7 @@ import time
 
 # tool -> the parts of its answer that are read from the rebuilt shape
 # (dotted keys), left out while the build is held.
-_SKETCH_STATE = ("state.wires", "state.closedWires", "state.openVertices", "state.openVerticesCount", "state.wiresMeet", "state.selfCrossing", "state.todo")
+_SKETCH_STATE = ("state.wires", "state.closedWires", "state.openVertices", "state.openVerticesCount", "state.wiresMeet", "state.selfCrossing", "state.openEnds", "state.branches", "state.meets", "state.moved")
 HELD_OK = {
     # The sketch's geometry and constraints are written at once, and the
     # solver's reading (solver, dof, conflicting, redundant) is a fresh

@@ -411,7 +411,7 @@ class WhichFace(unittest.TestCase):
         e = runners.entries()["sketch_new"]
         f = e["answer"]["fields"]
         self.assertEqual(f["result"], "=new_result(sk, b, said, link)")
-        self.assertEqual(f["on"], "=on_words(said, sk.Placement) if 'face' in a else what")
+        self.assertEqual(f["on"], "=on_words(said, world_pl(sk)) if 'face' in a else what")
         self.assertEqual(rl.sketch_new_result("S", "the face +z at z 2.5", "x runs +X.", None, ((0, 4), (0, 2), (0, 0)))[:46], "Sketch S is on the face +z at z 2.5. x runs +X")
 
 

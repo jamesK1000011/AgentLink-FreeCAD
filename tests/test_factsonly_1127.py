@@ -304,7 +304,8 @@ class BlindfoldGaps(unittest.TestCase):
         f = entries()["export"]["answer"]["fields"]
         self.assertEqual(f["tolerance"], {"when": "=tol is not None", "value": "=tol"})
         self.assertEqual(f["notGiven"]["value"], "tolerance not given, so tolerance is 0.01")
-        self.assertIn("unit", f)
+        self.assertIn("fileUnit", f)
+        self.assertEqual(f["toleranceUnit"], {"when": "=tol is not None", "value": "mm"})
         self.assertIn('return None if fmt in ("wrl", "x3d") else "mm"', source("families", "doc.py"))
 
 
@@ -627,8 +628,9 @@ class SessionSteps(unittest.TestCase):
         srv.call({"name": "probe_bad", "arguments": {"length": 0}})
         srv.call({"name": "probe_pad", "arguments": {"length": 6}})  # the same call again runs again (decision 6): one more line
         got = protocol.steps_part(srv)
-        self.assertEqual(got, {"steps": ["1 probe_body Plate: step 1", "2 probe_pad Pad: volume change +6000 mm³, step 2", "3 probe_bad: refused invalid_input",
-                                         "4 probe_pad Pad: volume change +6000 mm³, step 2"]})
+        self.assertEqual(got, {"steps": ["call 1: probe_body Plate: history step 1", "call 2: probe_read",
+                                         "call 3: probe_pad Pad: volume change +6000 mm³; history step 2", "call 4: probe_bad: refused invalid_input",
+                                         "call 5: probe_pad Pad: volume change +6000 mm³; history step 2"]})  # 27 Nov live proof: every call, reads too
 
     def test_the_newest_lines_that_fit_and_the_cut_off_notice(self):
         from agentlink import protocol
@@ -638,7 +640,7 @@ class SessionSteps(unittest.TestCase):
             srv.call({"name": "probe_body", "arguments": {"name": f"B{i}"}})
         got = protocol.steps_part(srv, limit=200)
         self.assertLess(len(got["steps"]), 30)
-        self.assertEqual(got["steps"][-1], "30 probe_body B29: step 1")  # the newest are kept
+        self.assertEqual(got["steps"][-1], "call 30: probe_body B29: history step 1")  # the newest are kept
         n = 30 - len(got["steps"])
         self.assertEqual(got["stepsLeftOut"], f"{n} older lines are not shown: steps holds 200 characters at most. "
                                               "The batch records (batches/ in the session folder) hold the calls of each batch.")
@@ -787,8 +789,8 @@ class ReviewFixes(unittest.TestCase):
         srv.call({"name": "batch", "arguments": {"rollback": True}})
         srv.call({"name": "probe_nested", "arguments": {}})
         self.assertEqual(protocol.steps_part(srv)["steps"],
-                         ["1 probe_make Kept: step 1", "2 probe_make A: step 1; taken back by rollback",
-                          "3 pad: refused not_found (a batch step, refused by its form)", "4 probe_nested outer"])
+                         ["call 1: probe_make Kept: history step 1", "call 2: probe_make A: history step 1; taken back by rollback",
+                          "call 3: pad: refused not_found (a batch step, refused by its form)", "call 4: probe_nested outer"])
         self.assertIn("note_refused(server, str(stop.tool or \"fast\"), stop.code", source("fastpath.py"))
         self.assertIn("note_rolled_back(getattr(s, \"server\", None), ROLLED_BACK if out.get(\"result\") == \"rolled_back\"", source("tools.py"))
 
@@ -855,7 +857,7 @@ class ReviewFixes(unittest.TestCase):
         self.assertEqual(protocol.KIND_WORDS["retry"], "")
         err = protocol.set_kind({"code": "busy", "message": "FreeCAD is busy with another call."})
         self.assertEqual((err["kind"], err["message"]), ("retry", "FreeCAD is busy with another call."))  # the raw error; no guessed cause
-        self.assertNotIn("FreeCAD was busy or not ready", source("protocol.py"))
+        self.assertNotIn("FreeCAD was busy or not ready", source("protocol.py").split("OLD_KIND_WORDS = (")[0])  # only in the list of old words that are taken out
 
     def test_c2_d2_a_parabolas_ends_are_said_and_a_held_recompute_is_said_as_held(self):
         got = child('''
@@ -869,6 +871,81 @@ class ReviewFixes(unittest.TestCase):
         ''')
         self.assertEqual(got[0], {"rotation": 0, "from": -6.0, "to": 6.0})
         self.assertEqual(got[1], 'The document\'s recompute is held (a batch with build: "end"), so the change of Body is not measured here.')
+
+
+class LiveProof1127(unittest.TestCase):
+    """The live proof on FreeCAD 1.1.3 of 27 Nov (live-proof-1127/RESULT.md)."""
+
+    def test_doc_new_and_every_call_have_a_line_with_named_numbers(self):
+        from agentlink import protocol
+        from agentlink.protocol import Server, Tool
+
+        schema = {"type": "object", "properties": {"name": {"type": "string"}}, "additionalProperties": True}
+        srv = Server("t", "0", [Tool("doc_new", "New.", schema, lambda a: {"document": a.get("name"), "label": a.get("name")}, changes=False),
+                                Tool("pd_body_new", "Body.", schema, lambda a: {"body": "Q", "step": 2}, changes=True)])
+        srv.call({"name": "doc_new", "arguments": {"name": "Part"}})
+        srv.call({"name": "pd_body_new", "arguments": {}})
+        self.assertEqual(protocol.steps_part(srv)["steps"], ["call 1: doc_new Part", "call 2: pd_body_new Q: history step 2"])
+
+    def test_sketch_frames_are_in_the_world(self):
+        got = child('''
+        from agentlink.families import sketch
+        import FreeCAD
+        class P:
+            def __init__(s, x): s.x = x
+            def multiply(s, o): return P(s.x + o.x)
+            def inverse(s): return P(-s.x)
+        sk = types.SimpleNamespace(Placement=P(0.0), getGlobalPlacement=lambda: P(100.0))
+        bare = types.SimpleNamespace(Placement=P(5.0))
+        print(json.dumps([sketch.world_pl(sk).x, sketch.holder_pl(sk).x, sketch.world_pl(bare).x, sketch.holder_pl(bare)]))
+        ''')
+        self.assertEqual(got, [100.0, 100.0, 5.0, None])
+        tj = json.dumps(entries()["sketch_new"])
+        for said in ("=axes(world_pl(sk))", "=frame(world_pl(sk))", "on_words(said, world_pl(sk))", "face_frame(sk.Placement, a.get('up'), holder_pl(sk))"):
+            self.assertIn(said, tj, said)
+        self.assertNotIn("=axes(sk.Placement)", json.dumps(entries()))
+        self.assertIn("rl.sketch_new_result(sk.Label, what, axes(world_pl(sk))", source("families", "sketch.py"))
+
+    def test_every_point_where_two_wires_meet(self):
+        got = child('''
+        from agentlink.families import sketch
+        two = sketch.cross_words(["circle 0", "circle 1"], lambda i, j: [(4, 9.165), (4, -9.165)])
+        one = sketch.cross_words(["circle 0", "circle 1"], lambda i, j: (10, 0))
+        print(json.dumps([two, one]))
+        ''')
+        self.assertEqual(got, [["circle 0 meets circle 1 at (4, 9.165) and (4, -9.165)"], ["circle 0 meets circle 1 at (10, 0)"]])
+        src = source("families", "sketch.py")
+        self.assertIn("found += [v.Point for v in a.section(b).Vertexes]", src)
+        for key in ('out["openEnds"] = gaps', 'out["branches"] = branches', 'out["meets"] = cross', 'st["moved"] = words'):
+            self.assertIn(key, src, key)
+        self.assertNotIn('out["todo"]', src)
+        self.assertIn("meets: each pair of closed wires that meet, with every point where they meet.", entries()["sketch_state"]["description"])
+
+    def test_each_number_of_an_export_has_its_unit(self):
+        got = child('''
+        from agentlink.families import doc
+        print(json.dumps(doc.verify_units({"triangles": 12, "size": [40.0, 40.0, 15.0], "sizeOfBodies": [40.0, 40.0, 15.0], "note": "x", "volumeDiff": 0.1, "other": 3})))
+        ''')
+        self.assertEqual(got, {"triangles": "count", "size": "mm", "sizeOfBodies": "mm", "volumeDiff": "mm³", "other": "not known"})
+        f = entries()["export"]["answer"]["fields"]
+        self.assertEqual(f["fileUnit"]["value"], "=unit_of(fmt)")
+        self.assertEqual(f["verifyUnits"]["value"], "=verify_units(verify)")
+        self.assertNotIn("unit", f)
+
+    def test_no_advice_tail_in_refusals(self):
+        from agentlink import protocol
+
+        self.assertEqual((protocol.KIND_WORDS["fixable"], protocol.KIND_WORDS["stop"]), ("", ""))
+        err = protocol.set_kind({"code": "invalid_input", "message": "what: nosuchpart is not a part name. The part names: a, b. Change what the error names and call again."})
+        self.assertEqual(err["message"], "what: nosuchpart is not a part name. The part names: a, b.")
+        for path, gone in ((("families", "pd_common.py"), "Use a name exactly as"), (("supervise.py",), "Try again in a while"),
+                           (("coedit.py",), "then call again"), (("families", "unattended.py"), "then call again"), (("tools.py",), "correct the call and go on"),
+                           (("cookbook.py",), "Correct the file and import it again"), (("guides", "model.md"), "and try again")):
+            self.assertNotIn(gone, source(*path), gone)
+        text = json.dumps(entries())
+        for gone in ("Try again without fix", "check the points run round", "check the box or plane against that", "check the folder can be written",
+                     "check the brackets", "check the delimiter", "check the operations", "else check the sizes", "call again for the next"):
+            self.assertNotIn(gone, text, gone)
 
 
 class Sentences(unittest.TestCase):

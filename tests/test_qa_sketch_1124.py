@@ -157,7 +157,7 @@ class OpenEnds(unittest.TestCase):
     def test_state_of_uses_the_words(self):
         with open(os.path.join(ROOT, "agentlink", "families", "sketch.py"), encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("said += _branch_words(sk, joins) + gaps", src)
+        self.assertIn('out["openEnds"] = gaps', src)
         self.assertNotIn("close the open wires", src)  # facts only (27 Nov)
 
     def test_the_sketch_ends_are_matched_to_their_curves(self):

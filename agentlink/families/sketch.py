@@ -42,6 +42,27 @@ def frame(pl):
     return {"origin": geo.vec(pl.Base), "xAxis": geo.vec(r.multVec(V(1, 0, 0))), "yAxis": geo.vec(r.multVec(V(0, 1, 0))), "normal": geo.vec(r.multVec(V(0, 0, 1)))}
 
 
+def holder_pl(sk):
+    """The placement that holds sketch sk's own (its global placement less
+    its Placement): the body's, and a container's, in the world. None when
+    it is not read."""
+    try:
+        return sk.getGlobalPlacement().multiply(sk.Placement.inverse())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def world_pl(sk):
+    """The sketch's placement in the world: its global placement, which
+    holds its body's Placement (and a container's). sk.Placement is in the
+    body's frame (27 Nov live proof: a sketch of a body at [100, 0, 0] was
+    said to be at world (0, 0, 0)). A stand-in without it: sk.Placement."""
+    try:
+        return sk.getGlobalPlacement()
+    except Exception:  # noqa: BLE001
+        return sk.Placement
+
+
 def frame_of(sk):
     """The sketch's frame in the world as four tuples (origin, x axis, y
     axis, normal), from its global placement (resultline.frame_ranges)."""
@@ -103,7 +124,7 @@ def new_result(sk, b, what, link):
     words, the body's range in the sketch's x, y and normal, and for a face
     sketch the face's own x and y range."""
     try:
-        return rl.sketch_new_result(sk.Label, what, axes(sk.Placement), body_ranges(b, sk), face_ranges(link, sk))
+        return rl.sketch_new_result(sk.Label, what, axes(world_pl(sk)), body_ranges(b, sk), face_ranges(link, sk))
     except Exception:  # noqa: BLE001 - a reading only
         return f"Sketch {getattr(sk, 'Label', '')} is on {what}."
 
@@ -397,17 +418,25 @@ def branch_words(ends, curves, size, dist, rounds=(), joins=()):
 CROSS_SHOWN = 4  # pairs of wires that meet, said one by one in the todo; wiresMeet counts them all
 
 
+def _and_words(items):
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
 def cross_words(loops, meet, cap=CROSS_SHOWN):
     """The todo words for closed loops that cross or touch each other (a
     loop inside another, apart from it, is a hole: no words). loops: their
-    names; meet(i, j): (x, y) where loops i and j meet, or None. cap: the
-    pairs said one by one, then how many more; None gives every pair."""
+    names; meet(i, j): the points where loops i and j meet (one (x, y) or
+    a list of them), or None. One phrase for each pair, with every point.
+    cap: the pairs said one by one, then how many more; None gives every
+    pair."""
     words = []
     for i in range(len(loops)):
         for j in range(i + 1, len(loops)):
             p = meet(i, j)
-            if p is not None:
-                words.append(f"{loops[i]} meets {loops[j]} at {_at(p)}")
+            if p is None or p == []:
+                continue
+            pts = [p] if isinstance(p, tuple) else list(p)
+            words.append(f"{loops[i]} meets {loops[j]} at {_and_words([_at(q) for q in pts])}")
     if not words:
         return []
     if cap is not None and len(words) > cap:
@@ -506,8 +535,20 @@ def _cross_words(sk, wires):
             d, pts, _info = a.distToShape(b)
             if d > tol:
                 return None
-            q = inv.multVec(pts[0][0])
-            return (q.x, q.y)
+            # Every point where the two meet (27 Nov live proof: two circles
+            # meet at two points, and one was given): the section's vertices
+            # and every solution of the distance, each once.
+            found = [p for pair in pts for p in pair[:1]]
+            try:
+                found += [v.Point for v in a.section(b).Vertexes]
+            except Exception:  # noqa: BLE001 - the distance's solutions stand
+                pass
+            out = []
+            for p in found:
+                q = inv.multVec(p)
+                if all(math.dist((q.x, q.y), r) > max(tol, 1e-6) for r in out):
+                    out.append((q.x, q.y))
+            return out
 
         return cross_words([name(w) for w in loops], meet, cap=None)
     except Exception:  # noqa: BLE001 - no reading: said as not tested
@@ -625,14 +666,18 @@ def state_of(sk):
             if len(cross) > CROSS_SHOWN:
                 cross = cross[:CROSS_SHOWN] + [f"and {len(cross) - CROSS_SHOWN} more loops that meet"]
         out["selfCrossing"] = "not tested"
-    said = []
+    # The measured words, each kind under its own key (27 Nov live proof:
+    # the key was "todo", for a list of facts).
     if openv or (wires and closed < len(wires)):
         joins = []
         gaps = _open_end_words(sk, openv, joins)
-        said += _branch_words(sk, joins) + gaps
-    said += cross
-    if said:
-        out["todo"] = "; ".join(said)
+        branches = _branch_words(sk, joins)
+        if gaps:
+            out["openEnds"] = gaps
+        if branches:
+            out["branches"] = branches
+    if cross:
+        out["meets"] = cross
     return out
 
 
@@ -1101,7 +1146,7 @@ def join_move_words(st, sk, joins):
         return st
     if words:
         st = dict(st)
-        st["todo"] = "; ".join(words + ([st["todo"]] if st.get("todo") else []))
+        st["moved"] = words
     return st
 
 
@@ -1433,17 +1478,20 @@ def constraint(t):
     return Sketcher.Constraint(*t)
 
 
-def face_frame(P, up=None):
+def face_frame(P, up=None, G=None):
     """The attachment offset that lines a sketch on a face (placed at P) up
     with the world: its origin the world origin's foot on the face's plane,
     its axes by orient.face_axes — y up world z on a standing face, else x
     along the world axis that lies most in the plane — so coordinates read
-    as the part's own. up: the world axis sketch y runs along."""
-    n = P.Rotation.multVec(V(0, 0, 1))
-    o = n * P.Base.dot(n)
+    as the part's own. up: the world axis sketch y runs along. G: the
+    placement that holds P (the body's, in the world; 27 Nov live proof:
+    the world's origin and axes, not the body's); None: the identity."""
+    W = G.multiply(P) if G is not None else P
+    n = W.Rotation.multVec(V(0, 0, 1))
+    o = n * W.Base.dot(n)
     x, y = (V(*c) for c in _axes_or_refuse(orient.face_axes, n, up))
     D = FreeCAD.Placement(o, FreeCAD.Rotation(x, y, n, "ZXY"))
-    return P.inverse().multiply(D)
+    return W.inverse().multiply(D)
 
 
 def attachment(sk, wrote=""):
@@ -1474,14 +1522,15 @@ def attachment(sk, wrote=""):
     return out
 
 
-def up_frame(P, up):
+def up_frame(P, up, G=None):
     """The attachment offset that turns a sketch placed at P about its own
     normal so its y runs along the world axis up (orient.up_axes). The origin
-    and the normal stay as the attachment put them."""
-    n = P.Rotation.multVec(V(0, 0, 1))
+    and the normal stay as the attachment put them. G: as face_frame."""
+    W = G.multiply(P) if G is not None else P
+    n = W.Rotation.multVec(V(0, 0, 1))
     x, y = (V(*c) for c in _axes_or_refuse(orient.up_axes, n, up))
-    D = FreeCAD.Placement(P.Base, FreeCAD.Rotation(x, y, n, "ZXY"))
-    return P.inverse().multiply(D)
+    D = FreeCAD.Placement(W.Base, FreeCAD.Rotation(x, y, n, "ZXY"))
+    return W.inverse().multiply(D)
 
 
 def _axes_or_refuse(fn, n, up):
@@ -1642,5 +1691,5 @@ def tools(session):
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "face_said": face_said, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent, "by_default": by_default,
-               "attachment": attachment, "con_brief": con_brief, "placement_json": picks.placement_json, "placement_fact": geo.placement_fact}
+               "attachment": attachment, "con_brief": con_brief, "world_pl": world_pl, "holder_pl": holder_pl, "placement_json": picks.placement_json, "placement_fact": geo.placement_fact}
     return runners.tools(GROUP, s, helpers)

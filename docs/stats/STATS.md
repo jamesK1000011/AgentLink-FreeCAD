@@ -270,12 +270,12 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 
 | Mode | Style | Tools listed | Characters | Tokens (est.) of the `tools/list` answer |
 |---|---|---:|---:|---:|
-| static (default) | ste | 6 | 8,163 | 2,332 |
-| static | full | 6 | 17,959 | 5,131 |
-| classic | ste | 24 | 25,166 | 7,190 |
-| classic | full | 24 | 34,714 | 9,918 |
+| static (default) | ste | 6 | 8,160 | 2,331 |
+| static | full | 6 | 17,956 | 5,130 |
+| classic | ste | 24 | 25,266 | 7,219 |
+| classic | full | 24 | 34,814 | 9,947 |
 
-So with the default (static, ste), the tool list costs about 2,332 tokens for 6 tools. With every hub group turned on, the list has 421 tools, 372,070 characters and about 106,306 tokens (style full).
+So with the default (static, ste), the tool list costs about 2,331 tokens for 6 tools. With every hub group turned on, the list has 421 tools, 372,237 characters and about 106,353 tokens (style full).
 
 - static: only the base is listed (`session_state`, `batch`, `guide_read`, `tool_find`, `approve_file`, `approve_code`). The agent finds the other tools with `tool_find`.
 - classic: the lean groups are listed (`core`, `view`).

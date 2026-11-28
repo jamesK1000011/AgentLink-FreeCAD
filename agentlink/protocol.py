@@ -90,19 +90,24 @@ class ToolError(Exception):
 # the message. The code and the status stay as they are.
 
 KIND_WORDS = {
-    "fixable": "Change what the error names and call again.",
+    # No kind has a sentence of its own (27 Nov live proof: "Change what the
+    # error names and call again." is advice). The kind is the fact; the
+    # message is what was wrong.
+    "fixable": "",
     # retry has no sentence of its own (27 Nov review, B4): the kind comes from
     # a word of the error (TRANSIENT_WORDS), and the error's own words are
     # the fact. No cause is guessed.
     "retry": "",
-    "stop": "Do not call it again. Report what happened.",
+    "stop": "",
 }
 # A FreeCAD error that names no input to change (24 Nov QA: "BRep_API:
 # command not done" came back with "The error says what to change"). A
 # message that carries this line keeps kind fixable, without that sentence.
 NAMES_NOTHING = "FreeCAD's error does not say which input to change."
 # The fixable sentence before 26 Nov: taken out of a message that carries it.
-OLD_KIND_WORDS = ("This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.",)
+OLD_KIND_WORDS = ("This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.",
+                  "Change what the error names and call again.", "Do not call it again. Report what happened.",
+                  "The cause is not in the call: FreeCAD was busy or not ready.")
 # The person's to say or to set: an approval, a hold, a refusal by rule.
 STOP_CODES = frozenset(("held_person_editing", "not_allowed", "refused", "denied", "declined", "stopped",
                         "pending_approval", "approval_pending", "unsupported", "unavailable"))
@@ -1882,13 +1887,15 @@ class Server:
 
 # ---- the session's calls, as facts (session_state's steps; 27 Nov) -----------------
 #
-# One short line for each call of a changing tool that the hub ran or
-# refused in this session, in order: its number, the tool, the object that
-# its answer names, the measured volume change where the answer has one, the
-# history step; or "refused" with the refusal's code. The runners (run,
-# batch, fast, pick) are not lines: each call that they run is. Reads are
-# not listed. The list is the session's: it starts again at initialize, and
-# it stays when a document is closed. No word of advice is in a line.
+# One short line for each call that the hub ran or refused in this session
+# for the agent, in order (27 Nov live proof: doc_new had no line; reads are
+# lines too): "call N: tool object: volume change …; history step S", or
+# "call N: tool: refused code". N counts the session's calls; S is the
+# document's history step, named as such. The runners (run, batch, fast,
+# pick) are not lines: each call that they run is. A call that a tool makes
+# itself and a call of the person are not lines. The list is the
+# session's: it starts again at initialize, and it stays when a document is
+# closed. No word of advice is in a line.
 
 STEP_RUNNERS = frozenset(("run", "batch", "fast", "pick"))
 STEP_OBJECT_KEYS = ("feature", "sketch", "body", "object", "document", "label", "name")
@@ -1899,10 +1906,10 @@ def step_line(n, name, body, error=None):
     """One line of the session's steps, from a call's answer (body) or its
     refusal (error)."""
     if isinstance(error, dict):
-        return f"{n} {name}: refused {error.get('code')}"
+        return f"call {n}: {name}: refused {error.get('code')}"
     body = body if isinstance(body, dict) else {}
     what = next((body[k] for k in STEP_OBJECT_KEYS if isinstance(body.get(k), str) and body[k]), None)
-    out = f"{n} {name}" + (f" {what}" if what else "")
+    out = f"call {n}: {name}" + (f" {what}" if what else "")
     facts = []
     v = body.get("volumeChange")
     if isinstance(v, (int, float)) and not isinstance(v, bool):
@@ -1911,14 +1918,14 @@ def step_line(n, name, body, error=None):
         facts.append(f"volume change {resultline.signed(v)} mm³")
     st = body.get("step")
     if isinstance(st, int) and not isinstance(st, bool):
-        facts.append(f"step {st}")
-    return out + (": " + ", ".join(facts) if facts else "")
+        facts.append(f"history step {st}")
+    return out + (": " + "; ".join(facts) if facts else "")
 
 
 def note_step(server, params, result):
-    """A call of a changing tool that ran or was refused, put on the
-    session's list (server._step_log). Reads and the runners are passed
-    over; a call of a name that is no tool is a refused line."""
+    """A call that ran or was refused, put on the session's list
+    (server._step_log). The runners are passed over; a call of a name that
+    is no tool is a refused line."""
     name = params.get("name")
     name = plain_name(server, name) if isinstance(name, str) else name
     if not isinstance(name, str) or name in STEP_RUNNERS:
@@ -1930,15 +1937,6 @@ def note_step(server, params, result):
         return
     if getattr(getattr(server, "session", None), "by", "agent") != "agent":
         return
-    tool = server.tools.get(name)
-    args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
-    if tool is not None:
-        try:
-            changes = bool(tool.changes_for(args))
-        except Exception:  # noqa: BLE001
-            changes = bool(getattr(tool, "changes", False))
-        if not changes:
-            return
     content = (result or {}).get("content") or []
     body = None
     if content and content[0].get("type") == "text":
@@ -1962,7 +1960,7 @@ def note_refused(server, name, code, where=""):
         log = getattr(server, "_step_log", None)
         if log is None:
             log = server._step_log = []
-        log.append(f"{len(log) + 1} {name}: refused {code}" + (f" ({where})" if where else ""))
+        log.append(f"call {len(log) + 1}: {name}: refused {code}" + (f" ({where})" if where else ""))
     except Exception:  # noqa: BLE001 - a record only
         pass
 

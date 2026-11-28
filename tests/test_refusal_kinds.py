@@ -26,9 +26,8 @@ def call(srv, name, args):
 
 class Kinds(unittest.TestCase):
     def test_words_are_fixed(self):
-        self.assertEqual(FIX, "Change what the error names and call again.")
-        self.assertEqual(RETRY, "")  # 27 Nov review: no guessed cause; the error's own words stand
-        self.assertEqual(STOP, "Do not call it again. Report what happened.")
+        # 27 Nov: no kind has a sentence of its own; the kind is the fact
+        self.assertEqual((FIX, RETRY, STOP), ("", "", ""))
 
     def test_kind_per_code(self):
         self.assertEqual(refusal_kind("invalid_input", "input.x: required."), "fixable")
@@ -50,13 +49,12 @@ class Kinds(unittest.TestCase):
     def test_sentence_once_at_the_end(self):
         err = set_kind({"code": "invalid_input", "message": "input.x: required."})
         self.assertEqual(err["kind"], "fixable")
-        self.assertEqual(err["message"], "input.x: required. " + FIX)
+        self.assertEqual(err["message"], "input.x: required.")
         set_kind(err)
-        self.assertEqual(err["message"].count(FIX), 1)
-        # Wrapped words (a fast block's step) keep one sentence, at the end.
-        err = set_kind({"code": "failed", "message": "step do.1 (pd_pad): input.x: required. " + FIX + " Ran before it: do.0."})
-        self.assertTrue(err["message"].endswith("Ran before it: do.0. " + FIX), err["message"])
-        self.assertEqual(err["message"].count(FIX), 1)
+        self.assertEqual(err["message"], "input.x: required.")
+        # The words before 27 Nov are taken out where a message carries them.
+        err = set_kind({"code": "failed", "message": "step do.1 (pd_pad): input.x: required. Change what the error names and call again. Ran before it: do.0."})
+        self.assertEqual(err["message"], "step do.1 (pd_pad): input.x: required. Ran before it: do.0.")
 
     def test_server_refusal_keeps_code_and_outcome(self):
         r = Server.refusal("held_person_editing", "Held: the person is editing Pad.", outcome="not_started")

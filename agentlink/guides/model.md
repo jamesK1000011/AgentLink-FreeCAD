@@ -17,7 +17,7 @@ A map of this guide. `guide_read { topic: "model", section: [...] }` reads the s
 ## traps
 - Face and edge numbers change after every modelling step: query again (`shape_query`) rather than reuse old references.
 - A result keeps the label of `body`, so setups and specs follow it; `bodies` are removed (keep: true hides them, and a hidden body is still listed).
-- A refusal for "changed nothing" means the pieces do not overlap: move them (`part_transform move`) and try again.
+- A refusal for "changed nothing": the pieces do not overlap.
 - `part_boolean` `common` with several `bodies` keeps what `body` shares with any of them (body ∩ bodies together), as FreeCAD's own common does; for the part shared by all, run `common` once for each of `bodies`.
 - Fillets bigger than a face beside the edge, or shells thinner than a fillet, fail: smaller sizes, or the shell before the fillet.
 - Loft profiles with different edge counts twist; start each at the matching corner. `part_loft` turns each profile to run the same way round and starts each at the point nearest the one before (`aligned` says what it changed). It keeps no loft that is invalid, open, inside out or bulges more than 15% beyond its profiles (measured on the surface itself, not its control points); the refusal gives the reason and names the spans that bulge (`profiles 11–12 by 37% along y`).
