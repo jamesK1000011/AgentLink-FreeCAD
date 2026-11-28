@@ -143,6 +143,7 @@ agentlink/guides/techdraw.md
 agentlink/guides/view.md
 agentlink/health.py
 agentlink/heavy.py
+agentlink/helplevel.py
 agentlink/hold.py
 agentlink/hooks.py
 agentlink/hull3d.py
@@ -193,6 +194,7 @@ agentlink/report_watch.py
 agentlink/restart_mark.py
 agentlink/resultline.py
 agentlink/runners.py
+agentlink/selectwhat.py
 agentlink/selftest.py
 agentlink/server.py
 agentlink/setup_check.py
