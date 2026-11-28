@@ -55,14 +55,21 @@ def take(tool, args):
 
 
 def health_has_fault(h):
-    """Whether a health part holds anything beyond 'no fault'."""
-    from . import health as _health, once as _once
+    """Whether a health part holds a fault: the health check's own reading
+    (agentlink/health.py last_fault: a recompute error, a shape that is not
+    valid or not closed, conflicting, redundant or malformed constraints,
+    an open dialog), or failed or not-recomputed objects named in it. A
+    health that the check did not read is kept."""
+    from . import health as _health
 
     if not isinstance(h, dict):
-        return h is not None and h not in (_health.NOTHING, _once.NOTHING_NEW)
-    if set(h) - {"facts"}:
+        return h is not None
+    if h.get("errors") or h.get("needRecompute") or h.get("taskPanel"):
         return True
-    return h.get("facts") not in (_health.NOTHING, _once.NOTHING_NEW)
+    facts = str(h.get("facts") or "")
+    if facts.startswith(_health.NOT_READ) or "did not run" in facts:
+        return True
+    return _health.last_fault()
 
 
 def answer(body, want):

@@ -87,6 +87,9 @@ def fixed(a):
     return {"volume": 10.0, "faces": 6, "box": [1, 2, 3], "health": h}
 srv.tools["t_fixed"] = Tool("t_fixed", "A fixed answer, for the tests.", {"type": "object", "properties": {"facts": {}, "errors": {"type": "boolean"}}, "additionalProperties": False}, fixed)
 
+srv.tools["t_sound"] = Tool("t_sound", "A sound shape's answer, for the tests.", {"type": "object", "properties": {}, "additionalProperties": False},
+                            lambda a: {"volume": 5.0, "health": {"facts": "shape: B: valid, closed, 1 solid", "next": "workbench PartWorkbench"}})
+
 def call(name, args):
     r = srv.call({"name": name, "arguments": args})
     t = r["content"][0]["text"]
@@ -104,6 +107,7 @@ out["ansMissing"] = call("t_fixed", {"what": ["volume", "nosuch"]})
 out["batch"] = call("batch", {"calls": [{"tool": "t_fixed", "what": "faces"}, {"tool": "t_fixed", "facts": {"$from": 0, "$at": "box.0"}}]})
 out["batchHint"] = call("batch", {"calls": [{"tool": "tool_find", "card": "doc_save_all", "what": ["does", "hint"]}]})
 out["noHintAsked"] = call("tool_find", {"card": "pd_chamfer", "what": ["does", "hint"]})
+out["sound"] = call("t_sound", {"what": "volume"})
 out["listing"] = [srv.tools[n].listing() for n in ("pd_chamfer", "doc_save_all")]
 print(json.dumps(out, default=str))
 '''
@@ -183,6 +187,9 @@ class Cards(unittest.TestCase):
 class Answers(unittest.TestCase):
     def test_what_narrows_an_answer_and_drops_health_without_a_fault(self):
         self.assertEqual(child()["ansWhat"]["body"], {"volume": 10.0})
+
+    def test_health_of_a_sound_shape_goes_when_not_asked(self):
+        self.assertEqual(child()["sound"]["body"], {"volume": 5.0})
 
     def test_health_with_a_fault_always_comes_back(self):
         b = child()["ansFault"]["body"]
