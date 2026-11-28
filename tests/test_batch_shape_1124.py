@@ -41,7 +41,7 @@ class ResultAndStatus(unittest.TestCase):
         self.assertEqual((b["result"], b["done"], b["notRun"]), ("ran_none", [], [1]))
         self.assertEqual(b["refused"]["status"], "not_started")
         self.assertIn("Call 0 (probe_make) was refused; it changed nothing.", b["note"])
-        self.assertTrue(b["note"].endswith("in order: probe_make (fixed), probe_make."), b["note"])  # no start sent: no start words (26 Nov)
+        self.assertTrue(b["note"].endswith("Call 1 (probe_make) was not run."), b["note"])  # no start sent: no start words (26 Nov); s1127e: no "Next:"
 
     def test_rollback_result_and_resend_list(self):
         _, b, _ = run('''
@@ -49,7 +49,8 @@ class ResultAndStatus(unittest.TestCase):
 ''')
         self.assertEqual(b["result"], "rolled_back")
         self.assertIn("Calls 0 (probe_make) were taken back (rollback: true).", b["note"])
-        self.assertIn("in order: probe_make, probe_make (fixed), probe_make.", b["note"])
+        self.assertIn("Call 2 (probe_make) was not run.", b["note"])
+        self.assertNotIn("Next:", b["note"])
 
     def test_a_refused_row_has_status_not_outcome(self):
         _, b, _ = run('''
@@ -63,7 +64,7 @@ class ResultAndStatus(unittest.TestCase):
         _, b, _ = run('''
     print(json.dumps(call("batch", {"start": 1, "calls": [mk("A"), mk("B"), mk("C", fail=True)]})))
 ''')
-        self.assertIn("Leave start out: start counts in the list you send, and the new list starts at its first call.", b["note"])
+        self.assertIn("start counts in the list that is sent: a list's first call is its call 1.", b["note"])
 
     def test_direct_refusal_has_status(self):
         _, b, _ = run('''

@@ -68,6 +68,9 @@ WAIVERS = {
     ("part_from_mesh", "meshobj_decimate"): "the advice to decimate first is gone (27 Nov review, facts only)",
     ("pd_boolean", "refuse"): "the hub does not refuse a boolean that changes nothing (27 Nov, facts only): the sentence was false",
     ("pd_primitive", "must"): "'it must overlap the body' is no rule (27 Nov, facts only): the call is kept with volume change 0",
+    ("part_boolean", "shape_query"): "the advice to use shape_query again is gone (s1127e QA, facts only); the card says faces and edges get new numbers",
+    ("part_transform", "shape_query"): "the advice to use shape_query again is gone (s1127e QA, facts only); the card says faces and edges are renumbered",
+    ("part_sweep", "must"): "'the profile must already be at the start of the path' is no rule (s1127e QA, facts only): the card says the tool does not move the profile",
     ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 

@@ -416,7 +416,7 @@ def shaped(doc, ref, what="body"):
     o = find(doc, ref, what)
     sh = getattr(o, "Shape", None)
     if sh is None or sh.isNull():
-        raise ToolError("invalid_state", f"{o.Label} has no shape ({o.TypeId}): a mesh becomes a body with import_file {{ solid: true }}.")
+        raise ToolError("invalid_state", f"{o.Label} has no shape ({o.TypeId}).")
     return o
 
 

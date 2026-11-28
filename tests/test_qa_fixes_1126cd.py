@@ -102,11 +102,11 @@ class HolesCut(unittest.TestCase):
     one = pc.holes_cut(2, out)
     print(json.dumps([one, sorted(out), pc.holes_cut(3, {})]))
 ''')
-        self.assertEqual(got, [1, ["profiles"], 3])
+        self.assertEqual(got, [1, ["holeSpots", "profiles"], 3])
 
     def test_the_card(self):
         e = entries()["pd_hole"]
-        self.assertIn("holes (the number it drilled)", e["description"])
+        self.assertIn("holes is the number of holes that removed material", e["description"])
         self.assertIn("profiles names each circle that cut nothing", e["description"])
         self.assertIn("holes_cut(spots, out)", json.dumps(e["answer"]))
 

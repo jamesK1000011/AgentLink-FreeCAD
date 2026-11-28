@@ -34,6 +34,7 @@ MAX_TOOLS = 3        # tools said in the hint
 MAX_SUGGEST = 4      # tools read from one rule
 MAX_PICKS = 12       # tools whose commands are asked whether they are active
 MAX_WHY = 60
+MAX_FACT_WORDS = 160  # the facts a rule fit by, in words (fact_words)
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nexthint.json")
 SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nexthint.schema.json")
@@ -242,6 +243,11 @@ def facts(doc, state=None, gui=None):
         out["features"] = "some" if feats else "none"
         if unused:
             out["body"] = _sketch_progress(unused[-1])
+            if out["body"] == "sketch-open":
+                try:
+                    out["openWires"] = sum(1 for w in unused[-1].Shape.Wires if not w.isClosed())
+                except Exception:  # noqa: BLE001 - not read: not said
+                    pass
             out["sketchName"] = str(unused[-1].Label)
             out["sketches"] = [str(k.Label) for k in reversed(unused)][:MAX_NAMES]
         elif feats:
@@ -362,6 +368,57 @@ def matches(rule, facts):
     return True
 
 
+def _a(word):
+    return ("an " if word[:1] in "aeiou" else "a ") + word
+
+
+def fact_words(when, facts):
+    """The facts of the document that made a rule fit, in words, from the
+    facts read (owner, 27 Nov: the why of a likely next tool is FACTS ONLY,
+    "sketch Path has 1 open wire", never an aim such as "close the
+    outline"). Only the facts the rule's when names are said."""
+    f = facts or {}
+    out = []
+    for k in (when or {}):
+        v = f.get(k)
+        if k == "failing" and v:
+            out.append(f"{f.get('failingName') or 'an object'} fails to recompute")
+        elif k == "selection" and v:
+            on = f.get("picked")
+            out.append(f"{_a(str(v))} is selected" + (f" on {on}" if on else ""))
+        elif k == "editing" and v == "sketch":
+            out.append(f"sketch {f.get('editSketch') or ''} is open in edit".replace("  ", " "))
+        elif k == "dof" and v:
+            out.append("the sketch in edit is fully constrained" if v == "full" else "the sketch in edit has degrees of freedom left")
+        elif k == "page" and v:
+            out.append("a drawing page is in front")
+        elif k == "assembly" and v:
+            name = f.get("assemblyName") or "the assembly"
+            out.append({"empty": f"{name} has no parts", "unjointed": f"{name} has parts and no joints", "jointed": f"{name} has joints"}.get(v, f"{name}: {v}"))
+        elif k == "workbench" and v:
+            out.append(f"the workbench is {v}")
+        elif k == "document" and v == "empty":
+            out.append("the document has no objects")
+        elif k == "body" and v:
+            body = f.get("bodyName") or "the body"
+            sk = f"sketch {f['sketchName']}" if f.get("sketchName") else "the newest sketch"
+            n_open = f.get("openWires")
+            out.append({
+                "none": "the document has no PartDesign Body",
+                "empty": f"{body} has no feature and no sketch",
+                "sketch-empty": f"{sk} of {body} has no geometry",
+                "sketch-open": f"{sk} of {body} has " + (f"{n_open} open wire{'' if n_open == 1 else 's'}" if isinstance(n_open, int) else "open wires"),
+                "sketch-not-ready": f"{sk} of {body} has closed wires, and the solver flags constraints or two loops meet",
+                "sketch-closed": f"{sk} of {body} has closed wires, and no feature uses it",
+                "features": f"the tip of {body} is {f.get('tipName') or 'a feature'}" + (f" ({f['lastFeature']})" if f.get("lastFeature") else ""),
+            }.get(v, f"{body}: {v}"))
+        elif k == "features" and v and "body" not in (when or {}):
+            out.append(f"{f.get('bodyName') or 'the body'} has {'no feature' if v == 'none' else 'features'}")
+        elif k == "lastFeature" and v and "body" not in (when or {}):
+            out.append(f"the tip is {f.get('tipName') or 'a feature'} ({v})")
+    return "; ".join(x for x in out if x)
+
+
 def rank(facts, table=None, limit=MAX_PICKS):
     """The likely next tools for these facts, likeliest first:
     [{ tool, why, rule, score }], each tool once (from its heaviest rule).
@@ -375,12 +432,12 @@ def rank(facts, table=None, limit=MAX_PICKS):
                 continue
             weight = float(rule.get("weight") or 0)
             for k, s in enumerate((rule.get("suggest") or [])[:MAX_SUGGEST]):
-                tool, why = s.get("tool"), s.get("why")
+                tool, why = s.get("tool"), fact_words(rule.get("when"), facts)
                 if not isinstance(tool, str) or not tool:
                     continue
                 score = weight - 0.1 * k
                 if tool not in best or score > best[tool][0]:
-                    best[tool] = (score, order, k, _cut(why, MAX_WHY), rid)
+                    best[tool] = (score, order, k, _cut(why, MAX_FACT_WORDS), rid)
         except Exception:  # noqa: BLE001 - one bad rule never stops the hint
             continue
     got = sorted(best.items(), key=lambda kv: (-kv[1][0], kv[1][1], kv[1][2], kv[0]))
@@ -426,7 +483,16 @@ def available(picks, state=None, exists=None, entry=toolindex.entry, n=MAX_TOOLS
 
 def words(picks, n=MAX_TOOLS):
     """"pd_pad (a closed sketch no feature uses yet), pd_pocket (…)"."""
-    return ", ".join(f"{p['tool']} ({p['why']})" if p.get("why") else p["tool"] for p in list(picks)[:n])
+    # Tools of the same facts are said together, the facts once:
+    # "pd_pad, pd_pocket (sketch S of Body has closed wires, …)".
+    groups = []
+    for p in list(picks)[:n]:
+        why = p.get("why") or ""
+        if groups and groups[-1][1] == why:
+            groups[-1][0].append(p["tool"])
+        else:
+            groups.append(([p["tool"]], why))
+    return ", ".join(", ".join(t) + (f" ({w})" if w else "") for t, w in groups)
 
 
 # ---- the line -----------------------------------------------------------------------------

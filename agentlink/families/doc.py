@@ -283,6 +283,17 @@ def open_labels(docs):
     return [d.Label if labels.count(d.Label) == 1 else f"{d.Label} ({d.Name})" for d in docs]
 
 
+def same_label(d, base=None):
+    """The other open documents whose label is d's label, or the label d was
+    asked for (base), as "label (name)" (s1127e QA, H14: doc_new "ShortCut"
+    made ShortCut5 and did not say four more were open). [] when none."""
+    try:
+        want = {str(d.Label)} | ({str(base)} if base else set())
+        return [f"{x.Label} ({x.Name})" for x in FreeCAD.listDocuments().values() if x.Name != d.Name and str(x.Label) in want]
+    except Exception:  # noqa: BLE001 - not read: not said
+        return []
+
+
 def errors(doc):
     out = []
     for o in doc.Objects:
@@ -1258,7 +1269,7 @@ def tools(session):
         "recompute_scoped": lambda objs: picks.recompute_scoped(s.doc, objs),
         # documents
         "new_doc": new_doc, "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
-        "listed_docs": lambda: FreeCAD.listDocuments(), "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
+        "listed_docs": lambda: FreeCAD.listDocuments(), "same_label": same_label, "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
         "unsaved": unsaved, "touched_marks": touched_marks, "current_name": current_name, "back_to": back_to, "recent_files": recent_files, "open_at": open_at,
         "unit_of": unit_of, "verify_units": verify_units, "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "agent_file": agent_file, "note_agent_file": note_agent_file, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
         # files

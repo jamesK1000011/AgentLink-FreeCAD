@@ -313,7 +313,8 @@ SCHEMAS = {
                           # bicycle L5 build (21 Nov, finding 4): Refine off by default on a pipe
                           ("subtractive", "refine", {"type": "boolean", "description": "FreeCAD's Refine on the pipe; left out: FreeCAD's own value."})]},
     # bicycle L5 build (21 Nov, finding 3): a sketch hung on an edge again in place, or its lost element re-pointed
-    "sketch_attach": {"why": "bicycle L5 finding 3: edge, mode, at, repair",
+    "sketch_attach": {"why": "bicycle L5 finding 3: edge, mode, at, repair; s1127e QA H11: the face's form",
+                      "describe": {"face": "{ side: \"+z\" | \"-z\" | \"+x\" | \"-x\" | \"+y\" | \"-y\", feature } or { at: [x,y,z], normal: [x,y,z], feature }. A face by its name is text in plane: \"Pad.Face3\"."},
                       "after": [("flip", "edge", {"type": "string", "description": "An object's edge, \"Binder.Edge1\": the sketch hangs on it."}),
                                 ("edge", "mode", {"type": "string", "description": "On an edge: NormalToEdge (default), FrenetNB, FrenetTN, FrenetTB, Concentric, RevolutionSection."}),
                                 ("mode", "at", {"type": "number", "description": "On an edge: where, 0 (its start) to 1 (its end)."}),

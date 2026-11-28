@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Decision 7 (24 Nov): the runner passes the run's time limit as a setting,
 # AGENTLINK_TIME_LIMIT_MIN (minutes), read at start. The time counts from
-# the first tools/call. Set: session_state says "N of M minutes used"; the
-# health verdict of a changing answer says "time: N of M minutes used" only
+# the first tools/call. Set: session_state says "N of M minutes used since the first tool call"; the
+# health verdict of a changing answer says "time: N of M minutes used since the first tool call" only
 # from half the limit on (24 Nov blind QA: noise before). Not set: nothing shows.
 import os
 import sys
@@ -57,8 +57,8 @@ class TimeSet(unittest.TestCase):
         self.assertTrue(self.got["started"])
 
     def test_session_state_shows_it(self):
-        self.assertEqual(self.got["early"], "2 of 30 minutes used")
-        self.assertEqual(self.got["state"], "16 of 30 minutes used")
+        self.assertEqual(self.got["early"], "2 of 30 minutes used since the first tool call")
+        self.assertEqual(self.got["state"], "16 of 30 minutes used since the first tool call")
         with open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8") as f:
             src = f.read()
         body = src[src.index("    def _state_parts(self, a):"):src.index("    def _front_state(self):")]
@@ -66,7 +66,7 @@ class TimeSet(unittest.TestCase):
 
     def test_the_health_verdict_shows_it_from_half_the_limit(self):
         self.assertNotIn("time:", self.got["earlyVerdict"])
-        self.assertTrue(self.got["facts"].endswith("; time: 16 of 30 minutes used") or self.got["facts"] == "time: 16 of 30 minutes used",
+        self.assertTrue(self.got["facts"].endswith("; time: 16 of 30 minutes used since the first tool call") or self.got["facts"] == "time: 16 of 30 minutes used since the first tool call",
                         self.got["facts"])
         self.assertEqual(self.got["facts"].count("time:"), 1)
 
@@ -75,7 +75,7 @@ class TimeSet(unittest.TestCase):
         self.assertIsNone(self.got["batch"])
         self.assertEqual(len(self.got["rows"]), 2)
         self.assertNotIn("time:", self.got["rows"][0])
-        self.assertEqual(self.got["rows"][1], "recompute: FreeCAD reports no recompute error; time: 16 of 30 minutes used")
+        self.assertEqual(self.got["rows"][1], "recompute: FreeCAD reports no recompute error; time: 16 of 30 minutes used since the first tool call")
 
 
 class TimeNotSet(unittest.TestCase):
@@ -98,12 +98,12 @@ class TheSetting(unittest.TestCase):
 
     def test_the_words(self):
         timelimit.configure("12.5")
-        self.assertEqual(timelimit.line(), "time: 0 of 12.5 minutes used")  # before the first call
+        self.assertEqual(timelimit.line(), "time: 0 of 12.5 minutes used since the first tool call")  # before the first call
         timelimit.started(now=1000.0)
         timelimit.started(now=5000.0)  # a later call changes nothing
-        self.assertEqual(timelimit.used(now=1000.0 + 59), "0 of 12.5 minutes used")
-        self.assertEqual(timelimit.used(now=1000.0 + 61 * 7), "7 of 12.5 minutes used")
-        self.assertEqual(timelimit.line(now=1000.0 + 60 * 20), "time: 20 of 12.5 minutes used")
+        self.assertEqual(timelimit.used(now=1000.0 + 59), "0 of 12.5 minutes used since the first tool call")
+        self.assertEqual(timelimit.used(now=1000.0 + 61 * 7), "7 of 12.5 minutes used since the first tool call")
+        self.assertEqual(timelimit.line(now=1000.0 + 60 * 20), "time: 20 of 12.5 minutes used since the first tool call")
 
     def test_off_says_nothing(self):
         timelimit.configure("")
@@ -119,7 +119,7 @@ class TheSetting(unittest.TestCase):
         timelimit.started(now=1000.0)
         self.assertEqual(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"}, now=1000.0 + 60 * 14)["facts"], "recompute: FreeCAD reports no recompute error")
         h = timelimit.mark_health(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"}, now=1000.0 + 60 * 15), now=1000.0 + 60 * 15)
-        self.assertEqual(h["facts"], "recompute: FreeCAD reports no recompute error; time: 15 of 30 minutes used")
+        self.assertEqual(h["facts"], "recompute: FreeCAD reports no recompute error; time: 15 of 30 minutes used since the first tool call")
 
     def test_documented_with_the_other_settings(self):
         for doc in ("SETUP.md", "README.md", os.path.join("docs", "clients", "README.md")):

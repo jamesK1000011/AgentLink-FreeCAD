@@ -426,6 +426,7 @@ class Run:
         self.made_rows = []      # {name, label, type} of the same: the names later calls take
         self.checks = []         # the key results of check, save and close steps
         self.health_bad = 0
+        self.health_first = None
         self.changed = False     # a changing call came before (dry: leading checks stop counting)
         self.notes = []          # dry: what was not read
         self.read_checks = 0
@@ -790,7 +791,12 @@ def _summary(run, ok, secs, v0, v1, cp=None):
     if v0 is not None and v1 is not None and abs(v1 - v0) > 1e-6:
         parts.append(f"vol {_fmt_num(v0)}→{_fmt_num(v1)} mm³")
     # What the calls' own health readings say: no claim for a reading that is not there (27 Nov review, A1).
-    parts.append(f"health: a fault or no reading after {run.health_bad} call{'s' if run.health_bad != 1 else ''} (warnings)" if run.health_bad
+    # Which of the two, in the health's own words (s1127e QA, H12: "a fault or
+    # no reading" did not say which): the first, then how many in warnings.
+    first = getattr(run, "health_first", None)
+    parts.append((f"health: {_cut(first, 200)}" + (f" ({run.health_bad} calls with such health; warnings has each)" if run.health_bad > 1 else ""))
+                 if run.health_bad and first else
+                 f"health: a fault or no reading after {run.health_bad} call{'s' if run.health_bad != 1 else ''} (warnings)" if run.health_bad
                  else "health: no fault in the readings of the calls")
     return " · ".join(parts)
 
@@ -923,6 +929,8 @@ def _run(server, session, steps, a):
         hw = _health_words(body)
         if hw:
             run.health_bad += 1
+            if not getattr(run, "health_first", None):
+                run.health_first = f"{where} ({name}): {hw}"
             run.warnings.append(_cut(f"{where} ({name}) health: {hw}"))
         for k in ("warning", "warnings"):
             w = body.get(k) if isinstance(body, dict) else None

@@ -1080,5 +1080,131 @@ class LiveProofB3fc1d0(unittest.TestCase):
         self.assertNotIn("Call it again in a moment", sup)
 
 
+class QaS1127e(unittest.TestCase):
+    """Blind QA s1127e (qa-s1127e/QA-REPORT.md): the hub items."""
+
+    def test_1_holes_is_0_when_nothing_was_drilled_and_the_spots_are_said(self):
+        got = child('''
+        out = {"volumeChange": 0.0}
+        n0 = pc.holes_cut(2, out)
+        out2 = {"volumeChange": -50.0, pc.NOT_CUT: 1}
+        n1 = pc.holes_cut(3, out2)
+        out3 = {"volumeChange": -50.0}
+        n2 = pc.holes_cut(2, out3)
+        print(json.dumps([n0, out, n1, out2, n2, out3]))
+        ''')
+        self.assertEqual(got, [0, {"volumeChange": 0.0, "holeSpots": 2}, 2, {"volumeChange": -50.0, "holeSpots": 3}, 2, {"volumeChange": -50.0}])
+        self.assertIn("holes is the number of holes that removed material (0 when the volume change is 0 mm³)", entries()["pd_hole"]["description"])
+
+    def test_2_the_words_follow_the_measured_change_and_the_type(self):
+        got = child('''
+        feat = types.SimpleNamespace(TypeId="PartDesign::AdditivePipe", Label="Pipe")
+        body = types.SimpleNamespace(Label="Body", Shape=types.SimpleNamespace(Volume=-678.58))
+        line = pc.sign_facts(feat, body, "pd_pipe", "Pipe", -678.58, pc.rl.feature_head("Pipe", "pd_pipe", -678.58) + " The body is 1 solid.")
+        pad = types.SimpleNamespace(TypeId="PartDesign::Pad", Label="Pad")
+        ok = pc.sign_facts(pad, types.SimpleNamespace(Label="Body", Shape=types.SimpleNamespace(Volume=10.0)), "pd_pad", "Pad", 10.0, pc.rl.feature_head("Pad", "pd_pad", 10.0))
+        print(json.dumps([line, ok, pc.add_sub(feat), pc.add_sub(types.SimpleNamespace(TypeId="PartDesign::Hole")), pc.add_sub(types.SimpleNamespace(TypeId="PartDesign::Fillet"))]))
+        ''')
+        self.assertEqual(got[0], "Pipe (PartDesign::AdditivePipe, a additive type): volume change -678.58 mm³. The body is 1 solid. The volume of Body is -678.58 mm³, below 0.")
+        self.assertEqual(got[1], "Pad added material, volume change +10 mm³.")
+        self.assertEqual(got[2:], ["additive", "subtractive", None])
+
+    def test_2_body_check_line_has_the_check_geometry_errors_and_the_sign(self):
+        cg = {"errors": ["BOP check found the following errors:", "Error in Edge: BOPAlgo SelfIntersect", "Error in Edge: BOPAlgo SelfIntersect"]}
+        self.assertEqual(rl.body_check_result("Body", 1, None, True, True, (-44, 6, 0, 24, -3, 3), -678.58, cg),
+                         "Body is 1 solid; valid, closed; box x -44..6, y 0..24, z -3..3; volume -678.58 mm³ (below 0); Check Geometry: 2 errors (BOPAlgo SelfIntersect).")
+        self.assertTrue(rl.body_check_result("B", 1, None, True, True, None, 5.0, {"errors": []}).endswith("volume 5 mm³; Check Geometry: no error."))
+        self.assertIn('s.get("checkGeometry"))', source("tools.py"))
+
+    def test_3_a_hole_profile_says_the_volume_it_drilled_not_an_area_share(self):
+        pdc = source("families", "pd_common.py")
+        body = pdc[pdc.index("def profile_results"):pdc.index("\ndef ", pdc.index("def profile_results") + 5)]
+        self.assertIn("hole_d is not None", body)
+        self.assertIn("drilled {hit.Volume:.4g} mm³", body)
+        self.assertLess(body.index("hole_d is not None"), body.index("whole = f.Area"))
+
+    def test_4_part_boolean_lists_the_inputs_left_in_the_document(self):
+        e = entries()["part_boolean"]
+        self.assertIn('"inputsLeft"', json.dumps(e["answer"]))
+        self.assertIn("With name, the result is a new object with that label, and body stays in the document as it was.", e["description"])
+        self.assertNotIn("Trap", e["description"])
+        steps = json.dumps(e["steps"])
+        for w in ("Move a tool into the base", "may repair it", "Overlap the pieces clearly", "Check each with body_check"):
+            self.assertNotIn(w, steps)
+        self.assertIn("def inputs_left(objs, result):", source("families", "model.py"))
+
+    def test_5_a_given_diameter_that_was_not_set_is_said(self):
+        got = child('''
+        from agentlink.families import feature
+        class G:
+            def __init__(s, r): s.Radius = r
+        G.__name__ = "Circle"
+        sk = types.SimpleNamespace(Geometry=[G(3.0)], getConstruction=lambda i: False)
+        f = types.SimpleNamespace(Diameter=6.6, ThreadSize="M6x1.0", Threaded=False)
+        a = {"thread": "M6", "diameter": 5}
+        f2 = types.SimpleNamespace(Diameter=6.0, ThreadSize="", Threaded=False)
+        print(json.dumps([feature.hole_size_facts(a, f, sk), feature.hole_size_facts({"diameter": 6}, f2, sk)]))
+        ''')
+        self.assertEqual(got[0]["diameterNotSet"], "diameter 5 given and not set: with thread, ThreadSize M6x1.0 is set, and FreeCAD sets Diameter from it (clearance): Diameter 6.6")
+        self.assertEqual(got[0]["circles"], "the sketch has circles of diameter 6; FreeCAD's Hole drills its Diameter 6.6 at each circle's centre")
+        self.assertEqual(got[1], {})
+        self.assertIn("hole_size_facts(a, f, sk)", json.dumps(entries()["pd_hole"]))
+
+    def test_6_the_advice_clauses_are_gone(self):
+        texts = json.dumps(entries()) + "".join(source(*p) for p in (("tools.py",), ("families", "pd_common.py"), ("families", "picks.py"), ("families", "model.py"),
+                                                                     ("families", "techdraw.py"), ("sup_jobs.py",), ("gui_link.py",)))
+        for w in ("pd_pad a closed sketch (or pd_primitive) first", "pd_body_new makes one", "Next: send a new batch", "Next: fix call",
+                  "a mesh becomes a body with", "doc_save first", "or its link is off or still starting", "Trap:", "ask the person first",
+                  "close the outline, or", "pd_pad a sketch first", "Next: wait for it", "Press Cancel"):
+            self.assertNotIn(w, texts, w)
+
+    def test_7_why_is_the_facts_the_rule_fits_by(self):
+        from agentlink import nexthint
+
+        for rid, rule in nexthint.load().items():
+            for sg in rule["suggest"]:
+                self.assertNotIn("why", sg, rid)
+        got = nexthint.rank({"body": "sketch-open", "bodyName": "Body", "sketchName": "Path", "openWires": 1, "features": "some"})
+        self.assertTrue(got)
+        self.assertTrue(all(p["why"] == "sketch Path of Body has 1 open wire" for p in got), got)
+        line = nexthint.words(got)
+        self.assertEqual(line.count("(sketch Path of Body has 1 open wire)"), 1)
+        for w in ("close the outline", "find ends that do not meet", "not closed yet", "nothing here yet", "a plain box"):
+            self.assertNotIn(w, json.dumps(nexthint.load()))
+        self.assertNotIn("new work in a document of its own", source("options.py"))
+
+    def test_8_a_part_feature_is_not_called_a_body(self):
+        got = child('''
+        sh = types.SimpleNamespace(isNull=lambda: False, Solids=[1])
+        box = types.SimpleNamespace(TypeId="Part::Box", Label="Box", Shape=sh, InList=[])
+        doc = types.SimpleNamespace(Objects=[box])
+        print(json.dumps([pc.part_solids_words(doc), pc.part_solids_words(types.SimpleNamespace(Objects=[]))]))
+        ''')
+        self.assertEqual(got, [" The document has Box (Part::Box): a Part feature, not a PartDesign Body.", ""])
+        self.assertIn("It is a Part feature such as Part::Box or Part::Cylinder, not a PartDesign Body.", entries()["part_primitive"]["description"])
+        self.assertNotIn("as a body", entries()["part_primitive"]["description"])
+
+    def test_9_other_accuracy_items(self):
+        from agentlink import timelimit
+
+        # H5: where the minutes count from
+        self.assertIn("since the first tool call", source("timelimit.py"))
+        # H9: a pattern's Originals are stored
+        pdc = source("families", "pd_common.py")
+        for t in ("LinearPattern", "PolarPattern", "Mirrored", "MultiTransform"):
+            self.assertIn(f'"PartDesign::{t}": ("Originals"', pdc)
+        # H7: the solid a zero-change feature put, measured
+        self.assertIn("tool_span_words(feat, body, sk, pl)", pdc)
+        # H11: sketch_attach's face has its form
+        self.assertIn("A face by its name is text in plane", entries()["sketch_attach"]["inputSchema"]["properties"]["face"]["description"])
+        # H12: fast names the health fact
+        self.assertIn("health_first", source("fastpath.py"))
+        # H14: doc_new says the other documents of that label
+        self.assertIn("same_label(d)", json.dumps(entries()["doc_new"]["answer"]))
+        self.assertIn("def same_label(d, base=None):", source("families", "doc.py"))
+        # H17: no mesh clause on a shape-less object
+        self.assertNotIn("a mesh becomes a body", source("families", "picks.py"))
+
+
 if __name__ == "__main__":
     unittest.main()

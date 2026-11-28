@@ -62,7 +62,7 @@ def used(now=None):
         return None
     t0 = _first[0]
     n = 0 if t0 is None else max(0, int(((time.time() if now is None else now) - t0) // 60))
-    return f"{n} of {_num(LIMIT)} minutes used"
+    return f"{n} of {_num(LIMIT)} minutes used since the first tool call"  # where it counts from (s1127e QA, H5)
 
 
 def line(now=None):

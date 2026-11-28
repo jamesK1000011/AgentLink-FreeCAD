@@ -105,6 +105,45 @@ def hole_spots(sk, f):
     return n, bool(mask & 1)
 
 
+def hole_size_facts(a, f, sk):
+    """{diameterNotSet, circles} for pd_hole's answer (s1127e QA, H6): the
+    given diameter that was not set, and the circles of the sketch whose size
+    is not the Hole's Diameter. With thread, this tool sets ThreadSize and
+    not Diameter, and FreeCAD sets Diameter from the thread size
+    (FeatureHole: the tap drill when Threaded, else the clearance size).
+    FreeCAD's Hole drills its own Diameter at each circle's centre, whatever
+    the circle's radius. {} when there is nothing to say."""
+    out = {}
+    try:
+        dia = float(getattr(f.Diameter, "Value", f.Diameter))
+    except Exception:  # noqa: BLE001
+        return out
+    d = a.get("diameter") if hasattr(a, "get") else None
+    if a.get("thread") and isinstance(d, (int, float)) and not isinstance(d, bool) and abs(float(d) - dia) > 1e-9:
+        size = str(getattr(f, "ThreadSize", ""))
+        how = "tap drill" if getattr(f, "Threaded", False) else "clearance"
+        out["diameterNotSet"] = (f"diameter {pc.rl.num(d)} given and not set: with thread, ThreadSize {size} is set, and FreeCAD "
+                                 f"sets Diameter from it ({how}): Diameter {pc.rl.num(dia)}")
+    sizes = []
+    try:
+        for i, g in enumerate(sk.Geometry):
+            try:
+                if sk.getConstruction(i):
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
+            if type(g).__name__ in ("Circle", "ArcOfCircle"):
+                w = pc.rl.num(2 * float(g.Radius))
+                if abs(2 * float(g.Radius) - dia) > 1e-6 and w not in sizes:
+                    sizes.append(w)
+    except Exception:  # noqa: BLE001 - not read: not said
+        sizes = []
+    if sizes:
+        out["circles"] = (f"the sketch has circles of diameter {', '.join(sizes)}; FreeCAD's Hole drills its Diameter "
+                          f"{pc.rl.num(dia)} at each circle's centre")
+    return out
+
+
 def key_values(f):
     """A feature's key values as feature_list shows them: each of KEYS it
     has, left out where it says nothing (a false flag, a second length of a
@@ -514,7 +553,7 @@ def tools(session):
                "edge_words": pc.edge_words, "plane_ref": lambda *x: pc.plane_ref(*x), "axis_ref": lambda *x: pc.axis_ref(*x), "support_prop": pc.support_prop,
                "ref_snapshot": pc.ref_snapshot, "repair_refs": pc.repair_refs, "broken": pc.newly_broken,
                # the family's
-               "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots, "holes_cut": pc.holes_cut,
+               "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots, "hole_size_facts": hole_size_facts, "holes_cut": pc.holes_cut,
                "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body,
                "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec, "path_closed": path_closed, "closed_tube_words": closed_tube_words,
                "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options, "not_given": pc.not_given, "thread_change": thread_change, "fit_word": fit_word}

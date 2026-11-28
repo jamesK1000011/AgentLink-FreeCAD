@@ -48,7 +48,7 @@ class AResentBatch(unittest.TestCase):
     print(json.dumps(call("batch", {"calls": [mk("A"), mk("B", fail=True), mk("C")]})))
 ''')
         self.assertNotIn("last batch", b["note"])
-        self.assertIn("Next: send a new batch with these calls, in order: probe_make (fixed), probe_make.", b["note"])
+        self.assertIn("Call 2 (probe_make) was not run.", b["note"])
 
 
 class StartWords(unittest.TestCase):
@@ -58,8 +58,8 @@ class StartWords(unittest.TestCase):
            "yes": call("batch", {"start": 0, "calls": [mk("C"), mk("D", fail=True)]})[1]["note"]}
     print(json.dumps(out))
 ''')
-        self.assertNotIn("start", got["no"].split("Next:")[1])
-        self.assertIn("Leave start out", got["yes"])
+        self.assertNotIn("start", got["no"])
+        self.assertIn("start counts in the list that is sent", got["yes"])
 
 
 class FixableSentence(unittest.TestCase):

@@ -432,7 +432,7 @@ def constraint_result(added, dof_before, dof_after, moves=(), spans=None, more=0
 
 # ---- RL-BC: body_check -----------------------------------------------------------------------
 
-def body_check_result(label, solids, solids_said=None, valid=None, closed=None, box=None, volume=None):
+def body_check_result(label, solids, solids_said=None, valid=None, closed=None, box=None, volume=None, check=None):
     """The result line of body_check: "Body is 2 separate solids that do not
     touch (nearest gap 12.5 mm); valid, closed; box x 0..60, y …; volume 9000
     mm³." solids_said: the words that say whether the solids touch (given
@@ -451,7 +451,24 @@ def body_check_result(label, solids, solids_said=None, valid=None, closed=None, 
     if box is not None:
         parts.append(f"box {box_text(box)}")
     if volume is not None:
-        parts.append(f"volume {num(volume)} mm³")
+        parts.append(f"volume {num(volume)} mm³" + (" (below 0)" if volume < 0 and num(volume) != "0" else ""))
+    if isinstance(check, dict):
+        # Check Geometry's errors are in the line too (s1127e QA, H10: "valid,
+        # closed" was said of a solid with two BOPAlgo SelfIntersect errors).
+        # A line that ends in ":" is FreeCAD's heading ("BOP check found the
+        # following errors:"), not an error.
+        errs = [str(e) for e in check.get("errors") or [] if not str(e).rstrip().endswith(":")]
+        heads = len(check.get("errors") or []) - len(errs)
+        n = (check.get("errorsInAll") - heads) if check.get("errorsInAll") else len(errs)
+        if errs:
+            kinds = []
+            for e in errs:
+                k = e.rsplit(":", 1)[-1].strip()
+                if k and k not in kinds:
+                    kinds.append(k)
+            parts.append(f"Check Geometry: {plural(int(n), 'error')} ({', '.join(kinds[:4])})")
+        else:
+            parts.append("Check Geometry: no error")
     return f"{label} is " + "; ".join(parts) + "." if parts else f"{label} was read."
 
 

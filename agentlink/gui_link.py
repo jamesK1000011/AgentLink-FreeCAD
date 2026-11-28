@@ -275,8 +275,8 @@ def unsafe_close_press(d, button, in_hand):
     if not under:
         return None
     return (f"button: {button} is not pressed here. FreeCAD asks this while {under[0]} closes the document, and a Save or Don't Save "
-            "inside that close crashed FreeCAD before. Press Cancel (dialog_answer { button: \"Cancel\" }). Then doc_close { documents, discard: true } "
-            "closes it without a dialog, or doc_save first keeps the changes.")
+            "inside that close crashed FreeCAD before. dialog_answer { button: \"Cancel\" } presses Cancel. doc_close { documents, discard: true } "
+            "closes a document without a dialog, and doc_save keeps the changes.")
 
 
 FILE_PRESS = ("save", "don't save", "dont save", "discard", "save all", "discard all", "yes", "yes to all", "replace", "overwrite", "ok")
@@ -328,8 +328,8 @@ def file_picker_press(d, button):
     b = str(button or "").lower().replace("&", "").strip()
     if b in BACK_OUT or b in ("no",):
         return None
-    return (f"button: {button} is not pressed in a file dialog: the path there is not checked. Press Cancel "
-            "(dialog_answer { button: \"Cancel\" }), then use a tool that takes a path: doc_open { path }, doc_save { path }, "
+    return (f"button: {button} is not pressed in a file dialog: the path there is not checked. dialog_answer {{ button: \"Cancel\" }} "
+            "presses Cancel. These tools take a path: doc_open { path }, doc_save { path }, "
             "import_file { path }, export { path }. cmd_run names the tool for each command that opens a file dialog.")
 
 
@@ -805,8 +805,8 @@ def fill(d, text=None, item=None):
     if _persons(d):
         raise ValueError("this is the person's OK dialog: only the person reads and presses it")
     if is_file_picker(d):
-        raise ValueError("text and item do not fill a file dialog: the path there is not checked. Press Cancel, then use a tool "
-                         "that takes a path: doc_open { path }, doc_save { path }, import_file { path }, export { path }.")
+        raise ValueError("text and item do not fill a file dialog: the path there is not checked. These tools "
+                         "take a path: doc_open { path }, doc_save { path }, import_file { path }, export { path }.")
     if hasattr(w, "setTextValue") and hasattr(w, "textValue"):
         if item is not None:
             items = list(w.comboBoxItems()) if hasattr(w, "comboBoxItems") else []

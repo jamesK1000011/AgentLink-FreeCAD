@@ -64,7 +64,34 @@ def pd_bodies(doc):
 
 def pd_body(doc, ref):
     return picks.one_of(pd_bodies(doc), ref, "body: say which — {labels}.", "body {ref}: no such PartDesign body — they are: {labels}.",
-                        none="No PartDesign body in the document: pd_body_new makes one.", nocase=True)
+                        none="No PartDesign Body in the document." + part_solids_words(doc), nocase=True)
+
+
+PART_SHOWN = 5  # Part features named in part_solids_words
+
+
+def part_solids_words(doc):
+    """" The document has Box (Part::Box), a Part feature, not a PartDesign
+    Body." for the solids of the document that are no PartDesign Body nor in
+    one (s1127e QA, H15: a Part::Box was taken for a body); "" when there
+    are none or they cannot be read. FreeCAD's TypeId names each."""
+    try:
+        objs = []
+        for o in doc.Objects:
+            t = str(getattr(o, "TypeId", ""))
+            if not t.startswith("Part::") or getattr(o, "InList", None) and any(str(getattr(p, "TypeId", "")).startswith("PartDesign::") for p in o.InList):
+                continue
+            sh = getattr(o, "Shape", None)
+            if sh is None or sh.isNull() or not sh.Solids:
+                continue
+            objs.append(f"{o.Label} ({t})")
+        if not objs:
+            return ""
+        more = f" and {len(objs) - PART_SHOWN} more" if len(objs) > PART_SHOWN else ""
+        one = len(objs) == 1
+        return f" The document has {', '.join(objs[:PART_SHOWN])}{more}: {'a Part feature' if one else 'Part features'}, not {'a PartDesign Body' if one else 'PartDesign Bodies'}."
+    except Exception:  # noqa: BLE001 - not read: not said
+        return ""
 
 
 def body_of(o):
@@ -352,7 +379,7 @@ def tip_shape(body, need=True):
     tip = body.Tip
     if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
         if need:
-            raise ToolError("invalid_state", f"{body.Label} has no solid yet: pd_pad a closed sketch (or pd_primitive) first.")
+            raise ToolError("invalid_state", f"{body.Label} has no solid yet: " + (f"its Tip is {tip.Label} ({tip.TypeId}), which has no solid." if tip is not None else "it has no Tip (no feature)."))
         return None, None
     return tip, tip.Shape
 
@@ -1209,10 +1236,10 @@ STORED = {
     "PartDesign::Chamfer": ("ChamferType", "Size", "Size2", "Angle", "FlipDirection", "UseAllEdges", "Refine"),
     "PartDesign::Draft": ("Angle", "NeutralPlane", "PullDirection", "Reversed", "Refine"),
     "PartDesign::Thickness": ("Value", "Reversed", "Intersection", "Mode", "Join", "Refine"),
-    "PartDesign::LinearPattern": ("Direction", "Reversed", "Mode", "Length", "Offset", "Occurrences", "Direction2", "Occurrences2", "TransformMode", "Refine"),
-    "PartDesign::PolarPattern": ("Axis", "Reversed", "Mode", "Angle", "Offset", "Occurrences", "TransformMode", "Refine"),
-    "PartDesign::Mirrored": ("MirrorPlane", "TransformMode", "Refine"),
-    "PartDesign::MultiTransform": ("TransformMode", "Refine"),
+    "PartDesign::LinearPattern": ("Originals", "Direction", "Reversed", "Mode", "Length", "Offset", "Occurrences", "Direction2", "Occurrences2", "TransformMode", "Refine"),
+    "PartDesign::PolarPattern": ("Originals", "Axis", "Reversed", "Mode", "Angle", "Offset", "Occurrences", "TransformMode", "Refine"),
+    "PartDesign::Mirrored": ("Originals", "MirrorPlane", "TransformMode", "Refine"),
+    "PartDesign::MultiTransform": ("Originals", "TransformMode", "Refine"),
     "PartDesign::AdditivePipe": ("Mode", "Transition", "Transformation", "Refine"),
     "PartDesign::SubtractivePipe": ("Mode", "Transition", "Transformation", "Refine"),
     "PartDesign::AdditiveLoft": ("Ruled", "Closed", "Refine"),
@@ -1534,12 +1561,45 @@ def result_line(feat, body, tool, delta, keep, seen=None, where_text=None):
         return ""
     label = getattr(feat, "Label", "") or tool
     try:
-        return _result_line(feat, body, tool, label, delta, keep, seen, where_text)
+        return sign_facts(feat, body, tool, label, delta, _result_line(feat, body, tool, label, delta, keep, seen, where_text))
     except Exception:  # noqa: BLE001 - a reading only
         try:
             return rl.feature_head(label, tool, delta)
         except Exception:  # noqa: BLE001
             return ""
+
+
+def add_sub(feat):
+    """"additive" or "subtractive" for a PartDesign feature that adds or
+    removes material by its type (FreeCAD's FeatureAddSub: Pad, Revolution,
+    the Additive* types; Pocket, Groove, Hole, the Subtractive* types);
+    None for another."""
+    t = str(getattr(feat, "TypeId", "") or "")
+    if t in ("PartDesign::Pad", "PartDesign::Revolution") or t.startswith("PartDesign::Additive"):
+        return "additive"
+    if t in ("PartDesign::Pocket", "PartDesign::Groove", "PartDesign::Hole") or t.startswith("PartDesign::Subtractive"):
+        return "subtractive"
+    return None
+
+
+def sign_facts(feat, body, tool, label, delta, line):
+    """The result line with the feature's type said where the measured
+    change has the other sign (s1127e QA, H2: "Pipe removed material" for an
+    AdditivePipe), and the body's volume said where it is below 0 (a solid
+    whose faces point inward). Both are measured or read; nothing is
+    guessed about why."""
+    kind = add_sub(feat)
+    head = rl.feature_head(label, tool, delta)
+    if kind and delta is not None and rl.num(delta) != "0" and (delta > 0) != (kind == "additive") and line.startswith(head):
+        line = (f"{label} ({getattr(feat, 'TypeId', '')}, a {kind} type): volume change {rl.signed(delta)} mm³."
+                + line[len(head):])
+    try:
+        vol = float(body.Shape.Volume)
+        if vol < 0 and rl.num(vol) != "0":
+            line += f" The volume of {getattr(body, 'Label', 'the body')} is {rl.num(vol)} mm³, below 0."
+    except Exception:  # noqa: BLE001 - not read: not said
+        pass
+    return line
 
 
 def _result_line(feat, body, tool, label, delta, keep, seen, where_text):
@@ -1793,10 +1853,25 @@ def profile_results(feat, reg, old, tol, cut=True, rec=None):
         span = 2 * max(bb.DiagonalLength, reg.BoundBox.DiagonalLength, 1.0) + bb.Center.Length + reg.BoundBox.Center.Length
         verb = "cut" if cut else "added"
         idle, idle_circles, full_n = [], 0, 0
+        # FreeCAD's Hole drills its own Diameter (and drill point, counterbore)
+        # at each circle's centre, not the circle's area: a share of the
+        # circle's area is no fact of a hole (s1127e QA, H3: a Ø6 circle drilled
+        # as a Ø5 tap drill was said to be "69.44% cut in part", (5/6)²). For a
+        # Hole the volume each circle's place took is said, with the Diameter.
+        hole_d = None
+        if getattr(feat, "TypeId", "") == "PartDesign::Hole":
+            try:
+                hole_d = float(getattr(feat.Diameter, "Value", feat.Diameter))
+            except Exception:  # noqa: BLE001 - not read: the volume alone
+                hole_d = float("nan")
         for words, f in got:
             n = f.normalAt(0, 0)
             prism = f.translated(n * -span).extrude(n * (2 * span))
             hit = prism.common(reg)
+            if hit.Volume > tol and hole_d is not None:
+                dw = f" at the Hole's Diameter {rl.num(hole_d)} mm" if hole_d == hole_d else ""
+                idle.append(f"{words} drilled {hit.Volume:.4g} mm³{dw}")
+                continue
             if hit.Volume > tol:
                 # How much of the profile did it: the volume it took against
                 # the volume its area gives over the same depth (the extent
@@ -1843,9 +1918,18 @@ def profile_results(feat, reg, old, tol, cut=True, rec=None):
 
 def holes_cut(spots, out):
     """pd_hole's holes: the spots the sketch gives, less the circles that
-    cut nothing (profile_results); that count is taken out of the answer."""
+    cut nothing (profile_results); that count is taken out of the answer.
+    0 when the volume change is 0 mm³: nothing was drilled (s1127e QA, H1:
+    "holes": 1 beside "volume change 0 mm³"). When the count is not the
+    sketch's, the answer also gives holeSpots: the circles and points of the
+    sketch, the places FreeCAD's Hole drills at."""
     try:
-        return max(int(spots) - int(out.pop(NOT_CUT, 0) or 0), 0)
+        n = max(int(spots) - int(out.pop(NOT_CUT, 0) or 0), 0)
+        if out.get("volumeChange") == 0:
+            n = 0
+        if n != int(spots) and isinstance(out, dict):
+            out["holeSpots"] = int(spots)
+        return n
     except Exception:  # noqa: BLE001
         return spots
 
@@ -1922,6 +2006,27 @@ def normal_span_words(feat, body):
         return ""
 
 
+def tool_span_words(feat, body, sk, pl):
+    """"Along the normal of sketch S the feature's own solid (its
+    AddSubShape) spans -25..0." for a feature that changed no volume: where
+    FreeCAD put the solid it adds or cuts, measured, beside the body's span
+    (s1127e QA, H7: a hole drilled away from the body said only "volume
+    change 0"). "" when the feature has no AddSubShape or it is not read."""
+    try:
+        tool = getattr(feat, "AddSubShape", None)
+        if tool is None or tool.isNull() or not tool.Solids:
+            return ""
+        import FreeCAD
+
+        n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+        frame = ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
+        placed = geo.world_shape(body, in_body_frame(body, tool) or tool)
+        along = rl.frame_ranges(frame, exact_box(placed))[2]
+        return f"Along the normal of sketch {sk.Label} the feature's own solid (its AddSubShape) spans {rl.span(*along)}."
+    except Exception:  # noqa: BLE001 - a reading only
+        return ""
+
+
 def sketch_lies_words(feat, body):
     """Where the sketch of a feature that changed no volume lies against the
     body, as measured: the features that share the sketch as their profile,
@@ -1946,6 +2051,9 @@ def sketch_lies_words(feat, body):
         along = normal_span_words(feat, body)
         if along:
             out.append(along)
+        tool_along = tool_span_words(feat, body, sk, pl)
+        if tool_along:
+            out.append(tool_along)
         off = outside_words(sk, bb, n)
         if off:
             out.append(off)

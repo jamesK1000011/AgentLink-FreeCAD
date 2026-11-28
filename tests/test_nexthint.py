@@ -32,7 +32,7 @@ class Table(unittest.TestCase):
         for rid, rule in nexthint.load().items():
             for s in rule["suggest"]:
                 self.assertIn(s["tool"], index, f"{rid}: {s['tool']} is not a tool of this repository")
-                self.assertLessEqual(len(s["why"]), nexthint.MAX_WHY, rid)
+                self.assertNotIn("why", s, rid)  # owner, 27 Nov: the why said is the facts (fact_words)
 
     def test_every_fact_and_value_is_one_the_reader_gives(self):
         known = {"document": {"empty", "objects"}, "failing": {True, False}, "selection": {"edge", "face", "vertex", "object"},
@@ -94,7 +94,7 @@ class Ranking(unittest.TestCase):
         names = [p["tool"] for p in got]
         self.assertEqual(len(names), len(set(names)))
         self.assertTrue(all(p["why"] for p in got))
-        self.assertEqual(got[0]["why"], "round the picked edge")
+        self.assertEqual(got[0]["why"], "an edge is selected")
 
     def test_nothing_fits_nothing_said(self):
         self.assertEqual(nexthint.rank({}), [])
@@ -140,7 +140,7 @@ class Line(unittest.TestCase):
         picks = nexthint.available(nexthint.rank({"body": "sketch-closed", "features": "some"}), {})
         self.assertEqual(len(picks), 3)
         line = nexthint.compose({"window": True, "workbench": "PartDesignWorkbench", "status": "s" * 300}, picks)
-        self.assertTrue(line.startswith("likely next: pd_pad (a closed sketch no feature uses yet), pd_pocket (cut it out of the body), pd_revolution ("))
+        self.assertTrue(line.startswith("likely next: pd_pad, pd_pocket, pd_revolution (the newest sketch of the body has closed wires, and no feature uses it)"), line)
         self.assertLessEqual(len(line), nexthint.MAX)
         self.assertNotIn("active now", line)
 

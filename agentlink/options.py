@@ -215,7 +215,7 @@ def theirs_first(session, server):
             start = False
         whose = "an empty start document that Agent Link made" if start else "the person's"
         return {"n": 1, "tool": "doc_new", "arguments": {}, "ask": [{"arg": "name"}],
-                "why": f"new work in a document of its own: {doc.Label} is {whose}"}
+                "why": f"the document in front, {doc.Label}, is {whose}"}
     except Exception:  # noqa: BLE001
         return None
 

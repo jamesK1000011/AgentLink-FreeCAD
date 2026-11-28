@@ -52,8 +52,7 @@
    "items": {
     "type": "object",
     "required": [
-     "tool",
-     "why"
+     "tool"
     ],
     "additionalProperties": false,
     "properties": {
@@ -65,7 +64,7 @@
       "type": "string",
       "minLength": 3,
       "pattern": "^.{3,60}$",
-      "description": "A few words on why, at most 60 characters."
+      "description": "Not read: the why that is said is the facts the rule fits by (nexthint.fact_words; owner, 27 Nov: facts only). Kept so an add-on's older rules still load."
      },
      "arguments": {
       "type": "object",

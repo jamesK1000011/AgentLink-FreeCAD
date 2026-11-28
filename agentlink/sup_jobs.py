@@ -202,8 +202,8 @@ class Jobs:
         lost = (f"The checkpoint {cp} from before the call is kept: tool_find {{ query: \"restore checkpoint\" }} finds the tool that goes back to it."
                 if cp else "Unsaved work in FreeCAD is lost. tool_find { query: \"recover documents\" } finds a tool that lists the copies FreeCAD kept.")
         return (f"{j['tool']} ({j['job']}) runs on FreeCAD's own thread, so it cannot stop in the middle. Nothing was stopped. "
-                f"Next: wait for it (job_status {{ job: \"{j['job']}\", wait: 25 }}), "
-                f"or app_force_restart, which stops FreeCAD and starts it again. {lost}")
+                f"job_status {{ job: \"{j['job']}\", wait: 25 }} waits for it; "
+                f"app_force_restart stops FreeCAD and starts it again. {lost}")
 
     def _prune(self):
         now = self.clock()

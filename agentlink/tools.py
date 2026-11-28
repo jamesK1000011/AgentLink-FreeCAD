@@ -203,17 +203,17 @@ def _tool_names(calls, idx, fixed=None):
 
 
 def _start_words(sent):
-    """The words about start after a new list's calls: only when the batch
-    was sent with start (26 Nov QA: every note said "Leave start out", and
-    no run had used start)."""
-    return " Leave start out: start counts in the list you send, and the new list starts at its first call." if sent else ""
+    """The words about start after the calls not run: only when the batch
+    was sent with start (26 Nov QA). A fact of the input, no step to take."""
+    return " start counts in the list that is sent: a list's first call is its call 1." if sent else ""
 
 
 def _resend_words(calls, i, start_sent=False):
-    """How to go on after a stop before calls[i] (budget, heavy read) of an
-    inline list: one way only, a new batch with the calls not run (1g)."""
+    """The calls not run after a stop before calls[i] (budget, heavy read)
+    of an inline list, in order (facts only, s1127e QA H19: no next-batch
+    advice)."""
     rest = list(range(i, len(calls)))
-    return f"send a new batch with these calls, in order: {_tool_names(calls, rest)}.{_start_words(start_sent)}"
+    return f"{_tool_names(calls, rest)}.{_start_words(start_sent)}"
 
 
 def _span_words(idx):
@@ -235,9 +235,8 @@ _STATUS_WORDS = {"not_started": "it changed nothing", "rolled_back": "its own ch
 
 def _refused_note(ref, rows, calls, first, k, out, mine):
     """The note of a batch stopped at a refused call: what the refused call
-    left, which calls stay, and the exact calls to send next (1f, 1g, 24
-    Nov). One way to go on for an inline list: a new batch with the fixed
-    call and the calls not run, and no from (Haiku counted from wrong)."""
+    left, which calls stay or were taken back, and the calls not run (facts
+    only, s1127e QA H19: no next-batch advice)."""
     if ref.get("buildFailed"):
         what = f"Call {first + k} ({ref['tool']}): the build after it left objects failing."
     else:
@@ -250,11 +249,14 @@ def _refused_note(ref, rows, calls, first, k, out, mine):
         parts.append(f"Calls {', '.join(map(str, gone))} ({_tool_names(calls, rel(gone))}) were taken back (rollback: true).")
     elif done:
         parts.append(f"Calls {', '.join(map(str, done))} ({_tool_names(calls, rel(done))}) ran and stay.")
-    resend = rel(gone) + [k] + list(range(k + 1, len(calls)))
+    rest = list(range(k + 1, len(calls)))
+    if rest:
+        one = len(rest) == 1
+        parts.append(f"{'Call' if one else 'Calls'} {_span_words([first + j for j in rest])} ({_tool_names(calls, rest)}) {'was' if one else 'were'} not run.")
     if mine.get("file"):
-        parts.append(f"Next: fix call {first + k} in the file, then batch {{ path: \"{mine['file']}\", start: {first + k} }}.")
-    else:
-        parts.append(f"Next: send a new batch with these calls, in order: {_tool_names(calls, resend, fixed=k)}.{_start_words(mine.get('startSent'))}")
+        parts.append(f"The calls are in the file {mine['file']}; batch {{ path, start }} starts at call start of it.")
+    elif mine.get("startSent"):
+        parts.append(_start_words(True).strip())
     return " ".join(parts)
 
 
@@ -867,7 +869,7 @@ class Session:
             (("machine", "queue", "dialog"), lambda: self._unattended_state(machine=bool(a.get("machine")))),
             (("agentDocument", "frontDocument", "mismatch"), self._front_state),
             (("time",), _time_state),
-            (("note",), lambda: {**({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {})}),
+            (("note",), lambda: {**({"note": "The hidden FreeCAD answered: this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {})}),
             (("launcher",), lambda: {"launcher": _launcher()} if a.get("launcher") else {}),
         ]
 
@@ -1092,7 +1094,7 @@ class Session:
         except Exception:  # noqa: BLE001
             volume = None
         try:
-            return resultline.body_check_result(o.Label, len(sh.Solids), said, s.get("valid"), s.get("closed"), box, volume)
+            return resultline.body_check_result(o.Label, len(sh.Solids), said, s.get("valid"), s.get("closed"), box, volume, s.get("checkGeometry"))
         except Exception:  # noqa: BLE001
             return ""
 
@@ -3038,7 +3040,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     # Out of time: what ran stays (this is no failure, so nothing
                     # is rolled back), the rest is named with how to run it.
                     nxt = first + i
-                    how = f"batch {{ path: \"{mine['file']}\", start: {nxt} }}" if mine.get("file") else _resend_words(calls, i, mine.get("startSent"))
+                    how = f"calls {nxt} to {first + len(calls) - 1} of the file {mine['file']}." if mine.get("file") else _resend_words(calls, i, mine.get("startSent"))
                     if hold is not None:
                         hold.build("end: out of time")
                     return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
@@ -3088,7 +3090,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                         except _chain.Miss as e:
                             hmiss = kinded({"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."})
                     nxt = first + i + 1
-                    how = f"batch {{ path: \"{mine['file']}\", start: {nxt} }}" if mine.get("file") else _resend_words(calls, i + 1, mine.get("startSent"))
+                    how = f"calls {nxt} to {first + len(calls) - 1} of the file {mine['file']}." if mine.get("file") else _resend_words(calls, i + 1, mine.get("startSent"))
                     if hold is not None:
                         hold.build("before a heavy read")
                     job = None
@@ -3109,7 +3111,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     if hmiss is None and job is None:
                         return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
                                       "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
-                                              + (f"batch {{ path: \"{mine['file']}\", start: {first + i} }} runs it first." if mine.get("file") else _resend_words(calls, i, mine.get("startSent")))})
+                                              + "not started: " + (f"calls {first + i} to {first + len(calls) - 1} of the file {mine['file']}." if mine.get("file") else _resend_words(calls, i, mine.get("startSent")))})
                     if hmiss is None:
                         # The GUI thread stands still here while the job's thread
                         # works: where both are, should the wait reach a minute
@@ -3122,7 +3124,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                         return ended({"results": results, "ran": len(results), "notRun": len(calls) - i - 1, "next": nxt,
                                       "heavy": {"index": first + i, "tool": c["tool"], "job": job["job"]},
                                       "note": f"calls.{first + i} ({c['tool']}) is a heavy read still running as job {job['job']} when the budget ran out: "
-                                              f"job_status {{ job: \"{job['job']}\", wait: 25 }} gives its answer (changes to its document wait for it), then {how}."})
+                                              f"job_status {{ job: \"{job['job']}\", wait: 25 }} gives its answer (changes to its document wait for it). Not started: {how}"})
                     if hmiss is None and job["status"] == "failed":
                         hmiss = kinded(job["error"])
                     hok = hmiss is None

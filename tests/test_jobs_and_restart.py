@@ -337,7 +337,7 @@ class CloseConfirmTest(unittest.TestCase):
 
     def test_unsafe_under_a_close(self):
         words = self.gl.unsafe_close_press(self.d, "Don't Save", ["batch", "doc_close", "dialog_answer"])
-        self.assertIn("Press Cancel", words)
+        self.assertIn("dialog_answer { button: \"Cancel\" } presses Cancel", words)
         self.assertIn("discard: true", words)
         self.assertIsNotNone(self.gl.unsafe_close_press(self.d, "Save", ["doc_close", "dialog_answer"]))
 

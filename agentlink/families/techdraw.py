@@ -2203,7 +2203,7 @@ def tools(session):
     def bodies_for(refs):
         objs = [s.body(r) for r in refs] if refs else s.bodies()
         if not objs:
-            raise ToolError("not_found", "No body in the document to draw: bodies names them (session_state lists what there is); part_primitive or pd_body_new makes one.")
+            raise ToolError("not_found", "No body in the document to draw: no shown solid object that nothing else is built from.")
         return objs
 
     def direction(d, what="direction"):

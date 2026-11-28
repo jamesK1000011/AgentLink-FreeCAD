@@ -214,7 +214,7 @@ def as_face(sh, what="profile"):
         return sh
     wires = sh.Wires
     if not wires or not all(w.isClosed() for w in wires):
-        raise ToolError("invalid_input", f"{what}: not closed, so it makes no solid — close the outline, or solid: false for a surface.")
+        raise ToolError("invalid_input", f"{what}: not closed, so it makes no solid (solid: false makes a surface).")
     try:
         return Part.makeFace(wires, "Part::FaceMakerBullseye")
     except Exception:
@@ -674,6 +674,22 @@ def tools(session):
         o = picks.bake(s, base, shape, name, consumed=consumed, keep=keep)
         return o, list(getattr(s, "last_hidden", []) or [])
 
+    def inputs_left(objs, result):
+        """[{object, type, visible}] for each input of a boolean that is in
+        the document after it, other than the result (s1127e QA, H4: with a
+        name, the base Part::Box stayed in the document, visible and uncut,
+        and the answer did not say so)."""
+        out = []
+        names = {x.Name for x in doc().Objects}
+        for o in objs:
+            try:
+                if o is None or o is result or o.Name not in names:
+                    continue
+                out.append({"object": o.Label, "type": o.TypeId, "visible": bool(getattr(o, "Visibility", True))})
+            except Exception:  # noqa: BLE001 - removed meanwhile: not listed
+                continue
+        return out
+
     # ---- transforms ----
 
     def scaled_each(sh, c, fx, fy, fz):
@@ -907,7 +923,7 @@ def tools(session):
     # What the tools' entries (agentlink/data/tools.json) call by name.
     helpers = {"carry_material": lambda src, copies: picks.carry_material(s, src, copies), "doc": doc, "finish": finish, "report": lambda o, tool, extra=None, check=True: report(s, o, tool, extra, check),
                "unique": lambda label, *own: s.unique(label, *own), "solid_body": lambda ref: picks.solid_body(s, ref),
-               "bake": lambda base, shape, name=None: picks.bake(s, base, shape, name), "baked": baked, "clean": geo.clean,
+               "bake": lambda base, shape, name=None: picks.bake(s, base, shape, name), "baked": baked, "inputs_left": inputs_left, "clean": geo.clean,
                "find": lambda ref, *what: picks.find(doc(), ref, *what), "positive": positive, "num": picks.num, "vec3": picks.vec3,
                "direction": picks.direction, "placed": picks.placement, "placement_json": picks.placement_json, "ref_list": picks.ref_list,
                "split_ref": picks.split_ref, "element": picks.element,
