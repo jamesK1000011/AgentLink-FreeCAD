@@ -134,19 +134,19 @@ POPUP_WAIT = float(os.environ.get("AGENTLINK_POPUP_WAIT", "10"))
 ANSWER_WAIT = 30.0
 
 
-def _kinded(err):
+def _kinded(err, kind=None):
     """The refusal's kind and its sentence (protocol.set_kind), when the
-    protocol module loads here."""
+    protocol module loads here. kind None: from its code and words."""
     try:
         from .protocol import set_kind
 
-        return set_kind(err)
+        return set_kind(err, kind)
     except Exception:  # noqa: BLE001 - words only
         return err
 
 
-def _answer(mid, code, message, outcome=None):
-    text = json.dumps({"error": _kinded({"code": code, "message": message, **({"status": outcome} if outcome else {})})})
+def _answer(mid, code, message, outcome=None, kind=None):
+    text = json.dumps({"error": _kinded({"code": code, "message": message, **({"status": outcome} if outcome else {})}, kind)})
     return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
 
@@ -951,9 +951,9 @@ class Window:
         except (ValueError, KeyError, TypeError):
             return None
 
-    def _refuse(self, line, why, code="invalid_state"):
+    def _refuse(self, line, why, code="invalid_state", kind=None):
         mid, _, _ = _call_info(line)
-        self.write(_answer(mid, code, why))
+        self.write(_answer(mid, code, why, kind=kind))
         return True
 
     def abandon(self, why, code="invalid_state"):
@@ -1196,7 +1196,11 @@ class Window:
         ready = self._ready()
         if isinstance(ready, str):
             # Between the quit and the pairing: said, never served headless.
-            return self._refuse(line, ready, code="unavailable")
+            # The kind is one fact with the words (27 Nov live proof, f): while
+            # the restart is in hand the same call goes through once the
+            # window pairs (retry); once the window is given up, the next
+            # calls run in the hidden FreeCAD (stop: the person's to say).
+            return self._refuse(line, ready, code="unavailable", kind=window_watch.words_kind(ready))
         if not ready:
             if self.seen:
                 self.seen = False
@@ -1616,7 +1620,7 @@ def run(script, argv):
         while not state["ending"]:
             time.sleep(1.0)
             try:
-                jobs.tick(words=lambda c: f"{c['tool']}: FreeCAD did not answer within {int(c['after'])} s (a call holds its Python). Nothing was changed. Call it again in a moment.")
+                jobs.tick(words=lambda c: f"{c['tool']}: FreeCAD did not answer within {int(c['after'])} s (a call holds its Python). Nothing was changed.")
             except Exception as e:  # noqa: BLE001
                 sys.stderr.write(f"Agent Link jobs: {e}\n")
 

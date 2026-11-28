@@ -88,7 +88,7 @@ def body_ranges(b, sk):
         shape = b.Shape
         if shape is None or shape.isNull() or not shape.Solids:
             return None
-        return rl.frame_ranges(frame_of(sk), _box6(geo.bound_box(shape)))
+        return rl.frame_ranges(frame_of(sk), _box6(geo.bound_box(geo.world_shape(b, shape))))
     except Exception:  # noqa: BLE001 - no reading: nothing said
         return None
 
@@ -114,7 +114,7 @@ def face_ranges(link, sk):
         sub = subs[0] if subs else ""
         if not isinstance(sub, str) or not sub.startswith("Face"):
             return None
-        return rl.frame_ranges(frame_of(sk), _box6(geo.bound_box(obj.Shape.getElement(sub))))
+        return rl.frame_ranges(frame_of(sk), _box6(geo.bound_box(geo.world_shape(obj, obj.Shape.getElement(sub)))))
     except Exception:  # noqa: BLE001 - no reading: nothing said
         return None
 

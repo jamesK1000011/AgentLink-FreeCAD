@@ -1898,7 +1898,8 @@ class Server:
 # closed. No word of advice is in a line.
 
 STEP_RUNNERS = frozenset(("run", "batch", "fast", "pick"))
-STEP_OBJECT_KEYS = ("feature", "sketch", "body", "object", "document", "label", "name")
+STEP_OBJECT_KEYS = ("feature", "sketch", "body", "object", "part", "document", "label", "name")
+STEP_LIST_SHOWN = 5  # names in a line's list fact (objects, failing); then how many more
 STEPS_CHARS = 30_000  # characters of step lines in one answer (half of MAX_REPLY); the newest that fit are given
 
 
@@ -1916,10 +1917,37 @@ def step_line(n, name, body, error=None):
         from . import resultline
 
         facts.append(f"volume change {resultline.signed(v)} mm³")
+    # The measured result of a call that has no volume change (27 Nov live
+    # proof, a: "54 part_container" and "102 recompute" said nothing).
+    objs = _step_names(body.get("objects"))
+    if objs:
+        facts.append("objects " + objs)
+    for k in ("closed", "discarded"):
+        got = _step_names(body.get(k))
+        if got:
+            facts.append(f"{k} {got}")
+    n_re = body.get("recomputed")
+    if isinstance(n_re, int) and not isinstance(n_re, bool):
+        facts.append(f"{n_re} object{'' if n_re == 1 else 's'} recomputed")
+    errs = body.get("errors")
+    if isinstance(errs, list) and ("recomputed" in body or errs):
+        names = _step_names([e.get("object") or e.get("label") if isinstance(e, dict) else e for e in errs])
+        facts.append(f"{len(errs)} failing" + (f": {names}" if names else "") if errs else "0 failing")
     st = body.get("step")
     if isinstance(st, int) and not isinstance(st, bool):
         facts.append(f"history step {st}")
     return out + (": " + "; ".join(facts) if facts else "")
+
+
+def _step_names(xs):
+    """"BC, BD and 3 more" for a list of names; "" for none."""
+    if not isinstance(xs, list):
+        return ""
+    xs = [str(x) for x in xs if isinstance(x, str) and x]
+    if not xs:
+        return ""
+    more = len(xs) - STEP_LIST_SHOWN
+    return ", ".join(xs[:STEP_LIST_SHOWN]) + (f" and {more} more" if more > 0 else "")
 
 
 def note_step(server, params, result):

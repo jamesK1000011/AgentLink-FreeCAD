@@ -975,5 +975,110 @@ class Sentences(unittest.TestCase):
         self.assertEqual(got, [2, None])
 
 
+class LiveProofB3fc1d0(unittest.TestCase):
+    """The live proof on b3fc1d0 (live-proof-1127/RESULT.md, section "b3fc1d0"), items a to f."""
+
+    def test_a_part_container_recompute_and_doc_close_lines_carry_their_result(self):
+        from agentlink.protocol import step_line
+
+        self.assertEqual(step_line(54, "part_container", {"part": "Box1", "objects": ["BC"]}), "call 54: part_container Box1: objects BC")
+        self.assertEqual(step_line(102, "recompute", {"recomputed": 3, "ok": False, "errors": [{"object": "Fillet", "error": "x"}]}),
+                         "call 102: recompute: 3 objects recomputed; 1 failing: Fillet")
+        self.assertEqual(step_line(103, "recompute", {"recomputed": 1, "ok": True, "errors": []}), "call 103: recompute: 1 object recomputed; 0 failing")
+        self.assertEqual(step_line(5, "doc_close", {"closed": ["lp2_fail"], "discarded": ["lp2_fail"], "open": ["AgentLink"]}),
+                         "call 5: doc_close: closed lp2_fail; discarded lp2_fail")
+        many = step_line(7, "part_container", {"part": "P", "objects": [f"B{i}" for i in range(8)]})
+        self.assertEqual(many, "call 7: part_container P: objects B0, B1, B2, B3, B4 and 3 more")
+
+    def test_a_reads_and_doc_close_are_not_left_out_of_the_steps(self):
+        src = source("protocol.py")
+        body = src[src.index("def note_step"):src.index("def note_refused")]
+        self.assertNotIn("changes", body)
+        self.assertNotIn("doc_close", body)
+
+    WORLD = '''
+        from agentlink import geometry as geo
+        from agentlink.families import sketch as sk_mod
+        class Pl:
+            def __init__(s, x=0.0): s.x = x
+            def multiply(s, o): return Pl(s.x + o.x)
+            def inverse(s): return Pl(-s.x)
+            def isIdentity(s): return abs(s.x) < 1e-12
+        class BB:
+            def __init__(s, x0, x1): s.XMin, s.XMax, s.YMin, s.YMax, s.ZMin, s.ZMax = x0, x1, -10.0, 10.0, 10.0, 10.0
+        class Shp:
+            def __init__(s, x0, x1, pl=None): s.x0, s.x1, s.Placement = x0, x1, pl or Pl()
+            def copy(s): return Shp(s.x0, s.x1, s.Placement)
+            def getElement(s, sub): return Shp(s.x0, s.x1, s.Placement)
+        class Obj:
+            def __init__(s, shape, own, glob): s.Shape, s.Placement, s._g = shape, Pl(own), Pl(glob)
+            def getGlobalPlacement(s): return s._g
+        geo.bound_box = lambda sh: BB(sh.x0 + sh.Placement.x, sh.x1 + sh.Placement.x)
+    '''
+
+    def test_b_a_face_of_a_feature_in_a_placed_body_or_container_is_put_in_the_world(self):
+        got = child(self.WORLD + '''
+        pad = Obj(Shp(-10.0, 10.0), 0.0, 100.0)  # a feature of a body at x 100: its shape is in the body's frame
+        body = Obj(Shp(-10.0, 10.0, Pl(100.0)), 100.0, 150.0)  # the body's shape has its Placement; a container adds 50
+        free = Obj(Shp(-10.0, 10.0), 0.0, 0.0)
+        w = lambda o, sh=None: geo.bound_box(geo.world_shape(o, sh))
+        print(json.dumps([[w(pad).XMin, w(pad).XMax], [w(body).XMin, w(body).XMax], [w(free).XMin, w(free).XMax],
+                          [w(pad, pad.Shape.getElement("Face6")).XMin]]))
+        ''')
+        self.assertEqual(got, [[90.0, 110.0], [140.0, 160.0], [-10.0, 10.0], [90.0]])
+
+    def test_b_the_sketch_ranges_read_the_world_shape(self):
+        src = source("families", "sketch.py")
+        for fn in ("def body_ranges", "def face_ranges"):
+            body = src[src.index(fn):src.index("\ndef ", src.index(fn) + 5)]
+            self.assertIn("geo.world_shape(", body)
+        pdc = source("families", "pd_common.py")
+        for fn in ("def outside_words", "def normal_span_words", "def sketch_lies_words"):
+            body = pdc[pdc.index(fn):pdc.index("\ndef ", pdc.index(fn) + 5)]
+            self.assertIn("geo.world_shape(", body)
+
+    def test_c_the_profiles_are_placed_as_the_region_is(self):
+        pdc = source("families", "pd_common.py")
+        body = pdc[pdc.index("def profile_results"):pdc.index("\ndef ", pdc.index("def profile_results") + 5)]
+        self.assertIn("in_body_frame(body, f)", body)
+        self.assertLess(body.index("in_body_frame(body, f)"), body.index("prism = "))
+
+    def test_d_the_count_after_the_sides_is_of_the_faces_not_looked_at(self):
+        self.assertEqual(rl.opens_text(["+z at z 30"], 8), "It opens on +z at z 30. 8 faces of the removed material were not looked at.")
+        self.assertEqual(rl.opens_text(["+z at z 30"], 0), "It opens on +z at z 30.")
+        self.assertEqual(rl.opens_text([], 1), "It opens on no face of the body that was looked at. 1 face of the removed material was not looked at.")
+        self.assertEqual(rl.touch_text(["+z at z 5"], 2, None, True), "It touches the body on +z at z 5. 2 faces of the new material were not looked at.")
+        for t in (rl.opens_text(["+z at z 30"], 686), rl.touch_text(["+z at z 5"], 7, None, True)):
+            self.assertNotIn("more not shown", t)
+
+    def test_e_fit_not_given_says_freecads_stored_word(self):
+        got = child('''
+        from agentlink.families import feature
+        print(json.dumps([feature.fit_word(types.SimpleNamespace(ThreadFit="Medium")), feature.fit_word(types.SimpleNamespace(ThreadFit="Fine"))]))
+        ''')
+        self.assertEqual(got, ["Medium", "Fine"])
+        self.assertNotIn("FIT_WORDS", source("families", "feature.py"))
+
+    def test_f_the_restart_words_and_their_kind_are_one_fact(self):
+        from agentlink import window_watch as ww
+        from agentlink.protocol import set_kind
+
+        w = ww.Watch.__new__(ww.Watch)
+        w.restart = {"why": "agentlink_update", "launched": True}
+        waiting = w.waiting_words(45)
+        lost = ww.Watch.lost_words({"why": "agentlink_update"})
+        self.assertEqual(ww.words_kind(waiting), "retry")
+        self.assertEqual(ww.words_kind(lost), "stop")
+        for t in (waiting, lost):
+            self.assertNotIn("Call it again", t)
+            self.assertNotIn("Ask the person", t)
+        e = set_kind({"code": "unavailable", "message": waiting}, ww.words_kind(waiting))
+        self.assertEqual(e["kind"], "retry")
+        self.assertNotIn("Do not call it again", e["message"])
+        sup = source("supervise.py")
+        self.assertIn('code="unavailable", kind=window_watch.words_kind(ready)', sup)
+        self.assertNotIn("Call it again in a moment", sup)
+
+
 if __name__ == "__main__":
     unittest.main()

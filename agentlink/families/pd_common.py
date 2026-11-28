@@ -1778,6 +1778,16 @@ def profile_results(feat, reg, old, tol, cut=True, rec=None):
             return {}
         n_all = len(got)
         got = got[:PROFILES_SHOWN]
+        # The profiles are in the body's own frame (the sketch's shape); reg
+        # and old are placed as the Body's Shape is (in_body_frame). 27 Nov
+        # live proof, c: on a body at [100, 0, 0] a pad of +500 mm³ was said
+        # to be "1 of 1 profile added nothing": the prisms missed the region.
+        try:
+            body = body_of(feat)
+        except Exception:  # noqa: BLE001 - a stand-in: no body, no Placement
+            body = None
+        if body is not None:
+            got = [(w, in_body_frame(body, f) or f) for w, f in got]
         part, none = [], 0
         bb = old.BoundBox
         span = 2 * max(bb.DiagonalLength, reg.BoundBox.DiagonalLength, 1.0) + bb.Center.Length + reg.BoundBox.Center.Length
@@ -1868,7 +1878,7 @@ def outside_words(sk, bb, n):
     """Words when the sketch's outline lies beside the body along an axis
     of the sketch's plane (world axes, the normal's axis left out), or ""."""
     try:
-        pb = sk.Shape.BoundBox
+        pb = geo.world_shape(sk).BoundBox
     except Exception:  # noqa: BLE001
         return ""
     return outside_text(sk.Label, (pb.XMin, pb.XMax, pb.YMin, pb.YMax, pb.ZMin, pb.ZMax),
@@ -1906,7 +1916,7 @@ def normal_span_words(feat, body):
 
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
         frame = ((pl.Base.x, pl.Base.y, pl.Base.z), (1, 0, 0), (0, 1, 0), (n.x, n.y, n.z))
-        along = rl.frame_ranges(frame, exact_box(body.Shape))[2]
+        along = rl.frame_ranges(frame, exact_box(geo.world_shape(body)))[2]
         return f"Along the normal of sketch {sk.Label} the body spans {rl.span(*along)} (0 is the sketch plane; + is the way the normal points)."
     except Exception:  # noqa: BLE001 - a reading only
         return ""
@@ -1932,7 +1942,7 @@ def sketch_lies_words(feat, body):
         if others:
             out.append(f"Sketch {sk.Label} is also the profile of {', '.join(o.Label for o in others)}.")
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
-        bb = geo.bound_box(body.Shape)
+        bb = geo.bound_box(geo.world_shape(body))
         along = normal_span_words(feat, body)
         if along:
             out.append(along)

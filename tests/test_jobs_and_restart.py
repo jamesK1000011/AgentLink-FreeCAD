@@ -79,7 +79,7 @@ class WatchTest(unittest.TestCase):
         self.assertIsInstance(got, str)
         self.assertIn("FreeCAD is starting again", got)
         self.assertIn("no window yet after 5 s", got)
-        self.assertIn("never go to the hidden FreeCAD", got)
+        self.assertIn("never goes to the hidden FreeCAD", got)
         # Still pending: the next call waits again (never headless quietly).
         self.assertTrue(self.w.pending())
 

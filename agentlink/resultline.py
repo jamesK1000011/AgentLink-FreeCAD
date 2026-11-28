@@ -175,10 +175,9 @@ def touch_text(faces, more, gap, touching):
     looked at (a cap); gap: the least distance to the body, mm, or None
     when not measured; touching: whether that distance is zero, or None."""
     if faces:
-        tail = f" and {more} more not shown" if more else ""
-        return f"It touches the body on {and_(faces)}{tail}."
+        return f"It touches the body on {and_(faces)}." + unlooked_text(more, "new")
     if touching is True:
-        return "It touches the body but shares no face with it." + (f" {more} faces were not looked at." if more else "")
+        return "It touches the body but shares no face with it." + unlooked_text(more, "new")
     if touching is False:
         return "It touches the body nowhere" + (f" (nearest gap {num(gap)} mm)." if gap is not None else ".")
     return ""
@@ -188,11 +187,21 @@ def opens_text(faces, more, looked=True):
     """Where a cut opens the body (the faces of the body before that the
     removed material lies on)."""
     if faces:
-        tail = f" and {more} more not shown" if more else ""
-        return f"It opens on {and_(faces)}{tail}."
+        return f"It opens on {and_(faces)}." + unlooked_text(more, "removed")
     if not looked:
         return ""
+    if more:
+        return "It opens on no face of the body that was looked at." + unlooked_text(more, "removed")
     return "It opens on no face of the body: it is closed inside it."
+
+
+def unlooked_text(more, what):
+    """" 8 faces of the removed material were not looked at." The faces
+    past the cap are not looked at for where they lie: the count is of
+    those faces, not of sides not said."""
+    if not more:
+        return ""
+    return f" {more} face{'' if more == 1 else 's'} of the {what} material {'was' if more == 1 else 'were'} not looked at."
 
 
 def solids_text(now, was=None):

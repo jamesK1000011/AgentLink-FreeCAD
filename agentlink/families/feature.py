@@ -453,14 +453,10 @@ def pipe_options(f, a):
         f.Refine = bool(a.get("refine"))
 
 
-FIT_WORDS = {"Medium": "normal", "Normal": "normal", "Standard": "normal", "Fine": "close", "Close": "close", "Coarse": "loose", "Loose": "loose", "Wide": "loose"}
-
-
 def fit_word(f):
-    """The fit input's word for the Hole's stored ThreadFit (read from the
-    feature); FreeCAD's own word when it is none of them."""
-    v = str(getattr(f, "ThreadFit", ""))
-    return FIT_WORDS.get(v, v)
+    """FreeCAD's own word for the Hole's stored ThreadFit ("Medium"), read
+    from the feature: the value FreeCAD keeps, not the fit input's word."""
+    return str(getattr(f, "ThreadFit", ""))
 
 
 def thread_change(b, f):

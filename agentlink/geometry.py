@@ -109,6 +109,26 @@ def container_fact(o):
         return None
 
 
+def world_shape(o, shape=None):
+    """Object o's shape (or shape, one of its own: a face of it) in the
+    world: with the Placements of what holds o (its body, an App::Part
+    container) put on it. A shape has the object's own Placement only: a
+    PartDesign feature's is in its body's frame, a body's leaves out a
+    container's (27 Nov live proof, b: a face sketch of a body at
+    [100, 0, 0] was said to span sketch x -110..-90). The shape as it is
+    when the holder is the identity or is not read."""
+    s = o.Shape if shape is None else shape
+    try:
+        holder = o.getGlobalPlacement().multiply(o.Placement.inverse())
+        if holder.isIdentity():
+            return s
+        w = s.copy()
+        w.Placement = holder.multiply(s.Placement)
+        return w
+    except Exception:  # noqa: BLE001 - a stand-in, or not read
+        return s
+
+
 def shape_key(shape):
     """A cheap key that changes when the shape does: its hash (the OCC shape
     and placement), kind, element counts and quick box. The hash alone is

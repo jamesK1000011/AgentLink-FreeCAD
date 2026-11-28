@@ -180,14 +180,26 @@ class Watch:
         else:
             stage = "FreeCAD has quit and has not started again yet"
         return (f"FreeCAD is starting again ({r.get('why') or 'a restart'}); no window yet after {int(waited)} s ({stage}). "
-                "This call was not run. Call it again in a moment: calls wait for the window and never go to the hidden FreeCAD meanwhile. "
-                "app_force_restart if the window does not come back.")
+                f"This call was not run. Each call waits up to {int(WAIT)} s for the window and never goes to the hidden FreeCAD meanwhile; "
+                f"{int(GIVE_UP // 60)} min after the restart with no window, the calls run in the hidden FreeCAD. "
+                "app_force_restart starts the window again.")
 
     @staticmethod
     def lost_words(r):
         mins = int(GIVE_UP // 60)
         return (f"The FreeCAD window did not come back within {mins} min after {(r or {}).get('why') or 'its restart'}. This call was not run. "
-                "The next calls run in the hidden FreeCAD, which has an empty document of its own. Ask the person to open FreeCAD again, or app_force_restart.")
+                "The next calls run in the hidden FreeCAD, which has an empty document of its own. app_force_restart starts the window again.")
+
+
+WAITING_HEAD = "FreeCAD is starting again ("
+
+
+def words_kind(words):
+    """The refusal kind that is one fact with the restart words: retry while
+    the restart is in hand (the call goes through once the window pairs),
+    stop once the window is given up (the next calls go to the hidden
+    FreeCAD: the person's to say)."""
+    return "retry" if str(words or "").startswith(WAITING_HEAD) else "stop"
 
 
 # ---- macOS: launch and quit notifications (optional) ---------------------------------------

@@ -50,7 +50,7 @@ class Pure(unittest.TestCase):
 
     def test_contact_words(self):
         self.assertEqual(rl.touch_text(["+z at z 5", "-x at x 0"], 0, None, True), "It touches the body on +z at z 5 and -x at x 0.")
-        self.assertEqual(rl.touch_text(["+z at z 5"], 3, None, True), "It touches the body on +z at z 5 and 3 more not shown.")
+        self.assertEqual(rl.touch_text(["+z at z 5"], 3, None, True), "It touches the body on +z at z 5. 3 faces of the new material were not looked at.")
         self.assertEqual(rl.touch_text([], 0, 12.5, False), "It touches the body nowhere (nearest gap 12.5 mm).")
         self.assertEqual(rl.touch_text([], 0, None, False), "It touches the body nowhere.")
         self.assertEqual(rl.touch_text([], 0, 0.0, True), "It touches the body but shares no face with it.")

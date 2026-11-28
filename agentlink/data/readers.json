@@ -1093,7 +1093,6 @@
     "attachment",
     "axes",
     "body",
-    "body_extent",
     "body_of",
     "body_reading",
     "bounds",
@@ -1121,7 +1120,6 @@
     "join_points",
     "line",
     "make_constraint",
-    "new_result",
     "offset_out",
     "on_words",
     "placement",
@@ -1144,9 +1142,11 @@
     "world_pl"
    ],
    "changers": [
+    "body_extent",
     "build",
     "clashing",
     "fresh",
+    "new_result",
     "state_of",
     "text_outlines"
    ],
