@@ -3402,6 +3402,10 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         lone = isinstance(a.get("queries"), list) and len(a["queries"]) == 1 or isinstance(a.get("words"), str)
         if names and not qs and not (lone and not a.get("card")):
             got = tool_groups({"card": names if len(names) > 1 or isinstance(a.get("card"), list) else names[0]})
+            if got.get("note") == TG_CARDS_NOTE:
+                got.pop("note")  # its facts are in tool_find's own card (data/hubcards.json)
+            elif isinstance(got.get("note"), str) and got["note"].endswith(TG_CARDS_NOTE):
+                got["note"] = got["note"][: -len(TG_CARDS_NOTE)].rstrip()
             if read_as:
                 got["readAs"] = read_as
             return got
@@ -3425,8 +3429,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         res = out[0] if len(out) == 1 else {"results": out}
         if names:
             res["cards"] = tool_groups({"card": names})["tools"]
-        res["note"] = ("Every tool found here can be called by name, or as a step { \"tool\": name, <its inputs> } in the calls of run (one call), batch (several calls) "
-                       "or fast (several calls, one short answer). tool_find { card: name } gives its whole description, its inputs and two example calls: plain and ready.")
+        # How to call a found tool and what the examples are: facts of tool_find's own
+        # card (data/hubcards.json effects, returns.examples), not repeated on each answer.
         if read_as:
             res["readAs"] = read_as
         return res
