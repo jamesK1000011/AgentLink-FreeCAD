@@ -119,14 +119,24 @@ def face_ranges(link, sk):
         return None
 
 
-def new_result(sk, b, what, link):
-    """sketch_new's result line: the sketch and its support, the axes in
-    words, the body's range in the sketch's x, y and normal, and for a face
-    sketch the face's own x and y range."""
+def face_extent(link, sk):
+    """Where the face that sketch sk is on lies in the sketch's own frame:
+    { "x": [min, max], "y": [min, max] } (mm, to 0.1, as body_extent); None
+    when the sketch is not on a face or the face is not read."""
+    got = face_ranges(link, sk)
+    if got is None:
+        return None
+    r = lambda v: round(float(v), 1) + 0.0  # noqa: E731
+    return {k: [r(lo), r(hi)] for k, (lo, hi) in zip(("x", "y"), got[:2])}
+
+
+def body_has_solid(b):
+    """Whether body b has a solid (sketch_new's bodySolid)."""
     try:
-        return rl.sketch_new_result(sk.Label, what, axes(world_pl(sk)), body_ranges(b, sk), face_ranges(link, sk))
-    except Exception:  # noqa: BLE001 - a reading only
-        return f"Sketch {getattr(sk, 'Label', '')} is on {what}."
+        shape = b.Shape
+        return not (shape is None or shape.isNull() or not shape.Solids)
+    except Exception:  # noqa: BLE001 - not read
+        return False
 
 
 def _geo_kind(g):
@@ -175,19 +185,16 @@ def describe_con(sk, i):
     return out
 
 
-def con_brief(sk, ids):
-    """Each constraint of ids in one short text: its id, FreeCAD's type and
-    its refs [geometry, vertex], and its value when it has one:
-    "4 Coincident [0, 2] [1, 1]", "9 Radius [4, 0] = 5". A constraint that
-    cannot be read is passed over."""
+def con_list(sk, ids):
+    """Each constraint of ids as a record (describe_con): { id, type, refs:
+    [[geometry, vertex], …], value (mm or deg, when it has one), name,
+    driving: false }. A constraint that cannot be read is passed over."""
     out = []
     for i in ids:
         try:
-            d = describe_con(sk, i)
+            out.append(describe_con(sk, i))
         except Exception:  # noqa: BLE001 - not read: not said
             continue
-        refs = " ".join(f"[{g}, {p}]" for g, p in d["refs"])
-        out.append(f"{d['id']} {d['type']} {refs}" + (f" = {d['value']:g}" if "value" in d else ""))
     return out
 
 
@@ -1182,33 +1189,49 @@ def _shapes_box(sk, ids):
 
 
 def con_result(sk, added, dof_before, joins, st):
-    """sketch_constrain's result line: the constraints added (in words), the
-    degrees of freedom before and after, each join that moved geometry with
-    the distance each point moved (no lower limit but MOVE_TOL), and the
-    extent of the sketch's shapes after the solve. Never raises."""
+    """sketch_constrain's result record: the constraints added (con_list's
+    records), the degrees of freedom before (the answer's state has them
+    after), each join that moved geometry with the distance each point moved
+    (no lower limit but MOVE_TOL), and the extent of the sketch's shapes
+    after the solve. Never raises."""
     try:
         return _con_result(sk, added, dof_before, joins, st)
     except Exception:  # noqa: BLE001 - a reading only
-        return f"Added constraint {', '.join(str(i) for i in added)}." if added else "Added no constraint."
+        return {"constraints": [{"id": i} for i in added or []]}
+
+
+def join_moved(sk, joins):
+    """join_moves as records: [{ join: [[geo, vertex], [geo, vertex]],
+    moved: [{ ref: [geo, vertex], mm }] }], the points that moved over
+    MOVE_TOL only. Never raises."""
+    out = []
+    for _kind, ids, a, b, _d in joins:
+        try:
+            g1, p1, g2, p2 = ids
+            moved = []
+            for g, p, was in ((g1, p1, a), (g2, p2, b)):
+                now = sk.getPoint(g, p)
+                m = math.dist(was, (now.x, now.y))
+                if m > MOVE_TOL:
+                    moved.append({"ref": [g, p], "mm": round(m, 4)})
+            if moved:
+                out.append({"join": [[g1, p1], [g2, p2]], "moved": moved})
+        except Exception:  # noqa: BLE001 - not read: not said
+            continue
+    return out
 
 
 def _con_result(sk, added, dof_before, joins, st):
+    cons = con_list(sk, added)
+    moves, more = [], 0
     try:
-        words = [con_words(sk, i) for i in added]
-    except Exception:  # noqa: BLE001
-        words = []
-    moves = []
-    more = 0
-    try:
-        got = join_moves(sk, joins)
-        moves = [(f"{ref_words(sk, g1, p1)} and {ref_words(sk, g2, p2)}", [(w, m) for w, m in pts])
-                 for _k, (g1, p1, g2, p2), _a, _b, _d, pts in got[:JOINS_SHOWN]]
-        more = max(0, len(got) - JOINS_SHOWN)
+        got = join_moved(sk, joins)
+        moves, more = got[:JOINS_SHOWN], max(0, len(got) - JOINS_SHOWN)
     except Exception:  # noqa: BLE001
         pass
     box = _shapes_box(sk, range(len(sk.Geometry))) if hasattr(sk, "Geometry") else None
     spans = ((box[0], box[1]), (box[2], box[3])) if box else None
-    return rl.constraint_result(words, dof_before, st.get("dof") if isinstance(st, dict) else None, moves, spans, more)
+    return rl.constraint_result(cons, dof_before, moves, spans, more)
 
 
 def _mid(g):
@@ -1237,14 +1260,14 @@ def support_face(sk):
 
 def lies_words(sk, world):
     """Where the world box of a call's new shapes lies against the face
-    the sketch is on and against its body's solid, one sentence each
-    (resultline.lies_text: the words of a feature's answer), from the
-    boxes as they are measured now. A sentence whose box is not read is
-    left out; a body with no solid has none. Nothing is said while a batch
-    holds the document's recompute (agentlink/hold.py): the body is then
-    the one from before the build. Nothing is said for a body inside a
-    moved Part (_one_frame): the boxes are then in two frames. 27 Nov QA: the answers said where
-    material went only after a feature was made."""
+    the sketch is on and against its body's solid, one record each
+    (resultline.lies_rec: { against: "face" | "body", box, axes }), from the boxes as they
+    are measured now. A record whose box is not read is left out; a body
+    with no solid has none. Nothing is said while a batch holds the
+    document's recompute (agentlink/hold.py): the body is then the one from
+    before the build. Nothing is said for a body inside a moved Part
+    (_one_frame): the boxes are then in two frames. 27 Nov QA: the answers
+    said where material went only after a feature was made."""
     out = []
     try:
         if getattr(getattr(sk, "Document", None), "RecomputesFrozen", False) is True:
@@ -1256,14 +1279,14 @@ def lies_words(sk, world):
     f = support_face(sk)
     if f is not None:
         try:
-            out.append(rl.lies_text("the face", world, _box6(geo.bound_box(f)), flat=True))
+            out.append(rl.lies_rec("face", world, _box6(geo.bound_box(f)), flat=True))
         except Exception:  # noqa: BLE001
             pass
     try:
         b = pc.body_of(sk)
         shape = b.Shape if b is not None else None
         if shape is not None and not shape.isNull() and shape.Solids:
-            out.append(rl.lies_text("the body", world, _box6(geo.bound_box(shape))))
+            out.append(rl.lies_rec("body", world, _box6(geo.bound_box(shape))))
     except Exception:  # noqa: BLE001
         pass
     return [t for t in out if t]
@@ -1284,14 +1307,15 @@ def _one_frame(sk):
 
 
 def add_result(sk, out, st):
-    """sketch_add's result line: each shape of the call with its ids, its
-    extent in the sketch's x/y and in the world, a circle's centre and
-    radius, an arc's start, middle and end point; then the sketch's wires,
-    closed wires and open ends. Never raises."""
+    """sketch_add's result record: for each shape of the call, in the order
+    of the answer's added, its extent in the sketch's x/y and in the world,
+    a circle's centre and radius, an arc's start, middle and end point, a
+    line's ends; where the call's shapes lie against the face and the body;
+    the sketch's open ends. Never raises."""
     try:
         return _add_result(sk, out, st)
     except Exception:  # noqa: BLE001 - a reading only
-        return "Added " + ", ".join(f"{i.get('kind', 'shape')} {rl.id_text(i.get('ids') or [])}" for i in out or []) + "."
+        return {"shapes": [{} for _ in out or []]}
 
 
 def _add_result(sk, out, st):
@@ -1324,12 +1348,9 @@ def _add_result(sk, out, st):
             if frame is not None:
                 kw["world"] = rl.world_box(frame, kw["xr"], kw["yr"])
                 worlds.append(kw["world"])
-        if isinstance(item.get("byDefault"), dict):
-            kw["default"] = item["byDefault"]
-        shapes.append(rl.shape_text(str(item.get("kind") or "shape"), ids, **kw))
-    wires = closed = ends = None
+        shapes.append(rl.shape_rec(**kw))
+    ends = None
     if isinstance(st, dict):
-        wires, closed = st.get("wires"), st.get("closedWires")
         try:
             ws = sk.Shape.Wires if not sk.Shape.isNull() else []
             ends = len(open_ends_of(sk, ws)) if ws else 0
@@ -1339,7 +1360,7 @@ def _add_result(sk, out, st):
     if worlds:
         union = tuple(f(w[i] for w in worlds) for i, f in enumerate((min, max, min, max, min, max)))
         lies = lies_words(sk, union)
-    return rl.sketch_add_result(shapes, wires, closed, ends, lies)
+    return rl.sketch_add_result(shapes, ends, lies)
 
 
 def refs_read(sk, raw, refs):
@@ -1541,8 +1562,10 @@ def _axes_or_refuse(fn, n, up):
 
 
 def axes(pl):
-    """A sketch's frame (placement pl) in one line of words (orient.axes_line)."""
-    return orient.axes_line(frame(pl))
+    """A sketch's frame (placement pl) as a record: { x: "+X", y: "+Z",
+    normal: "-Y" } (orient.axis_word of each: the world axis it runs
+    along, or "mostly +Z (12° off)")."""
+    return orient.axes_rec(frame(pl))
 
 
 def on_words(what, pl):
@@ -1687,9 +1710,9 @@ def tools(session):
                "line": lambda a, b: Part.LineSegment(a, b), "wire": lambda edges: Part.Wire(edges), "sort_edges": lambda edges: Part.sortEdges(edges),
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
-               "frame": frame, "state_of": state_of, "fresh": fresh, "join_points": join_points, "join_move_words": join_move_words, "dof_of": dof_of, "con_result": con_result, "add_result": add_result, "new_result": new_result, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
+               "frame": frame, "state_of": state_of, "fresh": fresh, "join_points": join_points, "join_move_words": join_move_words, "dof_of": dof_of, "con_result": con_result, "add_result": add_result, "face_extent": face_extent, "body_has_solid": body_has_solid, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "up_frame": up_frame, "axes": axes, "on_words": on_words, "face_said": face_said, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "edges_form": pc.edges_form, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines, "item_error": item_error, "body_extent": body_extent, "by_default": by_default,
-               "attachment": attachment, "con_brief": con_brief, "world_pl": world_pl, "holder_pl": holder_pl, "placement_json": picks.placement_json, "placement_fact": geo.placement_fact}
+               "attachment": attachment, "con_list": con_list, "world_pl": world_pl, "holder_pl": holder_pl, "placement_json": picks.placement_json, "placement_fact": geo.placement_fact}
     return runners.tools(GROUP, s, helpers)

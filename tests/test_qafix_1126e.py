@@ -36,26 +36,25 @@ class SolidsSaidAsMeasured(unittest.TestCase):
         out = run_stub(self.BODY + textwrap.dedent("""
             Shape.distToShape = lambda self, o: (12.5, [], [])
             r = s.body_check({"body": "Stem"})
-            print(json.dumps({"said": r["solidsSaid"], "allow": r["allowCompound"], "graded": "ok" in r or "problems" in r, "row": s._body_row(body)["multiSolid"]}))
+            print(json.dumps({"said": r["result"], "allow": r["allowCompound"], "graded": "ok" in r or "problems" in r, "row": s._body_row(body)["multiSolid"]}))
         """))
-        self.assertEqual(out["said"], "2 separate solids that do not touch (nearest gap 12.5 mm)")
+        self.assertEqual(out["said"], {"nearestGap": 12.5, "solidsTouch": False})  # 28 Nov: a record, no sentence
         self.assertIs(out["allow"], True)  # FreeCAD's property, as a fact beside the count
-        self.assertNotIn("on purpose", out["said"] + out["row"])
+        self.assertNotIn("on purpose", json.dumps(out["said"]) + out["row"])
         self.assertFalse(out["graded"])  # facts only (27 Nov): no ok, no problems
 
     def test_solids_that_touch_are_not_said_to_be_apart(self):
         out = run_stub(self.BODY + textwrap.dedent("""
             Shape.distToShape = lambda self, o: (0.0, [], [])
-            print(json.dumps(s.body_check({"body": "Stem"})["solidsSaid"]))
+            print(json.dumps(s.body_check({"body": "Stem"})["result"]))
         """))
-        self.assertIn("2 separate solids; at least two touch", out)
-        self.assertNotIn("do not touch", out)
+        self.assertEqual(out, {"nearestGap": 0.0, "solidsTouch": True})
 
     def test_without_a_distance_only_the_count_is_said(self):
         out = run_stub(self.BODY + textwrap.dedent("""
-            print(json.dumps(s.body_check({"body": "Stem"})["solidsSaid"]))
+            print(json.dumps("result" in s.body_check({"body": "Stem"})))
         """))
-        self.assertEqual(out, "2 separate solids")
+        self.assertIs(out, False)  # no distance measured: nothing is said
 
 
 class OpenEndsNameNoConstraint(unittest.TestCase):

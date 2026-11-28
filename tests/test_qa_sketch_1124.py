@@ -258,7 +258,11 @@ class BodyExtent(unittest.TestCase):
         e = entries()
         new = e["sketch_new"]
         self.assertEqual(new["answer"]["fields"]["bodyExtent"], {"when": "=ext", "value": "=ext"})
-        self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)", "said": "=face_said(b, link, what) if 'face' in a else what"}})
+        self.assertEqual(new["steps"][-2], {"let": {"ext": "=body_extent(b, sk)", "fext": "=face_extent(link, sk) if 'face' in a else None", "said": "=face_said(b, link, what) if 'face' in a else what"}})
+        self.assertEqual(new["answer"]["fields"]["bodySolid"], {"when": "=not body_has_solid(b)", "value": False})
+        self.assertEqual(new["answer"]["fields"]["faceExtent"], {"when": "=fext", "value": "=fext"})
+        self.assertIn("Coordinates are the sketch's", json.dumps(new["card"]["effects"]))  # the constant note is in the card, not in each answer
+        self.assertNotIn("note", new["answer"]["fields"])
         self.assertIn("bodyExtent: the box of the body's solid in the sketch's own frame", new["description"])
         add = e["sketch_add"]["description"]
         self.assertIn("rectangle {center|corner, size}. rounded_rectangle {…, radius}.", add)

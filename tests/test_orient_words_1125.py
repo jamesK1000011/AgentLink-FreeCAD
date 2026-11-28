@@ -187,13 +187,13 @@ class NeverSaidBefore(unittest.TestCase):
 
         t = runners.tool("sketch_new", runners.entries()["sketch_new"], {})
         s = types.SimpleNamespace()
-        note = "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."
-        a = orient.axes_line(fr(*PLANES["XY"]))
-        first = once.thin_reply(s, t, {"sketch": "Sketch", "axes": a, "note": note})
-        second = once.thin_reply(s, t, {"sketch": "Sketch001", "axes": a, "note": note})
+        a = {"x": "+X", "y": "+Y", "normal": "+Z"}
+        first = once.thin_reply(s, t, {"sketch": "Sketch", "axes": a})
+        second = once.thin_reply(s, t, {"sketch": "Sketch001", "axes": a})
         self.assertEqual(first["axes"], a)
         self.assertEqual(second["axes"], a)
-        self.assertNotIn("note", second)
+        # 28 Nov: the constant note is in the card's effects, not in any answer
+        self.assertNotIn("note", runners.entries()["sketch_new"]["answer"]["fields"])
 
 
 # ---- the placements: face_frame and up_frame on a stand-in FreeCAD with real rotations -----------
@@ -276,8 +276,7 @@ class Placements(unittest.TestCase):
     def test_a_plus_y_face_has_y_up_and_its_origin_off_the_centre(self):
         g = self.got["+y"]
         self.assertEqual(g["frame"], {"origin": [0.0, 15.0, 0.0], "xAxis": [-1.0, 0.0, 0.0], "yAxis": [0.0, 0.0, 1.0], "normal": [0.0, 1.0, 0.0]})
-        self.assertEqual(g["axes"], "x runs -X; y runs +Z (up); the normal points +Y: a pad grows toward +Y, a pocket or hole cuts toward -Y. "
-                                    "[0, 0] is at world (0, 15, 0).")
+        self.assertEqual(g["axes"], {"x": "-X", "y": "+Z", "normal": "+Y"})  # 28 Nov: a record; the origin is in frame
         # 27 Nov QA (F10): the face by its side (sketch.face_said), not by its centre
         self.assertEqual(g["on"], "the face +y at y 15; sketch origin at [0, 15, 0]")
 
@@ -288,7 +287,7 @@ class Placements(unittest.TestCase):
     def test_up_x_on_xz_keeps_the_origin_and_the_normal(self):
         f = self.got["XZ up x"]["frame"]
         self.assertEqual(f, {"origin": [0.0, 0.0, 0.0], "xAxis": [0.0, 0.0, -1.0], "yAxis": [1.0, 0.0, 0.0], "normal": [0.0, -1.0, 0.0]})
-        self.assertIn("x runs -Z (down); y runs +X", self.got["XZ up x"]["axes"])
+        self.assertEqual(self.got["XZ up x"]["axes"], {"x": "-Z", "y": "+X", "normal": "-Y"})
 
     def test_up_along_the_normal_refused(self):
         code, msg = self.got["XY up z"]

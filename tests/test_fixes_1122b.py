@@ -202,13 +202,12 @@ class OutlineBesideBody(unittest.TestCase):
         self.pd = pd_common
 
     def test_beside_names_both_ranges(self):
-        w = self.pd.outside_text("Holes", (12.5, 47.5, 12.5, 17.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1))
-        self.assertIn("the outline lies at y 12.5 to 17.5; the body spans y -30 to 0", w)
-        self.assertNotIn("Move", w)  # facts only (27 Nov): the measured spans, no instruction
+        w = self.pd.outside_rec((12.5, 47.5, 12.5, 17.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1))
+        self.assertEqual(w, {"y": {"outline": [12.5, 17.5], "body": [-30.0, 0.0]}})  # facts only (27 Nov): the measured spans, no instruction
 
     def test_over_the_body_says_nothing(self):
-        self.assertEqual(self.pd.outside_text("Holes", (12.5, 47.5, -17.5, -12.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1)), "")
+        self.assertEqual(self.pd.outside_rec((12.5, 47.5, -17.5, -12.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1)), {})
 
     def test_the_cut_axis_is_left_out(self):
         # Beside along z only (the cut's own axis): that is the direction words' job.
-        self.assertEqual(self.pd.outside_text("S", (0, 10, 0, 10, 50, 50), (0, 60, 0, 30, 0, 40), (0, 0, 1)), "")
+        self.assertEqual(self.pd.outside_rec((0, 10, 0, 10, 50, 50), (0, 60, 0, 30, 0, 40), (0, 0, 1)), {})

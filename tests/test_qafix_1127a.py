@@ -204,11 +204,11 @@ class RefsRead(unittest.TestCase):
 # ---- F3: a place taken by default is said ----------------------------------------------------
 
 class Defaults(unittest.TestCase):
-    def test_the_sentence(self):
-        self.assertEqual(rl.default_text({"center": [0, 0]}), "center not given, so center is [0, 0]")
-        got = rl.shape_text("circle", [4], circle=((0, 0), 3), xr=(-3, 3), yr=(-3, 3), default={"center": [0, 0]})
-        self.assertEqual(got, "circle, id 4: center not given, so center is [0, 0]; centre (0, 0), radius 3; sketch x -3..3, y -3..3.")
-        self.assertNotIn("not given", rl.shape_text("circle", [4], circle=((0, 0), 3)))
+    def test_the_record(self):
+        # 28 Nov: the inputs that the tool filled are the added item's notGiven; the shape record has the measured facts only
+        got = rl.shape_rec((-3, 3), (-3, 3), circle=((0, 0), 3))
+        self.assertEqual(got, {"circle": {"center": [0.0, 0.0], "radius": 3.0}, "sketchExtent": {"x": [-3.0, 3.0], "y": [-3.0, 3.0]}})
+        self.assertNotIn("notGiven", got)
 
     def test_on_the_stand_in(self):
         got = child('''
@@ -219,22 +219,20 @@ class Defaults(unittest.TestCase):
                "center": add.fn({"sketch": "S", "kind": "rectangle", "center": [0, 0], "size": [7, 9]}),
                "corner": add.fn({"sketch": "S", "kind": "rectangle", "corner": [1, 2], "size": [7, 9]}),
                "circle": add.fn({"sketch": "S", "kind": "circle", "radius": 2})}
-        out = {k: [v["result"], v["added"][0].get("byDefault")] for k, v in out.items()}
+        out = {k: [v["result"], v["added"][0].get("notGiven")] for k, v in out.items()}
         out["arc"] = refusal(lambda: add.fn({"sketch": "S", "kind": "arc", "radius": 4, "start": 10, "end": 80}))
-        out["arcOk"] = add.fn({"sketch": "S", "kind": "arc", "center": [3, 3], "radius": 4, "start": 10, "end": 80})["result"]
+        out["arcOk"] = add.fn({"sketch": "S", "kind": "arc", "center": [3, 3], "radius": 4, "start": 10, "end": 80})["added"][0].get("notGiven")
         out["table"] = {k: [sketch.by_default({"kind": k}), sketch.by_default({"kind": k, f: [1, 1]})] for k, f in sketch.ORIGIN_DEFAULT.items()}
         out["others"] = [k for k in ("line", "polyline", "arc", "arc3", "circle3", "bspline", "slot", "point") if sketch.by_default({"kind": k})]
         print(json.dumps(out))
         ''')
-        self.assertTrue(got["none"][0].startswith("rectangle, ids 0-3: center not given, so center is [0, 0]; construction not given, so construction is false; sketch x -3.5..3.5, y -4.5..4.5"), got["none"][0])
+        self.assertEqual(got["none"][0]["shapes"][0]["sketchExtent"], {"x": [-3.5, 3.5], "y": [-4.5, 4.5]})
         self.assertEqual(got["none"][1], {"center": [0, 0], "construction": False})
         for k in ("center", "corner"):  # the place was given: only what was not given is said (27 Nov: every such value)
-            self.assertNotIn("center not given", got[k][0])
             self.assertEqual(got[k][1], {"construction": False})
-        self.assertIn("center not given, so center is [0, 0]", got["circle"][0])
+        self.assertEqual(got["circle"][1]["center"], [0, 0])
         self.assertEqual(got["arc"], "center: an arc needs its centre [x, y].")
-        self.assertNotIn("center not given", got["arcOk"])
-        self.assertNotIn("start not given", got["arcOk"])
+        self.assertEqual(got["arcOk"], {"construction": False})
         for k, (missing, given) in got["table"].items():
             self.assertEqual(list(missing.values())[0], [0, 0], k)
             self.assertNotIn([0, 0], list(given.values()), k)
@@ -297,33 +295,33 @@ FAKES = textwrap.indent(FAKES0, "        ")
 class Lies(unittest.TestCase):
     BODY = (-4, 8, -3, 3, 0, 2)
 
-    def test_the_sentence_uses_the_words_of_a_features_answer(self):
-        got = rl.lies_text("the body", (-6, -1, 1, 5, 2, 2), self.BODY)
-        self.assertEqual(got, "Against the body (x -4..8, y -3..3, z 0..2): x past -x by 2; y past +y by 2; z inside (2 from -z, 0 from +z).")
-        self.assertIn(rl.against((-6, -1, 1, 5, 2, 2), self.BODY), got)  # one set of words
+    def test_the_record_uses_the_records_of_a_features_answer(self):
+        got = rl.lies_rec("body", (-6, -1, 1, 5, 2, 2), self.BODY)
+        self.assertEqual(got, {"against": "body", "box": {"x": [-4.0, 8.0], "y": [-3.0, 3.0], "z": [0.0, 2.0]},
+                               "axes": {"x": {"past": {"-x": 2.0}}, "y": {"past": {"+y": 2.0}}, "z": {"inside": {"-z": 2.0, "+z": 0.0}}}})
+        self.assertEqual(got["axes"], rl.against_rec((-6, -1, 1, 5, 2, 2), self.BODY))  # one set of records
 
     def test_inside_gives_the_distance_to_each_side(self):
         for i, ax in enumerate("xyz"):
             lo, hi = self.BODY[2 * i], self.BODY[2 * i + 1]
             new = list(self.BODY)
             new[2 * i], new[2 * i + 1] = lo + 0.25, hi - 1.5
-            self.assertIn(f"{ax} inside (0.25 from -{ax}, 1.5 from +{ax})", rl.against(tuple(new), self.BODY))
+            self.assertEqual(rl.against_rec(tuple(new), self.BODY)[ax], {"inside": {f"-{ax}": 0.25, f"+{ax}": 1.5}})
 
     def test_a_flat_face_leaves_out_the_axis_it_has_no_size_on(self):
         face = (-4, 8, -3, 3, 2, 2)
-        got = rl.lies_text("the face", (-6, -1, 1, 2, 2, 2), face, flat=True)
-        self.assertEqual(got, "Against the face (x -4..8, y -3..3, z 2): x past -x by 2; y inside (4 from -y, 1 from +y).")
+        got = rl.lies_rec("face", (-6, -1, 1, 2, 2, 2), face, flat=True)
+        self.assertEqual(got["axes"], {"x": {"past": {"-x": 2.0}}, "y": {"inside": {"-y": 4.0, "+y": 1.0}}})
         for i in range(3):  # the same on each axis
             f = [0, 10, 0, 10, 0, 10]
             f[2 * i + 1] = 0
-            said = rl.lies_text("the face", (1, 2, 1, 2, 1, 2), tuple(f), flat=True)
-            self.assertNotIn(f"{'xyz'[i]} inside", said)
-            self.assertNotIn(f"past -{'xyz'[i]}", said)
-            self.assertEqual(said.count("inside") + said.count("past"), 2)
+            said = rl.lies_rec("face", (1, 2, 1, 2, 1, 2), tuple(f), flat=True)
+            self.assertNotIn("xyz"[i], said["axes"])
+            self.assertEqual(len(said["axes"]), 2)
 
     def test_a_sketch_plane_inside_the_body(self):
-        got = rl.lies_text("the body", (0, 0, -1, 1, 0, 1), (-7, 5, -3, 3, 0, 2))
-        self.assertIn("x inside (7 from -x, 5 from +x)", got)
+        got = rl.lies_rec("body", (0, 0, -1, 1, 0, 1), (-7, 5, -3, 3, 0, 2))
+        self.assertEqual(got["axes"]["x"], {"inside": {"-x": 7.0, "+x": 5.0}})
 
     def test_measured_from_the_face_and_the_body_on_stand_ins(self):
         got = child(FAKES + """
@@ -352,19 +350,22 @@ class Lies(unittest.TestCase):
         out["oneFrame"] = len(sketch.lies_words(on_face, world))
         print(json.dumps(out))
         """)
-        self.assertEqual(got["face"], ["Against the face (x -4..8, y -3..3, z 2): x past -x by 2; y inside (4 from -y, 1 from +y).",
-                                       "Against the body (x -4..8, y -3..3, z 0..2): x past -x by 2; y inside (4 from -y, 1 from +y); z inside (2 from -z, 0 from +z)."])
+        self.assertEqual([x["against"] for x in got["face"]], ["face", "body"])
+        self.assertEqual(got["face"][0]["axes"], {"x": {"past": {"-x": 2.0}}, "y": {"inside": {"-y": 4.0, "+y": 1.0}}})
+        self.assertEqual(got["face"][1]["axes"]["z"], {"inside": {"-z": 2.0, "+z": 0.0}})
         self.assertEqual(len(got["plane"]), 1)
-        self.assertTrue(got["plane"][0].startswith("Against the body"))
+        self.assertEqual(got["plane"][0]["against"], "body")
         self.assertEqual((got["noSolid"], got["noBody"], got["held"], got["twoFrames"]), ([], [], [], []))  # nothing measured: nothing said
         self.assertEqual(got["oneFrame"], 2)
 
-    def test_the_result_line_has_it_after_the_shape_and_before_the_wires(self):
-        line = rl.sketch_add_result(["circle, id 0: centre (1, 1), radius 2."], 1, 1, 0, ["Against the body (x 0..1, y 0..1, z 0..1): x inside (0 from -x, 0 from +x)."])
-        self.assertEqual(line, "circle, id 0: centre (1, 1), radius 2. Against the body (x 0..1, y 0..1, z 0..1): x inside (0 from -x, 0 from +x). The sketch has 1 wire, 1 closed, 0 open ends.")
-        self.assertEqual(rl.sketch_add_result(["a."], 1, 1, 0), "a. The sketch has 1 wire, 1 closed, 0 open ends.")
+    def test_the_result_record_has_it_beside_the_shapes_and_the_open_ends(self):
+        lies = rl.lies_rec("body", (0, 1, 0, 1, 0, 1), (0, 1, 0, 1, 0, 1))
+        got = rl.sketch_add_result([rl.shape_rec(circle=((1, 1), 2))], 0, [lies])
+        self.assertEqual(list(got), ["shapes", "lies", "openEnds"])
+        self.assertEqual(got["lies"], [lies])
+        self.assertEqual(rl.sketch_add_result([{}], 0), {"shapes": [{}], "openEnds": 0})
 
-    def test_sketch_add_on_the_stand_in_has_the_sentence_in_result(self):
+    def test_sketch_add_on_the_stand_in_has_the_record_in_result(self):
         got = child(FAKES + """
         s = fc.Session(tempfile.mkdtemp())
         b = fc.body(s, "B")
@@ -375,8 +376,10 @@ class Lies(unittest.TestCase):
         print(json.dumps([list(r)[0], r["result"]]))
         """)
         self.assertEqual(got[0], "result")
-        self.assertIn("Against the body (x -4..8, y -3..3, z 0..2): x past +x by 2; y inside (4 from -y, 1 from +y); z inside (0 from -z, 2 from +z).", got[1])
-        self.assertLess(got[1].index("Against the body"), got[1].index("The sketch has"))
+        lies = got[1]["lies"]
+        self.assertEqual([x["against"] for x in lies], ["body"])
+        self.assertEqual(lies[0]["axes"], {"x": {"past": {"+x": 2.0}}, "y": {"inside": {"-y": 4.0, "+y": 1.0}}, "z": {"inside": {"-z": 0.0, "+z": 2.0}}})
+        self.assertLess(list(got[1]).index("shapes"), list(got[1]).index("lies"))
 
 
 # ---- F10: which face a sketch is on ----------------------------------------------------------
@@ -407,12 +410,11 @@ class WhichFace(unittest.TestCase):
         self.assertEqual(got[6], "the face +z at z 2.5; sketch origin at [0, 0, 2.5]")
         self.assertNotIn("centre", " ".join(got[:5] + got[6:]))
 
-    def test_the_result_line_and_on_use_it(self):
+    def test_on_uses_it_and_sketch_new_has_no_result(self):
         e = runners.entries()["sketch_new"]
         f = e["answer"]["fields"]
-        self.assertEqual(f["result"], "=new_result(sk, b, said, link)")
+        self.assertNotIn("result", f)  # 28 Nov: its facts are keys (on, axes, frame, bodyExtent, faceExtent, bodySolid)
         self.assertEqual(f["on"], "=on_words(said, world_pl(sk)) if 'face' in a else what")
-        self.assertEqual(rl.sketch_new_result("S", "the face +z at z 2.5", "x runs +X.", None, ((0, 4), (0, 2), (0, 0)))[:46], "Sketch S is on the face +z at z 2.5. x runs +X")
 
 
 # ---- F6: the measured change of a body whose sketch was edited --------------------------------
@@ -490,19 +492,17 @@ class UsedSketch(unittest.TestCase):
 # ---- F7: a partial cut in the result line ----------------------------------------------------
 
 class PartialCut(unittest.TestCase):
-    def test_the_sentence(self):
-        self.assertEqual(rl.profiles_text(2, 2, [62.5, 37.5], 0), "2 of 2 profiles cut in part (62.5% and 37.5% of the volume that each area gives over the same depth).")
-        self.assertEqual(rl.profiles_text(1, 1, [40], 0), "1 of 1 profile cut in part (40% of the volume that its area gives over the same depth).")
-        self.assertEqual(rl.profiles_text(3, 3, [40], 1), "1 of 3 profiles cut in part (40% of the volume that its area gives over the same depth). 1 of 3 profiles cut nothing.")
-        self.assertEqual(rl.profiles_text(3, 3, [], 0), "")  # every profile did all of it: nothing is said
-        self.assertEqual(rl.profiles_text(2, 2, [10], 0, cut=False), "1 of 2 profiles added in part (10% of the volume that its area gives over the same depth).")
-        self.assertIn("12 of 20 profiles were measured.", rl.profiles_text(20, 12, [], 3))
+    def test_the_record(self):
+        self.assertEqual(rl.profiles_rec(2, 2, [62.5, 37.5], 0), {"partialProfilePercent": [62.5, 37.5], "profileCount": 2})
+        self.assertEqual(rl.profiles_rec(3, 3, [40], 1), {"partialProfilePercent": [40.0], "idleProfiles": 1, "profileCount": 3})
+        self.assertEqual(rl.profiles_rec(3, 3, [], 0), {})  # every profile did all of it: nothing is said
+        self.assertEqual(rl.profiles_rec(20, 12, [], 3), {"idleProfiles": 3, "profileCount": 20, "profilesMeasured": 12})
 
-    def test_it_stands_in_the_result_line_before_the_solids(self):
+    def test_it_stands_in_the_result_record(self):
         old = (0, 9, 0, 4, 0, 2)
-        got = rl.feature_result("Pocket", "pd_pocket", -3.0, region=[(8, 9, 1, 2, 0, 2)], old_box=old, cut=True, faces=["+z at z 2"], solids=1, solids_was=1,
-                                profiles=rl.profiles_text(1, 1, [50], 0))
-        self.assertTrue(got.endswith("It opens on +z at z 2. 1 of 1 profile cut in part (50% of the volume that its area gives over the same depth). The body is 1 solid (was 1)."), got)
+        got = rl.feature_result("pd_pocket", -3.0, region=[(8, 9, 1, 2, 0, 2)], old_box=old, cut=True, faces=["+z at z 2"], solids=1, solids_was=1,
+                                profiles=rl.profiles_rec(1, 1, [50], 0))
+        self.assertEqual((got["partialProfilePercent"], got["profileCount"], got["solidsWas"]), ([50.0], 1, 1))
 
     def test_measured_by_the_profile_code_for_one_profile_and_for_several(self):
         got = child(FAKES + """
@@ -524,7 +524,7 @@ class PartialCut(unittest.TestCase):
             pc.profile_faces = lambda f: got if len(got) > 1 else []
             pc.one_profile = lambda f: got if len(got) == 1 else []
             rec = {}
-            return [pc.profile_results(feat, reg, old, 0.01, cut=cut, rec=rec), rec, pc._profiles_line({"profiles": rec}, cut)]
+            return [pc.profile_results(feat, reg, old, 0.01, cut=cut, rec=rec), rec, pc._profiles_rec({"profiles": rec})]
         out["onePart"] = run([Face(4.0, 5.0, 2.0)])                       # 5 of 8 mm³
         out["oneFull"] = run([Face(4.0, 8.0, 2.0)])
         out["two"] = run([Face(4.0, 6.0, 2.0), Face(4.0, 2.0, 2.0)])     # 75% and 25% of each one's 8 mm³
@@ -535,13 +535,13 @@ class PartialCut(unittest.TestCase):
         field, rec, line = got["onePart"]
         self.assertEqual(field, {})  # the profiles field stays for a sketch of several profiles
         self.assertEqual((rec["n"], rec["part"], rec["none"]), (1, [62.5], 0))
-        self.assertEqual(line, "1 of 1 profile cut in part (62.5% of the volume that its area gives over the same depth).")
-        self.assertEqual(got["oneFull"][2], "")
+        self.assertEqual(line, {"partialProfilePercent": [62.5], "profileCount": 1})
+        self.assertEqual(got["oneFull"][2], {})
         field, rec, line = got["two"]
         self.assertIn("2 profiles", field["profiles"])
-        self.assertEqual(line, "2 of 2 profiles cut in part (75% and 25% of the volume that each area gives over the same depth).")
-        self.assertEqual(got["none"][2], "1 of 2 profiles cut nothing.")
-        self.assertEqual(got["pad"][2], "1 of 1 profile added in part (50% of the volume that its area gives over the same depth).")
+        self.assertEqual(line, {"partialProfilePercent": [75.0, 25.0], "profileCount": 2})
+        self.assertEqual(got["none"][2], {"idleProfiles": 1, "profileCount": 2})
+        self.assertEqual(got["pad"][2], {"partialProfilePercent": [50.0], "profileCount": 1})
 
 
 # ---- F9: removal calls written from the state ------------------------------------------------

@@ -33,83 +33,71 @@ class Pure(unittest.TestCase):
         self.assertEqual([rl.num(x) for x in (6000, 0.02, -0.0, 12.345, 1234567.5, -196.35)], ["6000", "0.02", "0", "12.35", "1234567.5", "-196.35"])
         self.assertEqual((rl.signed(5), rl.signed(-5), rl.signed(0)), ("+5", "-5", "0"))
         self.assertEqual((rl.span(0, 60), rl.span(30, 30.0005)), ("0..60", "30"))
+        self.assertEqual(rl.box_rec(OLD), {"x": [0.0, 60.0], "y": [0.0, 30.0], "z": [0.0, 5.0]})
 
     def test_against_inside_and_past_on_each_axis(self):
         # 27 Nov QA (F1): an axis that is inside says the distance to each side
-        self.assertEqual(rl.against((10, 20, 5, 6, 1, 2), OLD), "x inside (10 from -x, 40 from +x); y inside (5 from -y, 24 from +y); z inside (1 from -z, 3 from +z)")
+        self.assertEqual(rl.against_rec((10, 20, 5, 6, 1, 2), OLD), {"x": {"inside": {"-x": 10.0, "+x": 40.0}}, "y": {"inside": {"-y": 5.0, "+y": 24.0}},
+                                                                    "z": {"inside": {"-z": 1.0, "+z": 3.0}}})
         for i, ax in enumerate("xyz"):
             lo = list(OLD)
             lo[2 * i] -= 7
-            self.assertIn(f"{ax} past -{ax} by 7", rl.against(tuple(lo), OLD))
+            self.assertEqual(rl.against_rec(tuple(lo), OLD)[ax], {"past": {f"-{ax}": 7.0}})
             hi = list(OLD)
             hi[2 * i + 1] += 3.5
-            self.assertIn(f"{ax} past +{ax} by 3.5", rl.against(tuple(hi), OLD))
-        both = rl.against((0, 60, 0, 30, -20, 20), OLD)
-        self.assertEqual(both, "x inside (0 from -x, 0 from +x); y inside (0 from -y, 0 from +y); z past -z by 20 and past +z by 15")
-        self.assertTrue(rl.against((0, 60.0004, 0, 30, 0, 5), OLD).startswith("x inside (0 from -x, 0 from +x); "))  # the equality tolerance
+            self.assertEqual(rl.against_rec(tuple(hi), OLD)[ax], {"past": {f"+{ax}": 3.5}})
+        both = rl.against_rec((0, 60, 0, 30, -20, 20), OLD)
+        self.assertEqual(both["x"], {"inside": {"-x": 0.0, "+x": 0.0}})
+        self.assertEqual(both["z"], {"past": {"-z": 20.0, "+z": 15.0}})
+        self.assertEqual(rl.against_rec((0, 60.0004, 0, 30, 0, 5), OLD)["x"], {"inside": {"-x": 0.0, "+x": 0.0}})  # the equality tolerance
 
-    def test_contact_words(self):
-        self.assertEqual(rl.touch_text(["+z at z 5", "-x at x 0"], 0, None, True), "It touches the body on +z at z 5 and -x at x 0.")
-        self.assertEqual(rl.touch_text(["+z at z 5"], 3, None, True), "It touches the body on +z at z 5. 3 faces of the new material were not looked at.")
-        self.assertEqual(rl.touch_text([], 0, 12.5, False), "It touches the body nowhere (nearest gap 12.5 mm).")
-        self.assertEqual(rl.touch_text([], 0, None, False), "It touches the body nowhere.")
-        self.assertEqual(rl.touch_text([], 0, 0.0, True), "It touches the body but shares no face with it.")
-        self.assertEqual(rl.touch_text([], 0, None, None), "")
-        self.assertEqual(rl.opens_text(["+z at z 10"], 0), "It opens on +z at z 10.")
-        self.assertEqual(rl.opens_text([], 0), "It opens on no face of the body: it is closed inside it.")
-        self.assertEqual(rl.opens_text([], 0, looked=False), "")
-
-    def test_solids(self):
-        self.assertEqual(rl.solids_text(2, 1), "The body is 2 solids (was 1).")
-        self.assertEqual(rl.solids_text(1, 1), "The body is 1 solid (was 1).")
-        self.assertEqual(rl.solids_text(None, 1), "")
+    def test_contact_records(self):
+        self.assertEqual(rl.touch_rec(["+z at z 5", "-x at x 0"], 0, None, True), {"touching": True, "faces": ["+z at z 5", "-x at x 0"]})
+        self.assertEqual(rl.touch_rec(["+z at z 5"], 3, None, True), {"touching": True, "faces": ["+z at z 5"], "facesNotLooked": 3})
+        self.assertEqual(rl.touch_rec([], 0, 12.5, False), {"touching": False, "gap": 12.5})
+        self.assertEqual(rl.touch_rec([], 0, None, False), {"touching": False})
+        self.assertEqual(rl.touch_rec([], 0, 0.0, True), {"touching": True, "faces": []})
+        self.assertEqual(rl.touch_rec([], 0, None, None), {})
 
     def test_a_pad_that_touches_nowhere_and_makes_two_solids(self):
-        got = rl.feature_result("Pad 2", "pd_pad", 6000, region=[(-30, 0, 30, 35, 5, 45)], old_box=OLD, faces=[], gap=12.5, touching=False, solids=2, solids_was=1)
-        self.assertEqual(got, "Pad 2 added material, volume change +6000 mm³. The new material is x -30..0, y 30..35, z 5..45. "
-                              "The body before is x 0..60, y 0..30, z 0..5. Against the body before: x past -x by 30; y past +y by 5; z past +z by 40. "
-                              "It touches the body nowhere (nearest gap 12.5 mm). The body is 2 solids (was 1).")
+        got = rl.feature_result("pd_pad", 6000, region=[(-30, 0, 30, 35, 5, 45)], old_box=OLD, faces=[], gap=12.5, touching=False, solids=2, solids_was=1)
+        self.assertEqual(got, {"material": "added", "bodyBefore": {"x": [0.0, 60.0], "y": [0.0, 30.0], "z": [0.0, 5.0]},
+                               "againstBefore": {"x": {"past": {"-x": 30.0}}, "y": {"past": {"+y": 5.0}}, "z": {"past": {"+z": 40.0}}},
+                               "touches": {"touching": False, "gap": 12.5}, "solidsWas": 1})
 
     def test_a_pad_on_top(self):
-        got = rl.feature_result("Pad", "pd_pad", 9000, region=[(0, 60, 0, 30, 5, 10)], old_box=OLD, faces=["+z at z 5"], touching=True, solids=1, solids_was=1)
-        self.assertIn("It touches the body on +z at z 5. The body is 1 solid (was 1).", got)
-        self.assertIn("x inside (0 from -x, 0 from +x); y inside (0 from -y, 0 from +y); z past +z by 5", got)
+        got = rl.feature_result("pd_pad", 9000, region=[(0, 60, 0, 30, 5, 10)], old_box=OLD, faces=["+z at z 5"], touching=True, solids=1, solids_was=1)
+        self.assertEqual(got["touches"], {"touching": True, "faces": ["+z at z 5"]})
+        self.assertEqual(got["againstBefore"], {"x": {"inside": {"-x": 0.0, "+x": 0.0}}, "y": {"inside": {"-y": 0.0, "+y": 0.0}}, "z": {"past": {"+z": 5.0}}})
 
     def test_the_first_feature(self):
-        got = rl.feature_result("Pad", "pd_pad", 9000, body_box=OLD, solids=1)
-        self.assertEqual(got, "Pad added material, volume change +9000 mm³. The body is 1 solid, x 0..60, y 0..30, z 0..5.")
+        # the body's box, volume and solids are the answer's own keys: only the material is left
+        self.assertEqual(rl.feature_result("pd_pad", 9000), {"material": "added"})
 
     def test_a_cut_keeps_opens_on_and_says_each_piece(self):
         pieces = [(12.5, 15, -2.5, 0, -20, 0), (-15, -12.5, -2.5, 0, -20, 0)]
-        got = rl.feature_result("Pocket", "pd_pocket", -196.35, region=pieces, old_box=(-30, 30, -15, 15, -20, 20), cut=True,
+        got = rl.feature_result("pd_pocket", -196.35, region=pieces, old_box=(-30, 30, -15, 15, -20, 20), cut=True,
                                 faces=["+y at y 0", "-z at z -20"], solids=1, solids_was=1)
-        self.assertIn("Pocket removed material, volume change -196.35 mm³.", got)
-        self.assertIn("The removed material is in 2 pieces: x 12.5..15, y -2.5..0, z -20..0; x -15..-12.5, y -2.5..0, z -20..0.", got)
-        self.assertIn("It opens on +y at y 0 and -z at z -20.", got)
-        more = rl.feature_result("Pocket", "pd_pocket", -1, region=pieces[:1], region_more=3, old_box=OLD, cut=True, faces=[], solids=1, solids_was=1)
-        self.assertIn("in 4 pieces: x 12.5..15, y -2.5..0, z -20..0; 3 more not shown.", more)
+        self.assertEqual(got["material"], "removed")
+        self.assertEqual(got["pieces"], [{"x": [12.5, 15.0], "y": [-2.5, 0.0], "z": [-20.0, 0.0]}, {"x": [-15.0, -12.5], "y": [-2.5, 0.0], "z": [-20.0, 0.0]}])
+        self.assertNotIn("touches", got)
+        self.assertNotIn("opens", got)  # the answer's opens lists the faces
+        more = rl.feature_result("pd_pocket", -1, region=pieces[:1], region_more=3, old_box=OLD, cut=True, faces=[], faces_more=8, solids=1, solids_was=1)
+        self.assertEqual((more["piecesNotShown"], more["opensNotLooked"], len(more["pieces"])), (3, 8, 1))
 
     def test_what_was_not_measured_is_left_out(self):
-        self.assertEqual(rl.feature_result("Pad", "pd_pad", None), "Pad added material.")
-        got = rl.feature_result("Pad", "pd_pad", 5, old_box=OLD, body_box=OLD, note="Not worked out: the body has more than 2000 faces.", solids=1, solids_was=1)
-        self.assertIn("The body before is x 0..60", got)
-        self.assertIn("Not worked out", got)
-        self.assertEqual(rl.feature_head("Cut", "pd_pocket", 0.001), "Cut: volume change 0 mm³.")
+        self.assertEqual(rl.feature_result("pd_pad", None), {"material": "added"})
+        self.assertEqual(rl.feature_result("pd_cut", None), {})
+        got = rl.feature_result("pd_pad", 5, old_box=OLD, solids=1, solids_was=1)
+        self.assertEqual(got, {"material": "added", "bodyBefore": rl.box_rec(OLD), "solidsWas": 1})
+        self.assertEqual(rl.feature_result("pd_pocket", 0.001), {})  # a volume change that rounds to 0 has no material word
+        self.assertEqual(rl.material("pd_pocket", -0.006), "removed")
 
-    def test_a_fillet_says_its_edges_and_its_radius(self):
-        got = rl.dressup_result("Fillet", "pd_fillet", -214.6, 4, "radius 5 mm", ["Edge1: line along z, 10 mm, mid [-40, -30, 5], outside"], 1, 1)
-        self.assertEqual(got, "Fillet: FreeCAD was given 4 edges, radius 5 mm, volume change -214.6 mm³. Edges: Edge1: line along z, 10 mm, mid [-40, -30, 5], outside. The body is 1 solid (was 1).")
-        self.assertIn("Chamfer: FreeCAD was given 1 edge, sizes 2 and 3 mm", rl.dressup_result("Chamfer", "pd_chamfer", 5, 1, "sizes 2 and 3 mm", [], 1, 1))
-
-    def test_sketch_new_says_the_normal_range_and_the_face(self):
-        axes = "x runs +X; y runs +Y; the normal points +Z. [0, 0] is at world (0, 0, 0)."
-        got = rl.sketch_new_result("HoleSketch", "XY", axes, ((-40, 40), (-30, 30), (0, 10)))
-        self.assertEqual(got, f"Sketch HoleSketch is on XY. {axes} The body spans sketch x -40..40, y -30..30, and along the normal 0..10 "
-                              "(0 is the sketch plane; + is the way the normal points).")
-        face = rl.sketch_new_result("Top", "face at [30, 15, 5]", axes, ((-30, 60), (0, 35), (-5, 0)), ((0, 60), (0, 30), (0, 0)))
-        self.assertIn("along the normal -5..0", face)
-        self.assertTrue(face.endswith("The face spans sketch x 0..60, y 0..30."))
-        self.assertIn("The body has no solid yet.", rl.sketch_new_result("A", "XY", axes))
+    def test_a_dress_up_says_edges_given_and_edges_changed(self):
+        edges = [{"edge": "Edge1", "kind": "line", "along": "z", "length": 10.0, "mid": [-40.0, -30.0, 5.0], "side": "outside"}]
+        got = rl.dressup_result(4, {"size": 5.0}, edges, 1, 1, changed=4)
+        self.assertEqual(got, {"edgesGiven": 4, "edgesChanged": 4, "size": 5.0, "edgesNotShown": 3, "solidsWas": 1})
+        self.assertEqual(rl.dressup_result(1, {"size": 2.0, "size2": 3.0}), {"edgesGiven": 1, "size": 2.0, "size2": 3.0})
 
     def test_frames_with_x_running_minus_x(self):
         # A sketch on the +y end face of a plate (y = 30): x runs -X, y runs up, the normal is +Y.
@@ -119,48 +107,51 @@ class Pure(unittest.TestCase):
 
     def test_sketch_add_shapes(self):
         frame = ((0, 30, 0), (-1, 0, 0), (0, 0, 1), (0, 1, 0))
-        rect = rl.shape_text("rectangle", [0, 1, 2, 3], (0, 30), (5, 45), rl.world_box(frame, (0, 30), (5, 45)))
-        self.assertEqual(rect, "rectangle, ids 0-3: sketch x 0..30, y 5..45; world x -30..0, y 30, z 5..45.")
-        circle = rl.shape_text("circle", [4], (12.5, 17.5), (-2.5, 2.5), circle=((15, 0), 2.5))
-        self.assertEqual(circle, "circle, id 4: centre (15, 0), radius 2.5; sketch x 12.5..17.5, y -2.5..2.5.")
-        arc = rl.shape_text("arc", [5], (0, 10), (0, 10), arc=((10, 0), (7.07, 7.07), (0, 10)))
-        self.assertIn("start (10, 0), middle (7.07, 7.07), end (0, 10)", arc)
-        self.assertEqual(rl.sketch_add_result([rect], 1, 1, 0), rect + " The sketch has 1 wire, 1 closed, 0 open ends.")
-        self.assertEqual(rl.sketch_add_result([rect], None, None, None), rect)
-        self.assertEqual(rl.id_text([0, 1, 2, 3]), "ids 0-3")
-        self.assertEqual(rl.id_text([0, 2, 5]), "ids 0, 2 and 5")
+        rect = rl.shape_rec((0, 30), (5, 45), rl.world_box(frame, (0, 30), (5, 45)))
+        self.assertEqual(rect, {"sketchExtent": {"x": [0.0, 30.0], "y": [5.0, 45.0]}, "worldBox": {"x": [-30.0, 0.0], "y": [30.0, 30.0], "z": [5.0, 45.0]}})
+        circle = rl.shape_rec((12.5, 17.5), (-2.5, 2.5), circle=((15, 0), 2.5))
+        self.assertEqual(circle["circle"], {"center": [15.0, 0.0], "radius": 2.5})
+        arc = rl.shape_rec((0, 10), (0, 10), arc=((10, 0), (7.07, 7.07), (0, 10)))
+        self.assertEqual(arc["arc"], {"start": [10.0, 0.0], "middle": [7.07, 7.07], "end": [0.0, 10.0]})
+        self.assertEqual(rl.shape_rec(line=((0, 0), (3, 4)))["line"], {"from": [0.0, 0.0], "to": [3.0, 4.0]})
+        self.assertEqual(rl.sketch_add_result([rect], 0), {"shapes": [rect], "openEnds": 0})
+        self.assertEqual(rl.sketch_add_result([rect], None), {"shapes": [rect]})
 
     def test_sketch_constrain_says_a_big_and_a_small_move(self):
-        moves = [("the end of arc 0 and the start of line 2", [("the end of arc 0", 40.0)]),
-                 ("the end of arc 1 and the start of line 3", [("the start of line 3", 0.02)])]
-        got = rl.constraint_result(["#4 coincident: the end of arc 0 and the start of line 2"], 14, 6, moves, ((-22.97, 185.29), (-20.35, 19.93)))
-        self.assertEqual(got, "Added #4 coincident: the end of arc 0 and the start of line 2. Degrees of freedom: 14 before, 6 after. "
-                              "The join of the end of arc 0 and the start of line 2 moved the end of arc 0 by 40 mm. "
-                              "The join of the end of arc 1 and the start of line 3 moved the start of line 3 by 0.02 mm. "
-                              "After the solve the sketch's shapes span sketch x -22.97..185.29, y -20.35..19.93.")
-        self.assertNotIn("moved", rl.constraint_result(["#1 horizontal: line 0"], 5, 4))
-        self.assertIn("2 more joins not shown.", rl.constraint_result(["x"], 1, 0, moves[:1], None, 2))
+        con = {"id": 4, "type": "Coincident", "refs": [[0, 2], [2, 1]]}
+        moves = [{"join": [[0, 2], [2, 1]], "moved": [{"ref": [0, 2], "mm": 40.0}]}, {"join": [[1, 2], [3, 1]], "moved": [{"ref": [3, 1], "mm": 0.02}]}]
+        got = rl.constraint_result([con], 14, moves, ((-22.97, 185.29), (-20.35, 19.93)))
+        self.assertEqual(got, {"constraints": [con], "dofBefore": 14, "moved": moves, "sketchExtent": {"x": [-22.97, 185.29], "y": [-20.35, 19.93]}})
+        self.assertNotIn("moved", rl.constraint_result([con], 5))
+        self.assertEqual(rl.constraint_result([con], None, moves[:1], None, 2)["joinsNotShown"], 2)
 
     def test_body_check(self):
-        got = rl.body_check_result("Bracket", 2, "2 separate solids that do not touch (nearest gap 12.5 mm)", True, True, (0, 60, 0, 30, 0, 40), 14053.65)
-        self.assertEqual(got, "Bracket is 2 separate solids that do not touch (nearest gap 12.5 mm); valid, closed; box x 0..60, y 0..30, z 0..40; volume 14053.65 mm³.")
-        self.assertEqual(rl.body_check_result("B", 1, None, False, True, None, None), "B is 1 solid; not valid, closed.")
+        self.assertEqual(rl.body_check_result(12.5), {"nearestGap": 12.5, "solidsTouch": False})
+        self.assertEqual(rl.body_check_result(0.0), {"nearestGap": 0.0, "solidsTouch": True})
+        self.assertEqual(rl.body_check_result(None), {})  # one solid: valid, closed, solids, volume, checkGeometry are the answer's keys
 
-    def test_fast_lines_keep_the_order(self):
-        rows = [("calls.0", "pd_pad", {"result": "A."}), ("calls.1", "get", {"x": 1}), ("calls.2", "pd_pocket", {"result": "B."})]
-        self.assertEqual(rl.fast_lines(rows), ["calls.0 pd_pad: A.", "calls.2 pd_pocket: B."])
+    def test_no_sentence_in_a_record(self):
+        said = [rl.feature_result("pd_pad", 5, region=[(0, 1, 0, 1, 0, 1)], old_box=OLD, faces=[], gap=1, touching=False, solids=2, solids_was=1),
+                rl.feature_result("pd_pocket", -5, region=[(0, 1, 0, 1, 0, 1)], old_box=OLD, cut=True, faces=[], solids=1, solids_was=1),
+                rl.dressup_result(2, {"size": 1.0}, [{"edge": "Edge1"}], 1, 1),
+                rl.sketch_add_result([rl.shape_rec(arc=((0, 0), (1, 1), (2, 2)))], 2),
+                rl.constraint_result([{"id": 0, "type": "Horizontal", "refs": [[0, 0]]}], 3, [], ((0, 1), (0, 1))),
+                rl.body_check_result(3.0)]
 
-    def test_no_verdict_or_shape_word(self):
-        said = []
-        said.append(rl.feature_result("Pad", "pd_pad", 5, region=[(0, 1, 0, 1, 0, 1)], old_box=OLD, faces=[], gap=1, touching=False, solids=2, solids_was=1))
-        said.append(rl.feature_result("Pocket", "pd_pocket", -5, region=[(0, 1, 0, 1, 0, 1)], old_box=OLD, cut=True, faces=[], solids=1, solids_was=1))
-        said.append(rl.dressup_result("Fillet", "pd_fillet", -1, 2, "radius 1 mm", ["Edge1"], 1, 1))
-        said.append(rl.sketch_new_result("S", "XY", "axes.", ((0, 1), (0, 1), (0, 1)), ((0, 1), (0, 1), (0, 0))))
-        said.append(rl.sketch_add_result([rl.shape_text("arc", [0], (0, 1), (0, 1), arc=((0, 0), (1, 1), (2, 2)))], 1, 0, 2))
-        said.append(rl.constraint_result(["c"], 3, 2, [("a and b", [("a", 1)])], ((0, 1), (0, 1))))
-        said.append(rl.body_check_result("B", 2, "2 separate solids", True, False, OLD, 1))
-        for t in said:
-            self.assertIsNone(BANNED.search(t), t)
+        def strings(x):
+            if isinstance(x, str):
+                yield x
+            elif isinstance(x, dict):
+                for k, v in x.items():
+                    yield k
+                    yield from strings(v)
+            elif isinstance(x, (list, tuple)):
+                for v in x:
+                    yield from strings(v)
+
+        for r in said:
+            for t in strings(r):
+                self.assertIsNone(BANNED.search(t), t)
         # and no such word in any fixed text of the module
         tree = ast.parse(open(os.path.join(ROOT, "agentlink", "resultline.py"), encoding="utf-8").read())
         for n in ast.walk(tree):
@@ -216,9 +207,9 @@ class OnStandIns(unittest.TestCase):
         body = types.SimpleNamespace(Shape=new)
         print(json.dumps(pc.result_line(Feat(old), body, "pd_pad", 9000.0, keep)))
         ''')
-        self.assertEqual(got, "Pad 2 added material, volume change +9000 mm³. The new material is x 0..60, y 0..30, z 5..10. The body before is x 0..60, y 0..30, z 0..5. "
-                              "Against the body before: x inside (0 from -x, 0 from +x); y inside (0 from -y, 0 from +y); z past +z by 5. "
-                              "It touches the body on +z at z 5. The body is 1 solid (was 1).")
+        self.assertEqual(got, {"material": "added", "bodyBefore": {"x": [0.0, 60.0], "y": [0.0, 30.0], "z": [0.0, 5.0]},
+                               "againstBefore": {"x": {"inside": {"-x": 0.0, "+x": 0.0}}, "y": {"inside": {"-y": 0.0, "+y": 0.0}}, "z": {"past": {"+z": 5.0}}},
+                               "touches": {"touching": True, "faces": ["+z at z 5"]}, "solidsWas": 1})
 
     def test_an_add_apart_makes_two_solids_and_says_the_gap(self):
         got = child(FAKES + '''
@@ -227,7 +218,8 @@ class OnStandIns(unittest.TestCase):
         keep = {"old": old, "reg": Shp((0, 10, 40, 50, 20, 45), gap=12.5), "cut": False, "tol": 0.01}
         print(json.dumps(pc.result_line(Feat(old), types.SimpleNamespace(Shape=new), "pd_pad", 500.0, keep)))
         ''')
-        self.assertIn("It touches the body nowhere (nearest gap 12.5 mm). The body is 2 solids (was 1).", got)
+        self.assertEqual(got["touches"], {"touching": False, "gap": 12.5})
+        self.assertEqual(got["solidsWas"], 1)
 
     def test_a_cut_and_the_first_feature_and_a_failed_measure(self):
         got = child(FAKES + '''
@@ -238,19 +230,20 @@ class OnStandIns(unittest.TestCase):
         broken = pc.result_line(Feat(old), types.SimpleNamespace(Shape=None), "pd_pad", 9000.0, {})
         print(json.dumps([a, first, broken]))
         ''')
-        self.assertIn("It opens on +z at z 5 and -z at z 0.", got[0])
-        self.assertEqual(got[1], "Pad 2 added material, volume change +9000 mm³. The body is 1 solid, x 0..60, y 0..30, z 0..5.")
-        self.assertTrue(got[2].startswith("Pad 2 added material"))  # a failed measure never raises
+        self.assertEqual(got[0]["material"], "removed")
+        self.assertNotIn("touches", got[0])
+        self.assertEqual(got[1], {"material": "added"})  # the first feature: the body is the answer's bounds
+        self.assertEqual(got[2]["material"], "added")  # a failed measure never raises
 
     def test_a_fillet_reads_the_radius_from_the_feature(self):
         got = child(FAKES + '''
         old = Shp((0, 60, 0, 30, 0, 5))
         f = Feat(old); f.TypeId = "PartDesign::Fillet"; f.Label = "Fillet"; f.Radius = types.SimpleNamespace(Value=5.0); f.Base = (None, ["Edge1", "Edge2"])
-        print(json.dumps(pc.result_line(f, types.SimpleNamespace(Shape=Shp((0, 60, 0, 30, 0, 5))), "pd_fillet", -12.5, {}, ["2 edges: 2 outside (lose material)", "Edge1: line along z"])))
+        print(json.dumps(pc.result_line(f, types.SimpleNamespace(Shape=Shp((0, 60, 0, 30, 0, 5))), "pd_fillet", -12.5, {}, [{"edge": "Edge1", "kind": "line", "along": "z"}])))
         ''')
-        self.assertEqual(got, "Fillet: FreeCAD was given 2 edges, radius 5 mm, volume change -12.5 mm³. Edges: 2 edges: 2 outside (lose material); Edge1: line along z. The body now is x 0..60, y 0..30, z 0..5. The body is 1 solid (was 1).")
+        self.assertEqual(got, {"edgesGiven": 2, "size": 5.0, "edgesNotShown": 1, "solidsWas": 1, **({"edgesChanged": got["edgesChanged"]} if "edgesChanged" in got else {})})
 
-    def test_the_answer_of_each_kind_starts_with_result(self):
+    def test_the_answer_of_each_kind_has_result_first_and_it_is_a_record(self):
         got = child('''
         import tempfile
         from agentlink.families import sketch, feature
@@ -269,18 +262,21 @@ class OnStandIns(unittest.TestCase):
         out["pd_pad"] = tool(feature, "pd_pad").fn({"body": "Tut", "sketch": "Profile", "length": 5})
         print(json.dumps({k: [list(v)[0], v.get("result"), v.get("axes", "")] for k, v in out.items()}))
         ''')
-        for kind, (first, line, axes) in got.items():
+        for kind, (first, rec, axes) in got.items():
+            if kind == "sketch_new":
+                self.assertNotEqual(first, "result")  # 28 Nov: sketch_new has no result; its facts are keys
+                self.assertIsNone(rec)
+                self.assertEqual(axes, {"x": "+X", "y": "+Y", "normal": "+Z"})
+                continue
             self.assertEqual(first, "result", kind)
-            self.assertIsInstance(line, str, kind)
-            # the axes words are orient.axes_line's own (they name what a pocket does); the rest is the line's
-            self.assertIsNone(BANNED.search(line.replace(axes, "") if axes else line), line)
-        self.assertTrue(got["sketch_add"][1].startswith("rectangle, ids 0-3: construction not given, so construction is false; sketch x"), got["sketch_add"][1])
-        self.assertTrue(got["sketch_constrain"][1].startswith("Added "))
-        self.assertIn("Degrees of freedom:", got["sketch_constrain"][1])
-        self.assertTrue(got["sketch_new"][1].startswith("Sketch S2 is on XY."))
-        self.assertTrue(got["pd_pad"][1].startswith("Pad added material"))
+            self.assertIsInstance(rec, dict, kind)
+        self.assertEqual(len(got["sketch_add"][1]["shapes"]), 1)
+        self.assertEqual(set(got["sketch_add"][1]["shapes"][0]), {"sketchExtent", "worldBox"})
+        self.assertEqual(got["sketch_constrain"][1]["constraints"][0]["type"], "Distance")
+        self.assertIn("dofBefore", got["sketch_constrain"][1])
+        self.assertEqual(got["pd_pad"][1]["material"], "added")
 
-    def test_body_check_starts_with_result(self):
+    def test_body_check_has_result_for_several_solids_only(self):
         from test_stem_findings_more import run_stub
 
         out = run_stub(textwrap.dedent("""
@@ -293,8 +289,7 @@ class OnStandIns(unittest.TestCase):
             r = s.body_check({"body": "Stem"})
             print(json.dumps([list(r)[0], r["result"]]))
         """))
-        self.assertEqual(out[0], "result")
-        self.assertIn("2 separate solids that do not touch (nearest gap 12.5 mm)", out[1])
+        self.assertEqual(out, ["result", {"nearestGap": 12.5, "solidsTouch": False}])
 
 
 class Joins(unittest.TestCase):
@@ -336,10 +331,10 @@ class ThroughTheHub(unittest.TestCase):
         self.assertEqual([list(r["result"])[0] for r in rows if "result" in r["result"]], ["result", "result"])
         self.assertNotIn("result", rows[1]["result"])
 
-    def test_fast_lists_the_result_lines_in_order_and_keeps_its_facts(self):
+    def test_fast_lists_one_record_for_each_call_with_a_result_in_order_and_keeps_its_facts(self):
         body = self.hub()["fast"]["body"]
         self.assertEqual(list(body)[0], "result")
-        self.assertEqual(body["result"], ["calls.0 probe_result: Probe 5 made one object.", "calls.2 probe_result: Probe 7 made one object."])
+        self.assertEqual(body["result"], [{"call": "calls.0", "tool": "probe_result", "volumeChange": 5.0}, {"call": "calls.2", "tool": "probe_result", "volumeChange": 5.0}])
         self.assertIn("fast", body)
         self.assertIn("made", body)
         self.assertNotIn("result", self.hub()["fastNone"]["body"])

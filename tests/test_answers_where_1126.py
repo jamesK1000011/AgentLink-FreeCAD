@@ -197,14 +197,7 @@ print(json.dumps([measure.side_of(V(0, 0, 0), V(1, 0, 0), V(-1, 0, 0), 0.01, Ful
 ''')
         self.assertEqual(got, [None, None, "outside"])
 
-    def test_sides_line(self):
-        got = child('''
-print(json.dumps([pc.sides_line(["outside"] * 4 + ["inside"] * 4), pc.sides_line(["outside"]), pc.sides_line(["inside", None]), pc.sides_line([None, None]), pc.sides_line([])]))
-''')
-        self.assertEqual(got, ["8 edges: 4 outside (lose material), 4 inside (gain material)", "1 edge: 1 outside (lose material)",
-                               "2 edges: 1 inside (gain material), 1 smooth or not known", "", ""])
-
-    def test_edge_words_lead_with_the_count_and_end_with_the_side(self):
+    def test_edge_words_are_records_with_the_side(self):
         got = child('''
 E = lambda p, q: fc.Shape("edge", [V(*p), V(*q)], curve="Line")
 sh = fc.Shape("solid", [])
@@ -215,9 +208,10 @@ plain = pc.edge_words(sh, ["Edge1", "Edge2"])
 pc.edge_sides = lambda shape, names: ["outside", "inside"]
 print(json.dumps({"plain": plain, "sided": pc.edge_words(sh, ["Edge1", "Edge2"])}))
 ''')
-        self.assertEqual(got["plain"], ["Edge1: line along z, 10 mm, mid [0, 0, 5]", "Edge2: line along z, 10 mm, mid [5, 5, 5]"])
-        self.assertEqual(got["sided"], ["2 edges: 1 outside (lose material), 1 inside (gain material)",
-                                        "Edge1: line along z, 10 mm, mid [0, 0, 5], outside", "Edge2: line along z, 10 mm, mid [5, 5, 5], inside"])
+        self.assertEqual(got["plain"], [{"edge": "Edge1", "kind": "line", "along": "z", "length": 10.0, "mid": [0.0, 0.0, 5.0]},
+                                        {"edge": "Edge2", "kind": "line", "along": "z", "length": 10.0, "mid": [5.0, 5.0, 5.0]}])
+        self.assertEqual([e.get("side") for e in got["sided"]], ["outside", "inside"])
+        self.assertEqual(got["sided"][0], {**got["plain"][0], "side": "outside"})
 
     def test_the_outside_filter(self):
         got = child('''
