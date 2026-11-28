@@ -102,6 +102,8 @@ out["ansWhat"] = call("t_fixed", {"what": ["volume"]})
 out["ansFault"] = call("t_fixed", {"what": ["volume"], "errors": True})
 out["ansMissing"] = call("t_fixed", {"what": ["volume", "nosuch"]})
 out["batch"] = call("batch", {"calls": [{"tool": "t_fixed", "what": "faces"}, {"tool": "t_fixed", "facts": {"$from": 0, "$at": "box.0"}}]})
+out["batchHint"] = call("batch", {"calls": [{"tool": "tool_find", "card": "doc_save_all", "what": ["does", "hint"]}]})
+out["noHintAsked"] = call("tool_find", {"card": "pd_chamfer", "what": ["does", "hint"]})
 out["listing"] = [srv.tools[n].listing() for n in ("pd_chamfer", "doc_save_all")]
 print(json.dumps(out, default=str))
 '''
@@ -164,6 +166,13 @@ class Cards(unittest.TestCase):
         self.assertTrue(bad["isError"])
         self.assertIn("nosuch is not a card field", bad["body"]["error"]["message"])
         self.assertIn("does", bad["body"]["error"]["message"])
+
+    def test_hint_in_a_batch_row_and_a_field_this_card_has_not(self):
+        row = child()["batchHint"]["body"]["results"][0]["result"]
+        self.assertIn("hint", row["tools"][0])
+        r = child()["noHintAsked"]
+        self.assertFalse(r["isError"], r)
+        self.assertEqual(set(card(r)), {"tool", "does"})
 
     def test_the_list_carries_one_does_line(self):
         ls = child()["listing"]

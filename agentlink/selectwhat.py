@@ -25,6 +25,10 @@ from .protocol import ToolError
 
 KEY = "what"
 ALWAYS = ("tool",)          # a card keeps its tool name
+# Every field a card can have; a name among them is never refused, also
+# where this card has no such field (a tool with no hint).
+CARD_FIELDS = ("tool", "group", "changes", "does", "inputs", "rules", "returns", "hint", "plain", "ready", "fill", "said",
+               "description", "inputSchema", "applies", "fits")
 CARD_KEYS = ("tools", "card", "cards")
 
 
@@ -104,9 +108,9 @@ def cards(body, want):
         seen.update(c)
     if not seen:
         return body
-    bad = [w for w in want if w not in seen]
+    bad = [w for w in want if w not in seen and w not in CARD_FIELDS]
     if bad:
-        raise ToolError("invalid_input", f"what: {', '.join(bad)} is not a card field. The fields: {', '.join(sorted(seen))}.")
+        raise ToolError("invalid_input", f"what: {', '.join(bad)} is not a card field. The fields: {', '.join(sorted(set(seen) | set(CARD_FIELDS) - {"description", "inputSchema"} if any("does" in c for c in every(body)) else seen))}.")
 
     def narrow(b):
         b = dict(b)

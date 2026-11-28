@@ -1555,7 +1555,8 @@ class Server:
                 want = _sel.take(t_w, params["arguments"])
             except ToolError as e:
                 return self.refusal(e.code, e.message)
-        self.want_now = want
+        # A batch row's what (agentlink/tools.py batch) stays for the call it names.
+        self.want_now = want if want is not None else self.__dict__.pop("_want_row", None)
         try:
             result = self._call_core(params)
             if want is not None and isinstance(result, dict) and not result.get("isError"):

@@ -3218,7 +3218,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     _tw = server.tools.get(c["tool"])
                     want_row = _selw.take(_tw, args) if _tw is not None and isinstance(args, dict) else None
                     if want_row is not None:
-                        server.want_now = want_row
+                        server._want_row = want_row
                     r = server.call({"name": c["tool"], "arguments": args})
                     if _prof is not None:
                         _prof.disable()
