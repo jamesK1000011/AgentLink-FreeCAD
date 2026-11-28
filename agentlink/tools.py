@@ -2217,22 +2217,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
 
         def card(t):
             out = {"tool": t.name, "group": t.group, "changes": bool(t.changes)}
-            f = getattr(t, "fields", None)
-            if f:
-                # The card in fields (owner, 27 Nov, decision 3): does, inputs (the
-                # schema, each input's meaning in its description), rules, returns.
-                # hint only at help level 1 and up, or when what names it.
-                from . import helplevel as _hl
-
-                want = getattr(server, "want_now", None) or ()
-                out["does"] = f.get("does", "")
-                out["inputs"] = t.schema
-                for k in ("rules", "returns"):
-                    if f.get(k):
-                        out[k] = list(f[k])
-                if f.get("hint") and (_hl.shown("hint") or "hint" in want):
-                    out["hint"] = list(f["hint"])
-            else:
+            if not getattr(t, "fields", None):
                 out["description"] = t.description
                 out["inputSchema"] = t.schema
             # A ready call, filled from the open document (owner, 22 Nov).
@@ -2251,6 +2236,13 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 said["health"] = health  # the health's advice and a sketch reading's DoF note
             if said:
                 out["said"] = said
+            if getattr(t, "fields", None):
+                # The card as records (agentlink/cards.py): every kind but hints and
+                # refusals, which come when what names them.
+                from . import cards as _cards
+
+                made = {k: v for k, v in out.items() if k not in ("tool", "group", "changes")}
+                return _cards.serve(t, made, getattr(server, "want_now", None))
             return out
 
         names = a.get("card")
@@ -3589,6 +3581,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     for t in ext.tools(session):
         server.add(t)
     ext.install_all(server, session)
+    # The hub tools written in code get their cards as records
+    # (agentlink/data/hubcards.json, agentlink/cards.py; owner, 28 Nov).
+    from . import cards as _cards
+
+    _cards.attach_hub(server.tools)
     # The output folder's quiet clear at start (then at most daily after a call).
     outputs.at_start(session)
     return server

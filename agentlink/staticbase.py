@@ -134,13 +134,20 @@ def listing(server, tools):
     """The tools/list entries, with the STE descriptions when asked for,
     and in the static list the short listed schemas (LISTED_SCHEMAS)."""
     out = [t.listing() for t in tools]
+    carded = {t.name for t in tools if getattr(t, "fields", None)}
     if style() == "ste":
         ste = ste_descriptions()
         for e in out:
-            if e.get("name") in ste:
+            if e.get("name") in ste and e.get("name") not in carded:
                 e["description"] = ste[e["name"]]
             if e.get("name") in LISTED_SCHEMAS and mode() == "static":
                 e["inputSchema"] = copy.deepcopy(LISTED_SCHEMAS[e["name"]])
+                if e.get("name") in carded:
+                    # A tool with a card lists its does line and a bare schema
+                    # (owner, 28 Nov): the meanings are in its card's inputNotes.
+                    from . import cards
+
+                    e["inputSchema"] = cards.bare(e["inputSchema"])
     return out
 
 

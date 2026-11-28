@@ -115,10 +115,8 @@ import re
 
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
-# A card in fields (owner, 27 Nov, decision 3) stands in for description:
-# does (one line), rules, returns and hint (lists of sentences). What each
-# input means is in its inputSchema property's description.
-CARD_FIELDS = {"does": str, "rules": list, "returns": list, "hint": list}
+# A card of records (owner, 28 Nov: agentlink/cards.py) stands in for
+# description: one kind of fact per field, a bare inputSchema.
 OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "pathKeys": list, "writeKeys": list, "reads": dict, "frontReads": dict, "kindInputs": dict, "activity": str,
             "workbench": str, "commands": list, "words": list}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
@@ -162,7 +160,9 @@ def check(doc):
             out.append(f"{name}: an object")
             continue
         if "card" in e:
-            out += check_card(name, e["card"])
+            from . import cards as _cards
+
+            out += _cards.check(name, e["card"], e.get("inputSchema") if isinstance(e.get("inputSchema"), dict) else None)
         for k, t in REQUIRED.items():
             if k == "description" and "card" in e and "description" not in e:
                 continue
@@ -203,41 +203,28 @@ def check(doc):
     return out
 
 
-def check_card(name, c):
-    """What is wrong with an entry's card fields."""
-    if not isinstance(c, dict):
-        return [f"{name}.card: an object of {', '.join(CARD_FIELDS)}"]
-    out = []
-    if not isinstance(c.get("does"), str) or len(c["does"]) < 10:
-        out.append(f"{name}.card.does: one line on what the tool does")
-    for k, t in CARD_FIELDS.items():
-        if k in c and not isinstance(c[k], t):
-            out.append(f"{name}.card.{k}: {t.__name__}")
-        if t is list and isinstance(c.get(k), list) and not all(isinstance(x, str) and x for x in c[k]):
-            out.append(f"{name}.card.{k}: a list of sentences")
-    extra = set(c) - set(CARD_FIELDS)
-    if extra:
-        out.append(f"{name}.card: unknown fields {sorted(extra)}")
-    return out
-
-
 def card_text(e):
-    """All the words of an entry's card, in field order, for the search
-    index and other readers of the words; the card itself is shown in
-    fields, never as this text."""
+    """Every line of an entry's card records (agentlink/cards.py), joined,
+    for the search index and other readers of the words; the card itself
+    is shown as records, never as this text. An entry with no card: its
+    description."""
     if not isinstance(e.get("card"), dict):
         return e.get("description", "")
-    c = e["card"]
-    return " ".join([c.get("does", "")] + list(c.get("rules", [])) + list(c.get("returns", [])) + list(c.get("hint", []))).strip()
+    from . import cards as _cards
+
+    return " ".join(_cards.lines(e["card"])).strip()
 
 
 def card_words(e):
-    """Every word of an entry's card and of its inputs' meanings: what the
-    one-text description held before the split (27 Nov), for readers that
-    search the words (tests, scripts). Never shown as one text."""
+    """Every word of an entry: its card's lines, its own refusals and any
+    input description its schema still has (an add-on's data). For readers
+    that search the words (tests, scripts)."""
+    from . import cards as _cards
+
     props = ((e.get("inputSchema") or {}).get("properties") or {})
     ins = [p.get("description", "") for p in props.values() if isinstance(p, dict) and p.get("description")]
-    return " ".join([card_text(e)] + ins).strip()
+    refs = [r["message"] for r in _cards.refusals(e) if isinstance(r.get("message"), str)]
+    return " ".join([card_text(e)] + ins + refs).strip()
 
 
 def refusing(fn):

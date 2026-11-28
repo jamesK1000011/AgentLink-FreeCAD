@@ -24,6 +24,7 @@ agentlink/approvals.py
 agentlink/around.py
 agentlink/batchrec.py
 agentlink/callshape.py
+agentlink/cards.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/chain.py
@@ -42,6 +43,7 @@ agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
 agentlink/data/guide_words.json
 agentlink/data/guide_words.schema.json
+agentlink/data/hubcards.json
 agentlink/data/nexthint.json
 agentlink/data/nexthint.schema.json
 agentlink/data/readers.json

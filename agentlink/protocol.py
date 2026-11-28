@@ -304,8 +304,8 @@ class Tool:
         # call; None for none. Declared in the tool's data (frontReads).
         self.front_reads = None if front_reads is None else dict(front_reads)
         self.description = description
-        # The card in fields (does, rules, returns, hint), when the tool's
-        # data has them (agentlink/tooldata.py); None: description only.
+        # The card as records (agentlink/cards.py), when the tool's data has
+        # one; None: description only.
         self.fields = None
         self.schema = schema
         self.fn = fn
@@ -364,7 +364,9 @@ class Tool:
         # the name, the schema with each input's meaning, and one does line.
         # The whole card comes from tool_find.
         if self.fields and self.fields.get("does"):
-            return {"name": self.name, "description": self.fields["does"], "inputSchema": self.schema}
+            from . import cards
+
+            return {"name": self.name, "description": self.fields["does"], "inputSchema": cards.bare(self.schema)}
         return {"name": self.name, "description": self.description, "inputSchema": self.schema}
 
 

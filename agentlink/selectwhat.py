@@ -25,10 +25,12 @@ from .protocol import ToolError
 
 KEY = "what"
 ALWAYS = ("tool",)          # a card keeps its tool name
-# Every field a card can have; a name among them is never refused, also
-# where this card has no such field (a tool with no hint).
-CARD_FIELDS = ("tool", "group", "changes", "does", "inputs", "rules", "returns", "hint", "plain", "ready", "fill", "said",
-               "description", "inputSchema", "applies", "fits")
+# Every field a card can have (agentlink/cards.py ORDER, the old card's
+# fields, the words the hub adds); a name among them is never refused,
+# also where this card has no such field (a tool with no hints).
+from .cards import ORDER as _ORDER
+
+CARD_FIELDS = tuple(_ORDER) + ("said", "applies", "fits", "readAs", "description", "inputSchema", "plain", "ready", "fill")
 CARD_KEYS = ("tools", "card", "cards")
 
 
@@ -86,9 +88,31 @@ def answer(body, want):
 
 
 def card(c, want):
+    """One card narrowed: a kind ("inputNotes") or one subject of a kind
+    ("inputNotes.size2", "returns.volume", "links.size2": the links of
+    that input)."""
     if not isinstance(c, dict):
         return c
-    return {k: v for k, v in c.items() if k in want or k in ALWAYS}
+    out = {k: v for k, v in c.items() if k in ALWAYS}
+    for w in want:
+        kind, _, sub = w.partition(".")
+        if kind not in c:
+            continue
+        v = c[kind]
+        if not sub:
+            out[kind] = v
+        elif out.get(kind) is v:
+            continue  # the whole kind is in already
+        elif isinstance(v, dict):
+            if sub in v:
+                part = out.get(kind) if isinstance(out.get(kind), dict) else {}
+                out[kind] = {**part, sub: v[sub]}
+        elif isinstance(v, list):
+            part = list(out.get(kind) or [])
+            part += [x for x in v if isinstance(x, dict) and sub in (x.get("inputs") or []) and x not in part]
+            if part:
+                out[kind] = part
+    return out
 
 
 def cards(body, want):
@@ -115,7 +139,7 @@ def cards(body, want):
         seen.update(c)
     if not seen:
         return body
-    bad = [w for w in want if w not in seen and w not in CARD_FIELDS]
+    bad = [w for w in want if w.split(".", 1)[0] not in seen and w.split(".", 1)[0] not in CARD_FIELDS]
     if bad:
         shown = sorted((set(seen) | set(CARD_FIELDS)) - {"description", "inputSchema"}) if any("does" in c for c in every(body)) else sorted(seen)
         raise ToolError("invalid_input", "what: " + ", ".join(bad) + " is not a card field. The fields: " + ", ".join(shown) + ".")

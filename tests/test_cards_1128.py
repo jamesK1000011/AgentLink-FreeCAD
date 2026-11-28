@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Cards in fields and the hub-level what (owner, 27 Nov: selectable data,
-# decisions 1-12). These tests pin:
-#   - every tool of agentlink/data/tools.json has a card in fields (does,
-#     rules, returns, hint) and no one-text description; the data check
-#     passes;
-#   - tool_find's card gives the fields: does, inputs (the schema, each
-#     input's meaning in it), rules, returns; hint only at help level 1 or
-#     when what names it;
-#   - the tool list carries one does line;
+# Cards as records and the hub-level what (owner, 27-28 Nov: selectable
+# data; agentlink/cards.py). These tests pin:
+#   - every tool of agentlink/data/tools.json has a card of records (one
+#     kind of fact per field) and a bare schema; the data check passes;
+#     the hub tools' cards (data/hubcards.json) name only their own inputs;
+#   - tool_find's card gives every kind but hints and refusals; those come
+#     when what names them (hints also at help level 1); what takes one
+#     subject of a kind (inputNotes.size2);
+#   - the tool list carries one does line and a bare schema;
 #   - what narrows a card, refuses an unknown card field with the names,
 #     narrows an answer, keeps health with a fault, and gives the whole
 #     answer with whatNotFound for a name the answer does not have;
@@ -97,18 +97,23 @@ def call(name, args):
 
 out = {}
 out["card"] = call("tool_find", {"card": "pd_chamfer"})
-out["cardHint"] = call("tool_find", {"card": "doc_save_all", "what": ["does", "hint"]})
-out["cardHintDefault"] = call("tool_find", {"card": "doc_save_all"})
-out["cardWhat"] = call("tool_find", {"card": "pd_chamfer", "what": ["does", "rules"]})
+hint_tool = next(n for n, t in srv.tools.items() if (getattr(t, "fields", None) or {}).get("hints") and getattr(t, "entry", None))
+out["cardHint"] = call("tool_find", {"card": hint_tool, "what": ["does", "hints"]})
+out["cardHintDefault"] = call("tool_find", {"card": hint_tool})
+out["cardRefusals"] = call("tool_find", {"card": "pd_chamfer", "what": ["refusals", "refusalNotes"]})
+out["cardSub"] = call("tool_find", {"card": "pd_chamfer", "what": ["inputNotes.size2", "links.size2"]})
 out["cardBad"] = call("tool_find", {"card": "pd_chamfer", "what": ["nosuch"]})
 out["ansWhat"] = call("t_fixed", {"what": ["volume"]})
 out["ansFault"] = call("t_fixed", {"what": ["volume"], "errors": True})
 out["ansMissing"] = call("t_fixed", {"what": ["volume", "nosuch"]})
 out["batch"] = call("batch", {"calls": [{"tool": "t_fixed", "what": "faces"}, {"tool": "t_fixed", "facts": {"$from": 0, "$at": "box.0"}}]})
-out["batchHint"] = call("batch", {"calls": [{"tool": "tool_find", "card": "doc_save_all", "what": ["does", "hint"]}]})
-out["noHintAsked"] = call("tool_find", {"card": "pd_chamfer", "what": ["does", "hint"]})
+out["batchHint"] = call("batch", {"calls": [{"tool": "tool_find", "card": hint_tool, "what": ["does", "hints"]}]})
+out["noHintAsked"] = call("tool_find", {"card": "pd_chamfer", "what": ["does", "hints"]})
 out["sound"] = call("t_sound", {"what": "volume"})
 out["listing"] = [srv.tools[n].listing() for n in ("pd_chamfer", "doc_save_all")]
+from agentlink import staticbase
+out["hubListing"] = next(e for e in staticbase.listing(srv, [srv.tools["session_state"]]))
+out["hubInputs"] = {n: list(((srv.tools[n].schema or {}).get("properties") or {})) for n in srv.tools}
 print(json.dumps(out, default=str))
 '''
 
@@ -130,58 +135,84 @@ def card(r):
 
 
 class Data(unittest.TestCase):
-    def test_every_entry_has_a_card_in_fields_and_the_check_passes(self):
-        from agentlink import tooldata
+    def test_every_entry_has_a_card_of_records_and_a_bare_schema(self):
+        from agentlink import cards, tooldata
 
         doc = json.load(open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8"))
         self.assertEqual(tooldata.check(doc), [])
         for n, e in doc["entries"].items():
             self.assertNotIn("description", e, n)
-            self.assertTrue(e["card"]["does"], n)
-            self.assertEqual(set(e["card"]) - {"does", "rules", "returns", "hint"}, set(), n)
+            self.assertEqual(cards.check(n, e["card"], e["inputSchema"]), [], n)
 
-    def test_card_text_has_every_field(self):
-        from agentlink.tooldata import card_text
+    def test_hub_cards_name_only_their_own_inputs(self):
+        from agentlink import cards
 
-        e = {"card": {"does": "Do a.", "rules": ["R."], "returns": ["Answer: x."], "hint": ["Then b."]}}
-        self.assertEqual(card_text(e), "Do a. R. Answer: x. Then b.")
-        self.assertEqual(card_text({"description": "Old words."}), "Old words.")
+        child()  # the server builds
+        hub = cards.hub_cards()
+        got = child()["hubInputs"]
+        for n, c in hub.items():
+            self.assertEqual(cards.check(n, c, None), [], n)
+            self.assertTrue(set(c.get("inputNotes", {})) <= set(got[n]), (n, set(c.get("inputNotes", {})) - set(got[n])))
+
+    def test_refusals_are_read_from_the_steps(self):
+        from agentlink import cards
+
+        e = {"steps": [{"refuse": "a: over 0.", "when": "=a.a <= 0"}, {"each": "x", "in": "=[]", "steps": [{"refuse": {"fmt": "x {x}"}, "code": "not_found"}]}]}
+        self.assertEqual(cards.refusals(e), [{"code": "invalid_input", "when": "=a.a <= 0", "message": "a: over 0."},
+                                             {"code": "not_found", "message": "x {x}"}])
+
+    def test_bare_keeps_an_input_named_description(self):
+        from agentlink import cards
+
+        s = {"type": "object", "description": "x", "properties": {"description": {"type": "string", "description": "y"},
+                                                                  "calls": {"type": "array", "items": {"type": "object", "description": "z"}}}}
+        self.assertEqual(cards.bare(s), {"type": "object", "properties": {"description": {"type": "string"}, "calls": {"type": "array", "items": {"type": "object"}}}})
 
 
 class Cards(unittest.TestCase):
-    def test_card_gives_fields_not_one_text(self):
+    def test_card_gives_every_kind_but_hints_and_refusals(self):
         c = card(child()["card"])
-        self.assertEqual(c["does"], "Bevel edges of the body.")
-        self.assertIn("inputs", c)
-        self.assertNotIn("description", c)
-        self.assertNotIn("inputSchema", c)
-        self.assertIn("size: mm (default 1).", c["inputs"]["properties"]["size"]["description"])
-        self.assertTrue(c["rules"] and c["returns"])
+        self.assertEqual(c["does"], json.load(open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8"))["entries"]["pd_chamfer"]["card"]["does"])
+        for k in ("inputs", "inputNotes", "links", "effects", "returns", "examples"):
+            self.assertIn(k, c)
+        for k in ("refusals", "refusalNotes", "hints", "description", "inputSchema", "rules"):
+            self.assertNotIn(k, c)
+        self.assertNotIn("description", json.dumps(c["inputs"]))
 
-    def test_hint_only_when_asked_or_at_level_1(self):
-        self.assertNotIn("hint", card(child()["cardHintDefault"]))
-        self.assertIn("hint", card(child()["cardHint"]))
-        self.assertIn("hint", card(child(1)["cardHintDefault"]))
+    def test_refusals_and_hints_when_asked(self):
+        c = card(child()["cardRefusals"])
+        self.assertEqual(set(c), {"tool", "refusals", "refusalNotes"})
+        self.assertTrue(any("size2 or angle" in r["message"] for r in c["refusals"]))
+        self.assertIn("hints", card(child()["cardHint"]))
+        self.assertIn("hints", card(child(1)["cardHintDefault"]))
+        self.assertNotIn("hints", card(child()["cardHintDefault"]))
 
-    def test_what_narrows_a_card_and_refuses_an_unknown_field(self):
-        c = card(child()["cardWhat"])
-        self.assertEqual(set(c), {"tool", "does", "rules"})
+    def test_what_takes_one_subject(self):
+        c = card(child()["cardSub"])
+        self.assertEqual(set(c), {"tool", "inputNotes", "links"})
+        self.assertEqual(set(c["inputNotes"]), {"size2"})
+        self.assertTrue(all("size2" in L["inputs"] for L in c["links"]))
+
+    def test_what_refuses_an_unknown_kind(self):
         bad = child()["cardBad"]
         self.assertTrue(bad["isError"])
         self.assertIn("nosuch is not a card field", bad["body"]["error"]["message"])
-        self.assertIn("does", bad["body"]["error"]["message"])
 
-    def test_hint_in_a_batch_row_and_a_field_this_card_has_not(self):
+    def test_hints_in_a_batch_row_and_a_kind_this_card_has_not(self):
         row = child()["batchHint"]["body"]["results"][0]["result"]
-        self.assertIn("hint", row["tools"][0])
+        self.assertIn("hints", row["tools"][0])
         r = child()["noHintAsked"]
         self.assertFalse(r["isError"], r)
-        self.assertEqual(set(card(r)), {"tool", "does"})
 
-    def test_the_list_carries_one_does_line(self):
+    def test_the_list_carries_does_and_a_bare_schema(self):
         ls = child()["listing"]
-        self.assertEqual(ls[0]["description"], "Bevel edges of the body.")
-        self.assertIn("properties", ls[0]["inputSchema"])
+        self.assertTrue(ls[0]["description"])
+        self.assertNotIn("description", json.dumps(ls[0]["inputSchema"]))
+        hub = child()["hubListing"]
+        from agentlink import cards
+
+        self.assertEqual(hub["description"], cards.hub_cards()["session_state"]["does"])
+        self.assertNotIn("description", json.dumps(hub["inputSchema"]))
 
 
 class Answers(unittest.TestCase):
