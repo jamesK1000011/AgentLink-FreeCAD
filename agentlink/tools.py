@@ -2216,8 +2216,25 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             return doc_facts[0]
 
         def card(t):
-            out = {"tool": t.name, "group": t.group, "changes": bool(t.changes),
-                   "description": t.description, "inputSchema": t.schema}
+            out = {"tool": t.name, "group": t.group, "changes": bool(t.changes)}
+            f = getattr(t, "fields", None)
+            if f:
+                # The card in fields (owner, 27 Nov, decision 3): does, inputs (the
+                # schema, each input's meaning in its description), rules, returns.
+                # hint only at help level 1 and up, or when what names it.
+                from . import helplevel as _hl
+
+                want = getattr(server, "want_now", None) or ()
+                out["does"] = f.get("does", "")
+                out["inputs"] = t.schema
+                for k in ("rules", "returns"):
+                    if f.get(k):
+                        out[k] = list(f[k])
+                if f.get("hint") and (_hl.shown("hint") or "hint" in want):
+                    out["hint"] = list(f["hint"])
+            else:
+                out["description"] = t.description
+                out["inputSchema"] = t.schema
             # A ready call, filled from the open document (owner, 22 Nov).
             from . import examples as _examples
 
@@ -2309,7 +2326,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     for t in server.tools.values() if not getattr(t, "alias_of", None) and not (only and t.group != only)]
 
             def row(r, why=None):
-                out = {"tool": r["name"], "group": r["group"], "does": first_sentence(r["description"])}
+                _f = getattr(r["tool"], "fields", None)
+                out = {"tool": r["name"], "group": r["group"], "does": _f["does"] if _f and _f.get("does") else first_sentence(r["description"])}
                 if why:
                     out["fits"] = ", ".join(why)
                 if r["name"] in told:
@@ -3180,6 +3198,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
 
                 t_call = time.time()
                 _around.start()
+                want_row = None
                 if miss is None:
                     _t_sc = time.time()
                     _prof = None
@@ -3192,6 +3211,14 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
 
                         _prof = cProfile.Profile()
                         _prof.enable()
+                    # what narrows only the row shown; the stored answer stays whole for
+                    # $from / $at (owner, 27 Nov, decision 10; agentlink/selectwhat.py).
+                    from . import selectwhat as _selw
+
+                    _tw = server.tools.get(c["tool"])
+                    want_row = _selw.take(_tw, args) if _tw is not None and isinstance(args, dict) else None
+                    if want_row is not None:
+                        server.want_now = want_row
                     r = server.call({"name": c["tool"], "arguments": args})
                     if _prof is not None:
                         _prof.disable()
@@ -3225,7 +3252,15 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     hold.note(first + i, c["tool"])
                     body = _hold.held_answer(c["tool"], body)
                 answers[first + i] = {"ok": ok, "tool": c["tool"], "size": len(text), **({"answer": body} if ok else {"error": (body.get("error") or {}).get("message")})}
-                row = {"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": kinded(body.get("error"))})}
+                shown = body
+                if ok and want_row is not None:
+                    from . import selectwhat as _selw2
+
+                    try:
+                        shown = _selw2.apply(c["tool"], body, want_row)
+                    except ToolError as _we:
+                        shown = {**body, "whatError": _we.message}
+                row = {"tool": c.get("tool"), "ok": ok, **({"result": shown} if ok else {"error": kinded(body.get("error"))})}
                 if ok and c.get("to"):
                     # The answer to its own file; the reply keeps where and its shape.
                     try:

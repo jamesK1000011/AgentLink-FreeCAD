@@ -115,6 +115,10 @@ import re
 
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
+# A card in fields (owner, 27 Nov, decision 3) stands in for description:
+# does (one line), rules, returns and hint (lists of sentences). What each
+# input means is in its inputSchema property's description.
+CARD_FIELDS = {"does": str, "rules": list, "returns": list, "hint": list}
 OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "pathKeys": list, "writeKeys": list, "reads": dict, "frontReads": dict, "kindInputs": dict, "activity": str,
             "workbench": str, "commands": list, "words": list}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
@@ -157,7 +161,11 @@ def check(doc):
         if not isinstance(e, dict):
             out.append(f"{name}: an object")
             continue
+        if "card" in e:
+            out += check_card(name, e["card"])
         for k, t in REQUIRED.items():
+            if k == "description" and "card" in e and "description" not in e:
+                continue
             if not isinstance(e.get(k), t):
                 out.append(f"{name}.{k}: required ({t.__name__})")
         for k, t in OPTIONAL.items():
@@ -182,7 +190,7 @@ def check(doc):
                 bad = [x for x in e[k] if not paths.valid_key(x)]
                 if bad:
                     out.append(f"{name}.{k}: dotted field names such as \"texture.file\" or \"profiles.*\", not {bad[:3]}")
-        extra = set(e) - set(REQUIRED) - set(OPTIONAL) - set(RUNNER)
+        extra = set(e) - set(REQUIRED) - set(OPTIONAL) - set(RUNNER) - {"card"}
         if extra:
             out.append(f"{name}: unknown fields {sorted(extra)}")
         s = e.get("inputSchema")
@@ -193,6 +201,43 @@ def check(doc):
         if isinstance(e.get("description"), str) and len(e["description"]) < 20:
             out.append(f"{name}.description: say what it does and when to use it")
     return out
+
+
+def check_card(name, c):
+    """What is wrong with an entry's card fields."""
+    if not isinstance(c, dict):
+        return [f"{name}.card: an object of {', '.join(CARD_FIELDS)}"]
+    out = []
+    if not isinstance(c.get("does"), str) or len(c["does"]) < 10:
+        out.append(f"{name}.card.does: one line on what the tool does")
+    for k, t in CARD_FIELDS.items():
+        if k in c and not isinstance(c[k], t):
+            out.append(f"{name}.card.{k}: {t.__name__}")
+        if t is list and isinstance(c.get(k), list) and not all(isinstance(x, str) and x for x in c[k]):
+            out.append(f"{name}.card.{k}: a list of sentences")
+    extra = set(c) - set(CARD_FIELDS)
+    if extra:
+        out.append(f"{name}.card: unknown fields {sorted(extra)}")
+    return out
+
+
+def card_text(e):
+    """All the words of an entry's card, in field order, for the search
+    index and other readers of the words; the card itself is shown in
+    fields, never as this text."""
+    if not isinstance(e.get("card"), dict):
+        return e.get("description", "")
+    c = e["card"]
+    return " ".join([c.get("does", "")] + list(c.get("rules", [])) + list(c.get("returns", [])) + list(c.get("hint", []))).strip()
+
+
+def card_words(e):
+    """Every word of an entry's card and of its inputs' meanings: what the
+    one-text description held before the split (27 Nov), for readers that
+    search the words (tests, scripts). Never shown as one text."""
+    props = ((e.get("inputSchema") or {}).get("properties") or {})
+    ins = [p.get("description", "") for p in props.values() if isinstance(p, dict) and p.get("description")]
+    return " ".join([card_text(e)] + ins).strip()
 
 
 def refusing(fn):
@@ -271,6 +316,12 @@ def build(folder, group, handlers, who="this add-on"):
             paths.GEOMETRIC.add(k)
         if v.get("pathKeys") or v.get("writeKeys"):
             paths.declare_keys(k, v.get("pathKeys"), v.get("writeKeys"))
-    return [Tool(k, v["description"], v["inputSchema"], refusing(handlers[k]), changes=v["changes"], group=group, reads=v.get("reads"),
-                 activity=v.get("activity"), front_reads=v.get("frontReads"))
+    return [with_card(Tool(k, card_text(v), v["inputSchema"], refusing(handlers[k]), changes=v["changes"], group=group, reads=v.get("reads"),
+                           activity=v.get("activity"), front_reads=v.get("frontReads")), v)
             for k, v in mine.items()]
+
+
+def with_card(t, e):
+    """The tool, with its card fields when its entry has them."""
+    t.fields = dict(e["card"]) if isinstance(e.get("card"), dict) else None
+    return t

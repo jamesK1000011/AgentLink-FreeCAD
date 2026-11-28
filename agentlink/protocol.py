@@ -304,6 +304,9 @@ class Tool:
         # call; None for none. Declared in the tool's data (frontReads).
         self.front_reads = None if front_reads is None else dict(front_reads)
         self.description = description
+        # The card in fields (does, rules, returns, hint), when the tool's
+        # data has them (agentlink/tooldata.py); None: description only.
+        self.fields = None
         self.schema = schema
         self.fn = fn
         # A change runs as one undo step (the session wraps it in a
@@ -357,6 +360,11 @@ class Tool:
         return self
 
     def listing(self):
+        # The list carries only what a call needs (owner, 27 Nov, decision 4):
+        # the name, the schema with each input's meaning, and one does line.
+        # The whole card comes from tool_find.
+        if self.fields and self.fields.get("does"):
+            return {"name": self.name, "description": self.fields["does"], "inputSchema": self.schema}
         return {"name": self.name, "description": self.description, "inputSchema": self.schema}
 
 
@@ -898,7 +906,8 @@ def check_input(schema, args, tool=None):
         if alt is not None:
             args[alt] = args.pop(k)
             read_as.append(f"{k} as {alt}")  # said each time (27 Nov: an input name read as another)
-    unknown = [k for k in args if k not in props]
+    # what is the hub-level selection key (agentlink/selectwhat.py), not a tool's input.
+    unknown = [k for k in args if k not in props and k != "what"]
     if unknown and schema.get("additionalProperties") is False and tool in FORGIVING_READS:
         # A pure read: a field it does not have is ignored and named, not
         # refused. Nothing can go wrong in a read, and a refusal costs the
@@ -1531,9 +1540,31 @@ class Server:
             # (families/pd_common.py sketch_of; decision 4, 23 Nov).
             held = (getattr(s, "filled_now", None), getattr(s, "sketch_now", None), getattr(s, "sketch_before", None))
             s.filled_now, s.sketch_now, s.sketch_before = [], None, None
+        # what: the hub-level selection key (agentlink/selectwhat.py), off
+        # the arguments before the tool sees them; the answer is narrowed after.
+        from . import selectwhat as _sel
+
+        want = None
+        t_w = self.tools.get(params.get("name")) or self.tools.get(plain_name(self, params.get("name")) or "")
+        if t_w is not None and isinstance(params.get("arguments"), dict) and _sel.KEY in params["arguments"]:
+            try:
+                params = {**params, "arguments": dict(params["arguments"])}
+                want = _sel.take(t_w, params["arguments"])
+            except ToolError as e:
+                return self.refusal(e.code, e.message)
+        self.want_now = want
         try:
             result = self._call_core(params)
+            if want is not None and isinstance(result, dict) and not result.get("isError"):
+                try:
+                    body = json.loads(result["content"][0]["text"])
+                    result = {**result, "content": [{"type": "text", "text": compact(_sel.apply(t_w.name, body, want))}] + result["content"][1:]}
+                except ToolError as e:
+                    result = self.refusal(e.code, e.message)
+                except (ValueError, KeyError, IndexError, TypeError):
+                    pass  # not a JSON answer: as it is
         finally:
+            self.want_now = None
             if s is not None:
                 got, sk, before = s.filled_now, s.sketch_now, getattr(s, "sketch_before", None)
                 s.filled_now, s.sketch_now, s.sketch_before = held

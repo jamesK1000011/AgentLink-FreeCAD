@@ -576,12 +576,14 @@ def tool(name, e, helpers):
             REFUSED[0] = (name, getattr(err, "step", None))
             raise
 
-    t = Tool(name, e["description"], e["inputSchema"], call, changes=e["changes"], group=e["group"], reads=e.get("reads"), activity=e.get("activity"),
+    from .tooldata import card_text, with_card
+
+    t = Tool(name, card_text(e), e["inputSchema"], call, changes=e["changes"], group=e["group"], reads=e.get("reads"), activity=e.get("activity"),
              front_reads=e.get("frontReads"))
     # The entry and its family's helpers stay on the tool: a dry reading of its leading checks is made from
     # them (agentlink/needs.py), and from nothing else.
     t.entry, t.helpers = e, helpers
-    return t
+    return with_card(t, e)
 
 
 def tools(group, session, helpers, data=None, family=None):
