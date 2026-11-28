@@ -32,6 +32,7 @@ SERVER = SETUP + '''
     Doc.removeObject = lambda self, n: self.Objects.remove(self.getObject(n))
     from agentlink import tools
     from agentlink.protocol import Tool, ToolError
+    from agentlink import tooldata
     import tempfile
     s = tools.Session(out_dir=tempfile.mkdtemp(prefix="agentlink-1123-"))
     srv = tools.build_server(s, lean=False)
@@ -56,7 +57,7 @@ SERVER = SETUP + '''
     if "sketch_add" not in srv.tools:
         # The sketch family needs FreeCAD's Part: its card, as the data gives it.
         _sa = json.load(open(os.path.join(%r, "agentlink", "data", "tools.json"), encoding="utf-8"))["entries"]["sketch_add"]
-        srv.tools["sketch_add"] = Tool("sketch_add", _sa["description"], _sa["inputSchema"], lambda a: {}, changes=True, group="sketch")
+        srv.tools["sketch_add"] = Tool("sketch_add", tooldata.card_text(_sa), _sa["inputSchema"], lambda a: {}, changes=True, group="sketch")
 ''' % ROOT
 
 

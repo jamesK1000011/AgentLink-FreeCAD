@@ -118,6 +118,12 @@ def support(o):
 '''
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def child(body):
     code = SETUP.replace("ROOT, TESTS", f"{ROOT!r}, {TESTS!r}").replace("MODES_", repr(MODES)) + textwrap.dedent(body)
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
@@ -342,7 +348,7 @@ class SkeletonTools(unittest.TestCase):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]
         for name in ("pd_datum", "part_datum"):
-            d = e[name]["description"]
+            d = _cw(e[name])
             for word in ("refs", "OZX", "Translate", "offset", "AttachmentOffset", "param_bind", "AttachmentOffset.Base.x"):
                 self.assertIn(word, d, (name, word))
             self.assertIn("refs", e[name]["inputSchema"]["properties"])

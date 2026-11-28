@@ -77,10 +77,10 @@ class AppData(unittest.TestCase):
             t = runners.tool(name, e, {})
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
-            self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes and the STE rewrite: tests/_meant.py
             want = _meant.schema(name, b["inputSchema"])  # meant changes: tests/_meant.py SCHEMAS
-            self.assertEqual(t.schema, want, name)
-            self.assertEqual(json.dumps(t.schema), json.dumps(want), name)  # the order of every key too
+            self.assertEqual(_meant.word_gap(t.description, t.schema, _meant.expected_words(name, b["description"], want), want), ([], []), name)  # words: the card and the inputs' meanings (tests/_meant.py)  # meant changes and the STE rewrite: tests/_meant.py
+            self.assertEqual(_meant.bare(t.schema), _meant.bare(want), name)
+            self.assertEqual(json.dumps(_meant.bare(t.schema)), json.dumps(_meant.bare(want)), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
             self.assertEqual(t.reads, b["reads"], name)
             self.assertEqual(t.group, b["group"], name)

@@ -27,6 +27,12 @@ sys.path.insert(0, TESTS)
 from agentlink import ccx_io  # noqa: E402
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def entries():
     with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
         return json.load(f)["entries"]
@@ -111,7 +117,7 @@ class FrontDocument(unittest.TestCase):
         src = open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8").read()
         self.assertIn('(("agentDocument", "frontDocument", "mismatch"), self._front_state),', src)
         self.assertIn("agentDocument, frontDocument and mismatch", src)
-        self.assertIn("rebound: true", entries()["doc_switch"]["description"])
+        self.assertIn("rebound: true", _cw(entries()["doc_switch"]))
 
 
 # ---- finding 9: the solvers' own lines and where ---------------------------------------------
@@ -261,7 +267,7 @@ class CopyKeepsMaterial(unittest.TestCase):
         e = entries()
         for k in ("part_transform", "object_duplicate", "draft_clone"):
             self.assertIn("carry_material(o, [", json.dumps(e[k]["steps"]), k)
-            self.assertIn("keeps the material", e[k]["description"], k)
+            self.assertIn("keeps the material", _cw(e[k]), k)
         self.assertEqual(json.dumps(e["part_transform"]["steps"]).count("carry_material("), 2)   # copy, and mirror / scale
         self.assertEqual(json.dumps(e["object_duplicate"]["steps"]).count("carry_material("), 2)  # simple and full
         fs = json.dumps(e["fea_setup"])

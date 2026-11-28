@@ -38,6 +38,12 @@ sys.path.insert(0, TESTS)
 from agentlink import render  # noqa: E402
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def entries():
     with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
         return json.load(f)["entries"]
@@ -374,7 +380,7 @@ class DeleteInABody(unittest.TestCase):
         text = json.dumps(e["steps"])
         self.assertIn("not holds(p, o)", text)
         self.assertIn("=let_go(objs)", text)
-        self.assertIn("A container that only holds the object is not a user", e["description"])
+        self.assertIn("A container that only holds the object is not a user", _cw(e))
 
 
 # ---- finding 12: object_get "A|B"; object_set values only (rename set 10) -----------------------
@@ -420,7 +426,7 @@ class GetAndSet(unittest.TestCase):
         sch = entries()["object_set"]["inputSchema"]
         self.assertEqual(sch["required"], ["object", "values"])
         self.assertEqual(list(sch["properties"]), ["object", "values"])
-        self.assertNotIn("property and value", entries()["object_set"]["description"])
+        self.assertNotIn("property and value", _cw(entries()["object_set"]))
 
 
 # ---- findings 2, 3: asm_joint gap and near ----------------------------------------------------
@@ -514,7 +520,7 @@ class JointGap(unittest.TestCase):
         # the card said shorter since (bicycle drive, the 900-token bound): the same facts
         for words in ("near: document coordinates", "nearLocal: the part's own frame", "its direction depends on which part moves",
                       "gap: mm between the joined faces after the solve (negative: overlap)", "Not with offset", "at (picked centres)"):
-            self.assertIn(words, e["description"])
+            self.assertIn(words, _cw(e))
 
 
 # ---- finding 9: one material list -------------------------------------------------------------
@@ -541,7 +547,7 @@ class ShortIds(unittest.TestCase):
 
     def test_the_entry_says_which(self):
         e = entries()["material_set"]
-        self.assertIn("The short ids of measure_mass also work", e["description"])
+        self.assertIn("The short ids of measure_mass also work", _cw(e))
         self.assertIn("mapped", e["answer"]["fields"])
         # measure_mass still takes material_set's ids (library ids and names) through card.
         self.assertIn("=card(raw)", json.dumps(entries()["measure_mass"]["steps"]))
@@ -587,7 +593,7 @@ class BomPrinted(unittest.TestCase):
 
     def test_the_card_says_which(self):
         e = entries()["asm_bom"]
-        self.assertIn("massAs", e["description"])
+        self.assertIn("massAs", _cw(e))
         self.assertIn("massNote", e["answer"]["fields"])
 
 

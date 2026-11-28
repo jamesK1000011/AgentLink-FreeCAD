@@ -49,6 +49,12 @@ print(json.dumps([res, eval(probe) if probe else None], default=repr))
 ''' % {"root": ROOT, "here": HERE, "files": HARNESS}
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def run_case(harness, tool, case, args, probe=None):
     """The new entry of tool, called with args on the stand-in prepared as the
     named case; with probe (a Python expression over s, the session), also
@@ -114,7 +120,7 @@ class Set5Geometry(Base):
         r = run_case("datapd", "sketch_edit", "sketcher call 44", {"sketch": "PlateSketch", "mirror": {"geos": [4], "about": "y"}})
         self.assertEqual(r[:2], ["refused", "invalid_input"])
         self.assertIn("mirror.geometry", r[2])
-        d = runners.entries()["sketch_edit"]["description"]
+        d = _cw(runners.entries()["sketch_edit"])
         self.assertNotRegex(d, r"\bgeos?\b")
 
 
@@ -147,8 +153,8 @@ class Set6Reversed(Base):
 
     def test_no_old_word_in_the_cards(self):
         for n in ("sketch_new", "sketch_attach"):
-            self.assertNotRegex(runners.entries()[n]["description"], r"\bflip\b", n)
-        self.assertNotRegex(runners.entries()["asm_joint"]["description"], r"\breverse\b")
+            self.assertNotRegex(_cw(runners.entries()[n]), r"\bflip\b", n)
+        self.assertNotRegex(_cw(runners.entries()["asm_joint"]), r"\breverse\b")
 
 
 
@@ -231,7 +237,7 @@ class ConstraintAndSketchWords(Base):
         self.assertEqual(list(props), ["sketch", "type", "refs", "value", "name"])
         self.assertEqual(e["inputSchema"]["required"], ["type"])
         self.assertIn("tangent", props["refs"]["description"])
-        self.assertIn('Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] } makes line 0 tangent to circle 1.', e["description"])
+        self.assertIn('Example: { "tool": "sketch_constrain", "type": "tangent", "refs": [0, 1] } makes line 0 tangent to circle 1.', _cw(e))
         self.assertNotIn("a", protocol.FIELD_ALIASES.get("sketch_constrain", {}))
 
     def test_a_b_kind_refused_with_the_fields_and_one_constraint(self):

@@ -194,7 +194,7 @@ def _rows():
                     if isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str):
                         out[n.args[0].value] = {"description": text(n.args[1], consts) or "", "group": group}
     for name, e in _json(DATA, "tools.json")["entries"].items():
-        out[name] = {"description": e["description"], "group": e["group"]}
+        out[name] = {"description": tooldata.card_text(e), "group": e["group"]}  # the card's words as the hub gives them (28 Nov)
     return [{"name": k, "about": "", "entry": toolindex.entry(k), **v} for k, v in sorted(out.items()) if k != "export_file"]
 
 

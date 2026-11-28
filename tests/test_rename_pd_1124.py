@@ -50,6 +50,12 @@ def call(tool, args):
 '''
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def run(body):
     code = RUN % (ROOT, HERE) + textwrap.dedent(body)
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
@@ -114,7 +120,7 @@ class PadPocketExtent(unittest.TestCase):
             text = json.dumps(e, ensure_ascii=False)
             self.assertNotIn("upToFace", text.replace("UpToFace", ""), tool)
             self.assertNotIn("a.type", text, tool)
-            self.assertIn("extent:", e["description"], tool)
+            self.assertIn("extent:", _cw(e), tool)
         with open(os.path.join(ROOT, "agentlink", "guides", "feature.md"), encoding="utf-8") as f:
             guide = f.read()
         self.assertIn("- `extent`: `length` (default)", guide)

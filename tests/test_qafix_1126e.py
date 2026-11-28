@@ -82,7 +82,9 @@ class OpenEndsNameNoConstraint(unittest.TestCase):
 
     def test_the_card_says_what_joins_a_line_to_an_arc(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
-            card = json.load(f)["entries"]["sketch_add"]["description"]
+            from agentlink.tooldata import card_words
+
+            card = card_words(json.load(f)["entries"]["sketch_add"])
         self.assertIn("sketch_constrain tangent on two end points [[line, v], [arc, v]] makes them coincident and smooth.", card)
 
 

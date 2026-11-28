@@ -31,7 +31,7 @@ ROOT = os.path.join(HERE, "..")
 sys.path.insert(0, ROOT)
 sys.path.insert(0, HERE)
 
-from agentlink import appliesnow, needs, runners  # noqa: E402
+from agentlink import appliesnow, needs, runners, tooldata  # noqa: E402
 from agentlink.protocol import ToolError  # noqa: E402
 
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
@@ -588,7 +588,7 @@ class Tokens(unittest.TestCase):
 
     def card(self, name):
         e = self.entries[name]
-        return {"name": name, "description": e["description"], "inputSchema": e["inputSchema"]}
+        return {"name": name, "description": tooldata.card_text(e), "inputSchema": e["inputSchema"]}
 
     def coded(self):
         """{name: characters} of the tools written in code (Tool("name", description, schema, …))."""

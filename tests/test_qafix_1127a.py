@@ -51,6 +51,12 @@ def refusal(fn):
 ''' % (ROOT, HERE)
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def child(body):
     r = subprocess.run([sys.executable, "-c", CHILD + textwrap.dedent(body)], capture_output=True, text=True, timeout=120, cwd=HERE)
     if r.returncode != 0:
@@ -146,7 +152,7 @@ class KindInputs(unittest.TestCase):
         sch = schema("sketch_add")
         props, kinds = sch["properties"], sch["properties"]["kind"]["enum"]
         self.assertEqual(sorted(self.TABLE), sorted(kinds))
-        desc = runners.entries()["sketch_add"]["description"]
+        desc = _cw(runners.entries()["sketch_add"])
         for kind, fields in self.TABLE.items():
             said = " ".join(re.findall(r"(?<![\w_])%s \{([^}]*)\}" % re.escape(kind), desc))
             for f in fields:

@@ -14,6 +14,12 @@ from agentlink.protocol import ToolError, check_input  # noqa: E402
 DATA = os.path.join(HERE, "..", "agentlink", "data")
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def tools_json():
     with open(os.path.join(DATA, "tools.json"), encoding="utf-8") as f:
         return json.load(f)["entries"]
@@ -139,7 +145,7 @@ class Placed(unittest.TestCase):
         ext = {"x": [-25.0, 25.0], "y": [-20.0, 20.0]}
         self.assertEqual([ext["x"][0], ext["y"][0]], [-25.0, -20.0])
         tj = tools_json()
-        add, new = tj["sketch_add"]["description"], tj["sketch_new"]["description"]
+        add, new = _cw(tj["sketch_add"]), _cw(tj["sketch_new"])
         self.assertIn('a plate on XY is centred: { "tool": "sketch_add", "kind": "rectangle", "center": [0, 0], "size": [50, 40] }, padded 4.', add)
         self.assertIn('sketch_new { face: { side: "+z" } } answers bodyExtent { x: [-25.0, 25.0], y: [-20.0, 20.0] }.', add)
         self.assertIn("kind rectangle, corner [-25, -20], size [10, 10]", add)

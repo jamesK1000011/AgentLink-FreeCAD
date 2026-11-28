@@ -157,6 +157,16 @@ def coded_files():
     return [os.path.join(PKG, "tools.py")] + sorted(os.path.join(fam, n) for n in os.listdir(fam) if n.endswith(".py"))
 
 
+def _entry_words(e):
+    """The words of a tools.json entry: its description, or since 28 Nov its
+    card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    if "card" not in e:
+        return e["description"]
+    sys.path.insert(0, ROOT)
+    from agentlink.tooldata import card_words
+    return card_words(e)
+
+
 def collect(root=ROOT):
     """{name: {"description", "inputs", "kind", "file"}} for every hub tool."""
     global PKG
@@ -164,7 +174,7 @@ def collect(root=ROOT):
     out = {}
     with open(os.path.join(PKG, "data", "tools.json"), encoding="utf-8") as f:
         for name, e in json.load(f)["entries"].items():
-            out[name] = {"description": e["description"], "inputs": sorted(set(_json_names(e["inputSchema"]))), "kind": "data", "file": "agentlink/data/tools.json"}
+            out[name] = {"description": _entry_words(e), "inputs": sorted(set(_json_names(e["inputSchema"]))), "kind": "data", "file": "agentlink/data/tools.json"}
     env = _env()
     for path in coded_files():
         with open(path, encoding="utf-8") as f:

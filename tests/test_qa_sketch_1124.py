@@ -28,6 +28,12 @@ SETUP = _SETUP + '''
 '''
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def entries():
     with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
         return json.load(f)["entries"]
@@ -263,8 +269,8 @@ class BodyExtent(unittest.TestCase):
         self.assertEqual(new["answer"]["fields"]["faceExtent"], {"when": "=fext", "value": "=fext"})
         self.assertIn("Coordinates are the sketch's", json.dumps(new["card"]["effects"]))  # the constant note is in the card, not in each answer
         self.assertNotIn("note", new["answer"]["fields"])
-        self.assertIn("bodyExtent: the box of the body's solid in the sketch's own frame", new["description"])
-        add = e["sketch_add"]["description"]
+        self.assertIn("bodyExtent", _cw(new))
+        add = _cw(e["sketch_add"])
         self.assertIn("rectangle {center|corner, size}. rounded_rectangle {…, radius}.", add)
         # 27 Nov: the facts about each input are in the schema's own descriptions
         props = e["sketch_add"]["inputSchema"]["properties"]

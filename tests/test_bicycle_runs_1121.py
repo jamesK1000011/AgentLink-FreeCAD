@@ -15,6 +15,12 @@ sys.path.insert(0, TESTS)
 from test_bicycle_1120 import child  # noqa: E402
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 class SweepCheap(unittest.TestCase):
     """Finding 1."""
 
@@ -88,7 +94,7 @@ class SweepCheap(unittest.TestCase):
         for k in ("parts", "skip"):
             self.assertIn(k, e["inputSchema"]["properties"])
         for words in ("Only pairs with motion between them are checked.", "pairsChecked, pairsSkipped"):
-            self.assertIn(words, e["description"])
+            self.assertIn(words, _cw(e))
 
 
 class SideCheck(unittest.TestCase):
@@ -233,9 +239,9 @@ class FeaSolveBounded(unittest.TestCase):
     def test_the_card_and_the_steps(self):
         with open(os.path.join(os.path.dirname(TESTS), "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]["fea_solve"]
-        self.assertIn("one limit for Gmsh and CalculiX together", e["description"])
-        self.assertIn("refuses before meshing", e["description"])
-        self.assertIn("2 elements through the wall", e["description"])
+        self.assertIn("one limit for Gmsh and CalculiX together", _cw(e))
+        self.assertIn("refuses before meshing", _cw(e))
+        self.assertIn("2 elements through the wall", _cw(e))
         self.assertIn("elements through the wall", json.dumps(e["steps"]))
         with open(os.path.join(os.path.dirname(TESTS), "agentlink", "families", "strength.py"), encoding="utf-8") as f:
             src = f.read()

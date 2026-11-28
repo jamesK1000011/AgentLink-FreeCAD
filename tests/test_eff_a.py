@@ -37,6 +37,12 @@ print(json.dumps(_flatten_batches(json.loads(sys.argv[2]))))
 '''
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def flatten(calls):
     r = subprocess.run([sys.executable, "-c", CHILD, ROOT, json.dumps(calls)], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
@@ -55,11 +61,12 @@ class Pictures(unittest.TestCase):
             text = json.dumps(e[name])
             self.assertNotIn("a.get('inline', True)", text, name)
             self.assertIn("a.get('inline', False)", text, name)
-            self.assertIn("inline: true", e[name]["description"], name)
+            self.assertIn("inline: true", _cw(e[name]), name)
 
     def test_window_width(self):
         w = entries()["window_snapshot"]
-        self.assertEqual(w["inputSchema"]["properties"]["width"], {"type": "integer"})
+        # the input's own meaning moved into it on 28 Nov: type and description
+        self.assertEqual({k: v for k, v in w["inputSchema"]["properties"]["width"].items() if k != "description"}, {"type": "integer"})
         steps = json.dumps(w["steps"])
         self.assertIn("width: 16 to 8192 px.", steps)
         self.assertIn("scaled(pix, a.width)", steps)

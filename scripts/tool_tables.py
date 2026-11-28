@@ -28,7 +28,7 @@ def table(entries, detail=False):
         rows = ["| Tool | Group | Runner | What it does |", "|---|---|---|---|"]
         for g, ts in groups(entries).items():
             for name, e in sorted(ts):
-                rows.append(f"| `{name}` | {g} | {e.get('runner', 'code')} | {e['description'].replace('|', '/')} |")
+                rows.append(f"| `{name}` | {g} | {e.get('runner', 'code')} | {tooldata.card_words(e).replace('|', '/')} |")
         return "\n".join(rows)
     rows = ["| Group | Tools (as data) |", "|---|---|"]
     for g, ts in groups(entries).items():

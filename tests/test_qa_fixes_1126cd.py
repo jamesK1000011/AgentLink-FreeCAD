@@ -41,6 +41,12 @@ from test_qa_sketch_1124 import SETUP  # noqa: E402
 from test_qa_sketch_1126 import GEO, STATE  # noqa: E402
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def entries(name="tools.json"):
     with open(os.path.join(ROOT, "agentlink", "data", name), encoding="utf-8") as f:
         return json.load(f)["entries"]
@@ -106,8 +112,8 @@ class HolesCut(unittest.TestCase):
 
     def test_the_card(self):
         e = entries()["pd_hole"]
-        self.assertIn("holes is the number of holes that removed material", e["description"])
-        self.assertIn("profiles names each circle that cut nothing", e["description"])
+        self.assertIn("holes is the number of holes that removed material", _cw(e))
+        self.assertIn("profiles names each circle that cut nothing", _cw(e))
         self.assertIn("holes_cut(spots, out)", json.dumps(e["answer"]))
 
 
@@ -142,7 +148,7 @@ class Vertices(unittest.TestCase):
 
 class Fillet(unittest.TestCase):
     def test_outside_corners_lead_and_the_plain_form_is_said_once(self):
-        d = entries()["pd_fillet"]["description"]
+        d = _cw(entries()["pd_fillet"])
         self.assertIn('{ type: "line", axis: "z", outside: true } is the outside vertical corners.', d)
         self.assertEqual(d.count('{ type: "line", axis: "z" }'), 1)
         self.assertIn("inside corners too", d)

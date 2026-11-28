@@ -34,6 +34,17 @@ LEFT = ["asm_motion.keys", "bim_layers.layers", "fea_native.heat", "fea_native.p
         "pd_multitransform.steps", "pd_shaft.segments", "td_gdt.frame"]
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
+def _cw_text(entry):
+    from agentlink.tooldata import card_text
+    return card_text(entry)
+
+
 def schema(name):
     return runners.tool(name, runners.entries()[name], {}).schema
 
@@ -233,7 +244,9 @@ class Scan(unittest.TestCase):
         self.assertEqual(sorted(_flat_1127b.FLAT), sorted(FLAT))
         for name in FLAT:
             e = runners.entries()[name]
-            self.assertEqual(_flat_1127b.FLAT[name], {"description": e["description"], "inputSchema": e["inputSchema"]}, name)
+            snap = _flat_1127b.FLAT[name]
+            self.assertEqual(_meant.word_gap(_cw_text(e), e["inputSchema"], _meant.words(snap["description"], snap["inputSchema"]), snap["inputSchema"]), ([], []), name)  # the words, as the card and the inputs hold them since 28 Nov
+            self.assertEqual(_meant.bare(snap["inputSchema"]), _meant.bare(e["inputSchema"]), name)
             self.assertIn(name, _meant.FLAT_1127)
 
     def test_each_entry_calls_only_what_its_family_has(self):
@@ -490,7 +503,7 @@ class Texts(unittest.TestCase):
         old = ("items: [{ kind", "pairs: [{", "pairs [{", "properties: [{", "configs: [{", "configs: [")
         bad = []
         for name in FLAT:
-            text = runners.entries()[name]["description"] + json.dumps(runners.entries()[name]["steps"], ensure_ascii=False)
+            text = _cw(runners.entries()[name]) + json.dumps(runners.entries()[name]["steps"], ensure_ascii=False)
             bad += [f"{name}: {w}" for w in old if w in text]
         d = os.path.join(ROOT, "agentlink", "guides")
         for f in sorted(os.listdir(d)):
@@ -503,7 +516,7 @@ class Texts(unittest.TestCase):
         said_ = {"td_cosmetic": "One call adds one figure", "asm_fits": "One call reads one pair", "cam_property_bag": "One call adds one value",
                  "sheet_table": "action add makes each next configuration", "pd_binder": 'or a list of references ["Face3", "Face5"]'}
         for name, words in said_.items():
-            self.assertIn(words, runners.entries()[name]["description"], name)
+            self.assertIn(words, _cw(runners.entries()[name]), name)
 
 
 if __name__ == "__main__":

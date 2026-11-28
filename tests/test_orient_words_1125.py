@@ -29,6 +29,12 @@ X, Y, Z = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
 PLANES = {"XY": (X, Y, Z), "XZ": (X, Z, (0.0, -1.0, 0.0)), "YZ": (Y, Z, X)}
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def fr(x, y, n, o=(0, 0, 0)):
     return {"origin": o, "xAxis": x, "yAxis": y, "normal": n}
 
@@ -144,7 +150,7 @@ class PickedWords(unittest.TestCase):
 class Cards(unittest.TestCase):
     def test_the_plane_table_matches_the_words(self):
         tj = tools_json()
-        new = tj["sketch_new"]["description"]
+        new = _cw(tj["sketch_new"])
         for name, (x, y, n) in PLANES.items():
             self.assertIn(f"{name}: {orient.axis_word(x)}, {orient.axis_word(y)}, {orient.axis_word(n)}.", new)
         for words in ("A pad grows along the normal, and a pocket or a hole cuts against it.", "XZ with offset 15 is at y -15.",
@@ -176,7 +182,7 @@ class Cards(unittest.TestCase):
         self.assertIn("front looks from -Y toward +Y (it shows the -Y side), with Z up. top looks down -Z, with +Y up the screen.", src)
         tj = tools_json()
         for name in ("view_snapshot", "steps_render", "td_view"):
-            self.assertIn("front looks from -Y", tj[name]["description"], name)
+            self.assertIn("front looks from -Y", _cw(tj[name]), name)
 
 
 class NeverSaidBefore(unittest.TestCase):

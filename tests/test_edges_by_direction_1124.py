@@ -33,6 +33,12 @@ def refused(fn, *a):
 ''' % (ROOT, HERE)
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def child(body):
     r = subprocess.run([sys.executable, "-c", CHILD + body], capture_output=True, text=True, timeout=120, cwd=HERE)
     if r.returncode != 0:
@@ -51,15 +57,15 @@ class Cards(unittest.TestCase):
 
     def test_fillet_and_chamfer_show_the_vertical_edges(self):
         for n in ("pd_fillet", "pd_chamfer"):
-            d = self.e[n]["description"]
+            d = _cw(self.e[n])
             self.assertIn("each edge with its direction, length, mid-point and side.", d, n)
-        self.assertIn('{ type: "line", axis: "z" } is every straight edge along z: the vertical edges.', self.e["pd_chamfer"]["description"])
+        self.assertIn('{ type: "line", axis: "z" } is every straight edge along z: the vertical edges.', _cw(self.e["pd_chamfer"]))
         # pd_fillet leads with the outside-only form (26 Nov QA: the plain form also took a lid's inside corners)
-        self.assertIn('Without outside, { type: "line", axis: "z" } is every vertical edge, inside corners too.', self.e["pd_fillet"]["description"])
-        self.assertIn("Add length or inside to keep fewer of them.", self.e["pd_fillet"]["description"])
+        self.assertIn('Without outside, { type: "line", axis: "z" } is every vertical edge, inside corners too.', _cw(self.e["pd_fillet"]))
+        self.assertIn("Add length or inside to keep fewer of them.", _cw(self.e["pd_fillet"]))
 
     def test_pocket_leads_with_where_the_cut_goes(self):
-        d = self.e["pd_pocket"]["description"]
+        d = _cw(self.e["pd_pocket"])
         fact = "The pocket starts on its sketch's plane and goes into the body, against the sketch's normal."
         self.assertTrue(d.startswith("Pocket a closed sketch out of the body. " + fact), d)
         for later in ("sides:", "taper:", "extent:"):
@@ -67,7 +73,7 @@ class Cards(unittest.TestCase):
         self.assertNotIn("It cuts against the normal of the sketch.", d)  # said once, first
 
     def test_hole_leads_with_where_it_drills(self):
-        d = self.e["pd_hole"]["description"]
+        d = _cw(self.e["pd_hole"])
         fact = "Drill holes into the body from the plane of the sketch, against the sketch's normal."
         self.assertTrue(d.startswith(fact), d)
         for later in ("thread:", "counterbore", "depth:", "diameter:"):

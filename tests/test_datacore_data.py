@@ -32,6 +32,12 @@ import _meant  # noqa: E402
 from _datacore_cases import CONVERTED, FILES, KEPT  # noqa: E402
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def _git(*args):
     try:
         r = subprocess.run(["git", "-C", ROOT, *args], capture_output=True, text=True, timeout=30)
@@ -74,9 +80,9 @@ class CoreData(unittest.TestCase):
             t = runners.tool(name, e, {})
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
-            self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes and the STE rewrite: tests/_meant.py
-            self.assertEqual(t.schema, _meant.schema(name, b["inputSchema"]), name)
-            self.assertEqual(json.dumps(t.schema), json.dumps(_meant.schema(name, b["inputSchema"])), name)  # the order of every key too
+            self.assertEqual(_meant.word_gap(t.description, t.schema, _meant.expected_words(name, b["description"], _meant.schema(name, b["inputSchema"])), _meant.schema(name, b["inputSchema"])), ([], []), name)  # words: the card and the inputs' meanings (tests/_meant.py)  # meant changes and the STE rewrite: tests/_meant.py
+            self.assertEqual(_meant.bare(t.schema), _meant.bare(_meant.schema(name, b["inputSchema"])), name)
+            self.assertEqual(json.dumps(_meant.bare(t.schema)), json.dumps(_meant.bare(_meant.schema(name, b["inputSchema"]))), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
             self.assertEqual(t.reads, b["reads"], name)
             self.assertEqual(t.group, b["group"], name)
@@ -88,7 +94,7 @@ class CoreData(unittest.TestCase):
         it is fixed text, so a changed limit must change the entry too."""
         from agentlink import runners, testrun
 
-        d = runners.entries()["addon_test"]["description"]
+        d = _cw(runners.entries()["addon_test"])
         for part in (f"timeout: seconds ({testrun.TIMEOUT:g}, at most {testrun.TIMEOUT_MAX:g})", f"finishes within {testrun.START_WAIT:g} s",
                      f"waiting up to {testrun.STATUS_WAIT:g} s"):
             self.assertIn(part, d)

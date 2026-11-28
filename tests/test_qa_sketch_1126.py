@@ -55,6 +55,12 @@ GEO = SETUP + '''
 '''
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 class Branches(unittest.TestCase):
     def test_lines_that_end_on_a_circle(self):
         # crank, qwen: two lines end where circle 0 passes, at (157.5, 0)
@@ -227,11 +233,11 @@ class Words(unittest.TestCase):
     def test_the_card_and_the_guide_say_round_ends_are_arcs(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]
-        d = e["sketch_add"]["description"]
+        d = _cw(e["sketch_add"])
         self.assertIn("A full circle is a closed wire of its own.", d)
         self.assertNotIn("draw arcs, not full circles", d)  # facts only (27 Nov)
         self.assertIn("sketch_constrain tangent on two end points [[line, v], [arc, v]]", d)
-        self.assertNotIn("readyForFeature", e["sketch_state"]["description"])
+        self.assertNotIn("readyForFeature", _cw(e["sketch_state"]))
         with open(os.path.join(ROOT, "agentlink", "guides", "sketch.md"), encoding="utf-8") as f:
             g = f.read()
         for pair in ("`refs: [[2, 1], [0, 2]]`", "`[[2, 2], [1, 1]]`", "`[[1, 2], [3, 1]]`", "`[[3, 2], [0, 1]]`"):

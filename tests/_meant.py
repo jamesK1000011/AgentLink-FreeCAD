@@ -112,8 +112,59 @@ def _ste():
         with open(os.path.join(root, "scripts", "ste_originals.json"), encoding="utf-8") as f:
             _STE["orig"] = json.load(f)["tools"]
         with open(os.path.join(root, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
-            _STE["now"] = {n: e["description"] for n, e in json.load(f)["entries"].items()}
+            from agentlink.tooldata import card_words
+
+            _STE["now"] = {n: card_words(e) for n, e in json.load(f)["entries"].items()}  # the card and the inputs' meanings: what the one text held
     return _STE
+
+
+def _input_words(schema):
+    return [p["description"] for p in ((schema or {}).get("properties") or {}).values() if isinstance(p, dict) and p.get("description")]
+
+
+def words(description, schema):
+    """The sorted words of a tool's description and of its inputs' own
+    descriptions. Since 28 Nov a tool's words are spread over the card and
+    the inputs (agentlink.tooldata.card_words), so a test compares words,
+    not the one text."""
+    return sorted(" ".join([description or ""] + _input_words(schema)).split())
+
+
+def expected_words(name, old, schema):
+    """words() of the snapshot's tool with its meant changes; the STE
+    rewrite already holds the inputs' words (they come from card_words)."""
+    text = description(name, old)
+    if name not in FLAT_1127 and name in _ste()["now"] and text == _ste()["now"][name]:
+        return sorted(text.split())
+    return words(text, schema)
+
+
+def word_gap(description, schema, expected, old_schema):
+    """([words lost], [words that are new]) of a tool's words against the
+    expected sorted words. A word that is new is allowed only in the meaning
+    of an input that had none in old_schema (the one line per input of 28 Nov
+    is new by design); no other new word, and no lost word, passes."""
+    from collections import Counter
+
+    a, b = Counter(words(description, schema)), Counter(expected)
+    old_props = (old_schema or {}).get("properties") or {}
+    allowed = Counter()
+    for k, p in ((schema or {}).get("properties") or {}).items():
+        if isinstance(p, dict) and p.get("description") and not (old_props.get(k) or {}).get("description"):
+            allowed.update(p["description"].split())
+    return sorted((b - a).elements()), sorted(((a - b) - allowed).elements())
+
+
+def bare(schema):
+    """schema without the descriptions of its own inputs (words() checks
+    those); every other key, in its order, stays."""
+    import copy
+
+    s = copy.deepcopy(schema)
+    for p in (s.get("properties") or {}).values():
+        if isinstance(p, dict):
+            p.pop("description", None)
+    return s
 
 
 # Rename sets of 24 Nov (owner rule R5: a renamed input keeps no alias).

@@ -23,6 +23,12 @@ ROOT = os.path.dirname(TESTS)
 sys.path.insert(0, ROOT)
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def entries():
     with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
         return json.load(f)["entries"]
@@ -414,9 +420,9 @@ class Cards(unittest.TestCase):
         self.assertIn("chain", props["kind"]["enum"])
         for words in ("chain: the belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125)", "PartDesign Sprocket", "Omitted: no turn; a warning names each overlap",
                       "autoFlip: true", "flipWarning", "keep: true finds the offset and turn", "kept, ratio, ratioFrom"):
-            self.assertIn(words, j["description"])
+            self.assertIn(words, _cw(j))
         for words in ("about 60 s", "partial: true", "continueWith", "staticOverlaps", "count only the contacts that the motion makes"):
-            self.assertIn(words, sw["description"])
+            self.assertIn(words, _cw(sw))
 
     def test_echo_lights_the_belt_button_for_a_chain(self):
         from agentlink import echo

@@ -40,8 +40,8 @@ class LiveFindings(unittest.TestCase):
         self.assertLessEqual(len(got["tools"]), 10)
         card = self.ok("tool_groups", {"card": "pd_fillet"})["tools"][0]
         self.assertEqual(card["group"], "feature")
-        self.assertIn("properties", card["inputSchema"])
-        self.assertTrue(card["description"])
+        self.assertIn("properties", card["inputs"])  # card fields since 28 Nov: does, inputs, rules, returns
+        self.assertTrue(card["does"])
         self.assertEqual(self.ok("tool_groups")["listed"], before)
         self.assertEqual(self.ok("tool_groups", {"find": "zzqqxx"})["tools"], [])
         e = self.no("tool_groups", {"card": "pd_filet"})

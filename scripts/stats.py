@@ -217,12 +217,23 @@ def _schema(node):
         return None
 
 
+def _entry_text(e):
+    """The description a tools/list card carries for a data tool: its card's
+    text (28 Nov); its inputs' meanings are in the schema, which the card
+    cost counts as well."""
+    if "card" not in e:
+        return e["description"]
+    sys.path.insert(0, ROOT)
+    from agentlink.tooldata import card_text
+    return card_text(e)
+
+
 def hub_cards():
     """{name: {"desc", "schema" (or None), "schemaChars"}} for every hub tool, read as ste_check.collect reads them."""
     out = {}
     with open(os.path.join(PKG, "data", "tools.json"), encoding="utf-8") as f:
         for name, e in json.load(f)["entries"].items():
-            out[name] = {"desc": e["description"], "schema": e["inputSchema"], "schemaChars": None}
+            out[name] = {"desc": _entry_text(e), "schema": e["inputSchema"], "schemaChars": None}
     ste_check.PKG = PKG
     env = ste_check._env()
     for path in ste_check.coded_files() + [os.path.join(PKG, "ext.py")]:  # ext.py: app_extensions, added by tools.py
@@ -268,7 +279,7 @@ def read_addon(folder):
             continue
         with open(p, encoding="utf-8") as f:
             for name, e in json.load(f).get("entries", {}).items():
-                chars, exact = card(name, e["description"], e["inputSchema"])
+                chars, exact = card(name, _entry_text(e), e["inputSchema"])
                 tools[name] = {"group": e["group"], "chars": chars, "exact": exact}
     for p in _py_files(folder):
         with open(p, encoding="utf-8") as f:

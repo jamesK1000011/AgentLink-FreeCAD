@@ -27,6 +27,12 @@ from test_hubfix2 import in_a_process  # noqa: E402
 TD = TechDrawPaper.BODY
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def src(*parts):
     with open(os.path.join(HERE, *parts), encoding="utf-8") as f:
         return f.read()
@@ -133,7 +139,7 @@ class TechDrawPlacing(unittest.TestCase):
         hatch = json.dumps(e["td_hatch"])
         self.assertIn("native_hatch(v, src, [f for f in faces if f not in flat])", hatch)
         self.assertIn('"hatch": {"when": "=native.get(\'object\')"', hatch)
-        self.assertIn("in the window as FreeCAD's own hatch", e["td_hatch"]["description"])
+        self.assertIn("in the window as FreeCAD's own hatch", _cw(e["td_hatch"]))
         self.assertIn("('textAt', [num(nx, 2), num(ny, 2)])", json.dumps(e["td_dimset"]["steps"]))
         self.assertIn("else mid[0]", json.dumps(e["td_dimset"]["steps"]))
         repair = json.dumps(e["td_dim_repair"])

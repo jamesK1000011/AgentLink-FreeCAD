@@ -26,6 +26,12 @@ V = fc.Vec
 ''' % (ROOT, HERE)
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def child(body):
     r = subprocess.run([sys.executable, "-c", CHILD + body], capture_output=True, text=True, timeout=120, cwd=HERE)
     if r.returncode != 0:
@@ -247,15 +253,16 @@ class Cards(unittest.TestCase):
             self.e = json.load(f)["entries"]
 
     def test_fillet_card_sorts_the_sides(self):
-        d = self.e["pd_fillet"]["description"]
+        d = _cw(self.e["pd_fillet"])
         self.assertNotIn("both are correct", d)
         self.assertIn('{ type: "line", axis: "z", outside: true }', d)
-        self.assertIn("outside: true", self.e["pd_chamfer"]["description"])
+        self.assertIn("outside: true", _cw(self.e["pd_chamfer"]))
 
     def test_shape_query_takes_outside(self):
         sq = self.e["shape_query"]
-        self.assertEqual(sq["inputSchema"]["properties"]["outside"], {"type": "boolean"})
-        self.assertIn("outside: true", sq["description"])
+        # the input's own meaning moved into it on 28 Nov: the schema has type and description now
+        self.assertEqual({k: v for k, v in sq["inputSchema"]["properties"]["outside"].items() if k != "description"}, {"type": "boolean"})
+        self.assertIn("outside: true", _cw(sq))
 
 
 if __name__ == "__main__":

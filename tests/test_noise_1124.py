@@ -45,7 +45,8 @@ class BatchTimes(unittest.TestCase):
 class Cards(unittest.TestCase):
 
     def test_pd_body_new_starts_with_what_a_beginner_needs(self):
-        d = card("pd_body_new")["description"]
+        from agentlink.tooldata import card_words
+        d = card_words(card("pd_body_new"))
         first_two = d.split(". ")[:2]
         self.assertIn("sketch_new", " ".join(first_two))
         self.assertNotIn("pd_binder", " ".join(first_two))

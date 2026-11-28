@@ -39,6 +39,12 @@ BUILD = r'''
 '''
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 class JointOverlaps(unittest.TestCase):
 
     def test_only_pairs_with_the_moved_part_are_cut(self):
@@ -116,9 +122,9 @@ class Cards(unittest.TestCase):
 
         with open(os.path.join(os.path.dirname(TESTS), "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]
-        self.assertIn("otherPairs", e["asm_joint"]["description"])
-        self.assertIn("pointTests", e["asm_check"]["description"])
-        self.assertNotIn("cuts every pair", e["asm_check"]["description"])
+        self.assertIn("otherPairs", _cw(e["asm_joint"]))
+        self.assertIn("pointTests", _cw(e["asm_check"]))
+        self.assertNotIn("cuts every pair", _cw(e["asm_check"]))
 
 
 if __name__ == "__main__":

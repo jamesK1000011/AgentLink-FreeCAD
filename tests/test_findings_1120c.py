@@ -96,6 +96,12 @@ g.__dict__["ObjectToGround"] = fc.doc().getObject("Base")
 '''
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def child(head, body):
     code = head.replace("ROOT, TESTS", f"{ROOT!r}, {TESTS!r}") + textwrap.dedent(body)
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
@@ -184,7 +190,7 @@ class SketchOnLcs(unittest.TestCase):
 
     def test_the_card_says_it(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
-            d = json.load(f)["entries"]["sketch_new"]["description"]
+            d = _cw(json.load(f)["entries"]["sketch_new"])
         self.assertIn('An LCS plane is "LCS.XZ_Plane"; a whole LCS gives its XY plane.', d)
 
 
@@ -238,7 +244,7 @@ class GearOnAPlane(unittest.TestCase):
     def test_the_card_says_it(self):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]["pd_gear"]
-        self.assertIn("AgentLinkTeeth and AgentLinkPitch. asm_joint kind chain reads them.", e["description"])
+        self.assertIn("AgentLinkTeeth and AgentLinkPitch. asm_joint kind chain reads them.", _cw(e))
         self.assertIn("plane", e["inputSchema"]["properties"])
         self.assertIn("rotate", e["inputSchema"]["properties"])
 

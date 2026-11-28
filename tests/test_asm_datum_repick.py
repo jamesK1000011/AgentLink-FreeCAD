@@ -21,6 +21,12 @@ TESTS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TESTS)
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def child(body):
     """body run in a Python of its own after the assembly stand-in is in;
     what it prints last, as JSON."""
@@ -230,7 +236,7 @@ class Card(unittest.TestCase):
         with open(os.path.join(ROOT, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             e = json.load(f)["entries"]["asm_joint"]
         for words in ("Put joints on LCS markers, not on faces that a boolean makes", "queryKept", "re-picked Face12 -> Face15", "two equal faces"):
-            self.assertIn(words, e["description"])
+            self.assertIn(words, _cw(e))
         self.assertIn("a datum (\"LCS\", { datum })", e["inputSchema"]["properties"]["a"]["description"])
 
 
