@@ -23,18 +23,21 @@
       "type": "string"
      },
      "at": {
+      "description": "[x,y,z]: place the new body",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "axis": {
+      "description": "with angle: place the new body",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "angle": {
+      "description": "with axis: place the new body",
       "type": "number"
      },
      "name": {
@@ -158,6 +161,7 @@
     "type": "object",
     "properties": {
      "objects": {
+      "description": "labels of the objects that the level holds",
       "type": "array",
       "items": {
        "type": "string"
@@ -819,9 +823,11 @@
       "description": "The mesh's label; may be left out when there is one."
      },
      "distance": {
+      "description": "mm along the point normals (negative: inward)",
       "type": "number"
      },
      "copy": {
+      "description": "true makes a new mesh (else the tool changes the mesh in place)",
       "type": "boolean"
      },
      "name": {
@@ -990,6 +996,7 @@
     "type": "object",
     "properties": {
      "points": {
+      "description": "points [[x, y(, z)] …] in mm, that the wall goes along",
       "type": "array",
       "items": {
        "type": "array",
@@ -1466,6 +1473,7 @@
       "type": "string"
      },
      "kind": {
+      "description": "one of: window, door",
       "type": "string",
       "enum": [
        "window",
@@ -1607,6 +1615,7 @@
     "type": "object",
     "properties": {
      "kind": {
+      "description": "one of: column, beam, slab, footing",
       "type": "string",
       "enum": [
        "column",
@@ -1616,24 +1625,28 @@
       ]
      },
      "at": {
+      "description": "kind column: the centre of its foot",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "from": {
+      "description": "kind beam: with to, the centre line",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "to": {
+      "description": "kind beam: with from, the centre line",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "points": {
+      "description": "kind slab or footing: the outline",
       "type": "array",
       "items": {
        "type": "array",
@@ -1643,18 +1656,23 @@
       }
      },
      "base": {
+      "description": "kind slab or footing: a closed sketch/wire, instead of points",
       "type": "string"
      },
      "width": {
+      "description": "mm; kind column: X; kind beam",
       "type": "number"
      },
      "depth": {
+      "description": "mm; kind column: Y; kind beam: vertical",
       "type": "number"
      },
      "height": {
+      "description": "mm; kind column",
       "type": "number"
      },
      "thickness": {
+      "description": "mm; kind slab or footing",
       "type": "number"
      },
      "name": {
@@ -1742,6 +1760,7 @@
     "type": "object",
     "properties": {
      "search": {
+      "description": "part of a name",
       "type": "string"
      },
      "category": {
@@ -1892,6 +1911,7 @@
     "type": "object",
     "properties": {
      "points": {
+      "description": "the outline (points or base)",
       "type": "array",
       "items": {
        "type": "array",
@@ -1901,6 +1921,7 @@
       }
      },
      "base": {
+      "description": "the outline (points or base)",
       "type": "string"
      },
      "angle": {"description": "angle: degrees; one, or a list with one for each edge in the order of the outline."},
@@ -2092,6 +2113,7 @@
     "type": "object",
     "properties": {
      "points": {
+      "description": "the floor outline of the room",
       "type": "array",
       "items": {
        "type": "array",
@@ -2101,9 +2123,11 @@
       }
      },
      "base": {
+      "description": "a base solid to make the room from",
       "type": "string"
      },
      "height": {
+      "description": "the room height (default 2600)",
       "type": "number"
      },
      "use": {
@@ -2194,12 +2218,14 @@
     "type": "object",
     "properties": {
      "levels": {
+      "description": "labels from bim_level",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "site": {
+      "description": "false for no site",
       "type": "boolean"
      },
      "siteName": {
@@ -2391,6 +2417,7 @@
     "type": "object",
     "properties": {
      "path": {
+      "description": "the IFC file to read into the document",
       "type": "string"
      }
     },
@@ -2450,6 +2477,7 @@
     "type": "object",
     "properties": {
      "points": {
+      "description": "the points that the wall goes along",
       "type": "array",
       "items": {
        "type": "array",
@@ -2463,9 +2491,11 @@
       "type": "number"
      },
      "vertical": {
+      "description": "a mullion about every that many mm (1500)",
       "type": "number"
      },
      "horizontal": {
+      "description": "a mullion about every that many mm (1500)",
       "type": "number"
      },
      "mullion": {
@@ -2693,9 +2723,11 @@
       }
      },
      "length": {
+      "description": "mm (1000)",
       "type": "number"
      },
      "width": {
+      "description": "mm (500)",
       "type": "number"
      },
      "thickness": {
@@ -2756,10 +2788,11 @@
    "inputSchema": {
     "type": "object",
     "properties": {
-     "spacing": {},
+     "spacing": {"description": "mm for both directions; one number with count lines, or a list of gaps"},
      "xSpacing": {"description": "xSpacing gives lines at x = 0, gap …, along Y."},
-     "ySpacing": {},
+     "ySpacing": {"description": "mm for the y direction (xSpacing is for the x direction)"},
      "count": {
+      "description": "the number of lines, with one number in spacing",
       "type": "integer"
      },
      "length": {
@@ -2825,9 +2858,11 @@
     "type": "object",
     "properties": {
      "name": {
+      "description": "the name of the material to make or find",
       "type": "string"
      },
      "density": {
+      "description": "kg/m³; bim_quantities uses it for weight",
       "type": "number"
      },
      "description": {
@@ -2998,9 +3033,11 @@
       "type": "number"
      },
      "heightStart": {
+      "description": "for a pitched truss",
       "type": "number"
      },
      "heightEnd": {
+      "description": "for a pitched truss",
       "type": "number"
      },
      "strut": {
@@ -3111,9 +3148,11 @@
     "type": "object",
     "properties": {
      "path": {
+      "description": "the label of a path that the fence goes along",
       "type": "string"
      },
      "points": {
+      "description": "points that the fence goes along, in mm",
       "type": "array",
       "items": {
        "type": "array",
@@ -3211,6 +3250,7 @@
     "type": "object",
     "properties": {
      "face": {
+      "description": "the flat face to cover, like \"Slab.Face6\"",
       "type": "string"
      },
      "finish": {
@@ -3224,6 +3264,7 @@
       ]
      },
      "tile": {
+      "description": "[length, width] for finish tiles (300 × 300)",
       "type": "array",
       "items": {
        "type": "number"
@@ -3234,6 +3275,7 @@
       "type": "number"
      },
      "joint": {
+      "description": "for finish tiles (3)",
       "type": "number"
      },
      "name": {
@@ -3536,6 +3578,7 @@
     "type": "object",
     "properties": {
      "by": {
+      "description": "one of: type, material, both",
       "type": "string",
       "enum": [
        "type",
@@ -3676,6 +3719,7 @@
     "type": "object",
     "properties": {
      "op": {
+      "description": "one of: add, subtract, cut, join, clone",
       "type": "string",
       "enum": [
        "add",
@@ -3686,6 +3730,7 @@
       ]
      },
      "object": {
+      "description": "the object for add, subtract, cut and clone",
       "type": "string"
      },
      "with": {
@@ -3695,12 +3740,14 @@
       }
      },
      "walls": {
+      "description": "walls of the same width, height and align to join (op join)",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "at": {
+      "description": "for op cut, with normal: cuts by a plane",
       "type": "array",
       "items": {
        "type": "number"
@@ -3713,12 +3760,14 @@
       }
      },
      "move": {
+      "description": "for op clone",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "delete": {
+      "description": "for op join",
       "type": "boolean"
      },
      "name": {
@@ -3844,24 +3893,29 @@
       ]
      },
      "from": {
+      "description": "an object with a shape (kinds component and clone)",
       "type": "string"
      },
      "ifcType": {
+      "description": "for kind component",
       "type": "string"
      },
      "at": {
+      "description": "for kind clone",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "axis": {
+      "description": "for kind clone",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "angle": {
+      "description": "for kind clone",
       "type": "number"
      },
      "name": {
@@ -3920,15 +3974,18 @@
       ]
      },
      "panels": {
+      "description": "the BIM panels to prepare for the cutter",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "width": {
+      "description": "for kind sheet: the stock sheet, with height",
       "type": "number"
      },
      "height": {
+      "description": "for kind sheet: the stock sheet, with width",
       "type": "number"
      },
      "name": {
@@ -4012,6 +4069,7 @@
       }
      },
      "margin": {
+      "description": "not applied: FreeCAD 1.1's nester has no margin",
       "type": "number"
      }
     },
@@ -4080,6 +4138,7 @@
     "type": "object",
     "properties": {
      "objects": {
+      "description": "the BIM objects that go to IFC as B-rep (plain faces) instead of extrusions",
       "type": "array",
       "items": {
        "type": "string"
@@ -4195,9 +4254,11 @@
       "type": "string"
      },
      "width": {
+      "description": "mm; width and/or height, one gives the other",
       "type": "number"
      },
      "height": {
+      "description": "mm; width and/or height, one gives the other",
       "type": "number"
      },
      "at": {
@@ -4263,6 +4324,7 @@
       "type": "string"
      },
      "folder": {
+      "description": "the objects library folder (the parts_library add-on, or folder)",
       "type": "string"
      },
      "insert": {
@@ -4325,6 +4387,7 @@
       "type": "string"
      },
      "delete": {
+      "description": "false keeps the old object (default: the tool deletes it)",
       "type": "boolean"
      },
      "name": {
@@ -4383,6 +4446,7 @@
     "type": "object",
     "properties": {
      "objects": {
+      "description": "loose lines and wires to build again as joined wires",
       "type": "array",
       "items": {
        "type": "string"
@@ -4556,6 +4620,7 @@
       }
      },
      "sort": {
+      "description": "true: sort the children by label",
       "type": "boolean"
      }
     },
@@ -4610,6 +4675,7 @@
       "type": "string"
      },
      "make": {
+      "description": "false keeps no pattern",
       "type": "boolean"
      },
      "tolerance": {
@@ -4665,21 +4731,27 @@
     "type": "object",
     "properties": {
      "body": {
+      "description": "the body to mesh",
       "type": "string"
      },
      "method": {
+      "description": "one of: standard, mefisto, netgen",
       "type": "string"
      },
      "deflection": {
+      "description": "method standard: mm from the surface (0.05)",
       "type": "number"
      },
      "angle": {
+      "description": "method standard: degrees (15)",
       "type": "number"
      },
      "maxLength": {
+      "description": "method mefisto: mm",
       "type": "number"
      },
      "fineness": {
+      "description": "method netgen: verycoarse … veryfine",
       "type": "string"
      },
      "name": {
@@ -4774,12 +4846,15 @@
       "type": "number"
      },
      "maxHoleEdges": {
+      "description": "holes: fills loops up to this many edges (50)",
       "type": "integer"
      },
      "minFacets": {
+      "description": "islands: removes pieces of this many triangles or fewer (10)",
       "type": "integer"
      },
      "copy": {
+      "description": "true keeps the original (else the tool changes the mesh in place)",
       "type": "boolean"
      },
      "name": {
@@ -4945,9 +5020,11 @@
       "type": "integer"
      },
      "lambda": {
+      "description": "method taubin: 0.6307; method laplace: lambda, it shrinks",
       "type": "number"
      },
      "mu": {
+      "description": "method taubin: 0.0424",
       "type": "number"
      },
      "copy": {
@@ -5052,6 +5129,7 @@
       "items": {}
      },
      "close": {
+      "description": "true closes the cut with a flat cap",
       "type": "boolean"
      },
      "maxHoleEdges": {
@@ -5107,19 +5185,23 @@
       "description": "The mesh's label; may be left out when there is one."
      },
      "scale": {
+      "description": "a factor or [x,y,z]",
       "type": [
        "number",
        "array"
       ]
      },
      "rotate": {
+      "description": "{ axis, angle degrees }",
       "type": "object"
      },
      "move": {
+      "description": "[x,y,z]",
       "type": "array",
       "items": {}
      },
      "mirror": {
+      "description": "one of \"x\", \"y\", \"z\"",
       "type": "string"
      },
      "copy": {
@@ -5167,9 +5249,11 @@
     "type": "object",
     "properties": {
      "a": {
+      "description": "one of the two closed meshes",
       "type": "string"
      },
      "b": {
+      "description": "one of the two closed meshes",
       "type": "string"
      },
      "op": {
@@ -5330,9 +5414,11 @@
       "description": "The mesh's label; may be left out when there is one."
      },
      "kind": {
+      "description": "planar | curvature",
       "type": "string"
      },
      "deviation": {
+      "description": "kind planar: mm from a fitted plane (0.01)",
       "type": "number"
      },
      "tolerance": {
@@ -5428,6 +5514,7 @@
       "description": "The mesh's label; may be left out when there is one."
      },
      "shape": {
+      "description": "a wire, a sketch or the edges of a body to project onto the mesh",
       "type": "string"
      },
      "direction": {
@@ -5481,6 +5568,7 @@
     "type": "object",
     "properties": {
      "kind": {
+      "description": "one of: box, sphere, cylinder, cone, torus",
       "type": "string",
       "enum": [
        "box",
@@ -5491,19 +5579,24 @@
       ]
      },
      "size": {
+      "description": "kind box: [x,y,z]",
       "type": "array",
       "items": {}
      },
      "radius": {
+      "description": "sphere: radius; cylinder, cone: radius at the base; torus: radius",
       "type": "number"
      },
      "radius2": {
+      "description": "cylinder, cone: radius at the top; torus: radius of the tube",
       "type": "number"
      },
      "height": {
+      "description": "for kind cylinder, cone",
       "type": "number"
      },
      "at": {
+      "description": "box: a corner; cylinder, cone: the base centre",
       "type": "array",
       "items": {}
      },
@@ -5741,6 +5834,7 @@
     "type": "object",
     "properties": {
      "object": {
+      "description": "a body, surface or mesh to spread the points over",
       "type": "string"
      },
      "count": {
@@ -5841,10 +5935,12 @@
       "items": {}
      },
      "near": {
+      "description": "[x, y, z], with radius",
       "type": "array",
       "items": {}
      },
      "radius": {
+      "description": "given with near",
       "type": "number"
      },
      "plane": {
@@ -5934,6 +6030,7 @@
       ]
      },
      "axis": {
+      "description": "shape cylinder: a hint",
       "type": "array",
       "items": {}
      },
@@ -5946,12 +6043,15 @@
       "type": "boolean"
      },
      "degree": {
+      "description": "shape surface: degree (3); shape curve: degree",
       "type": "integer"
      },
      "poles": {
+      "description": "shape surface: poles (6)",
       "type": "integer"
      },
      "smooth": {
+      "description": "shape surface",
       "type": "boolean"
      },
      "weight": {
@@ -6071,6 +6171,7 @@
       "type": "number"
      },
      "depth": {
+      "description": "for method poisson",
       "type": "integer"
      },
      "name": {
@@ -6170,6 +6271,7 @@
     "type": "object",
     "properties": {
      "kind": {
+      "description": "one of: box, cylinder, sphere, cone, torus, wedge, prism, tube",
       "type": "string",
       "enum": [
        "box",
@@ -6183,21 +6285,26 @@
       ]
      },
      "size": {
+      "description": "kind box: [x,y,z]",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "radius": {
+      "description": "cylinder, cone: base; prism: centre to corner; tube: radius; sphere: radius; torus: ring",
       "type": "number"
      },
      "radius2": {
+      "description": "cone: top; tube: bore; torus: tube",
       "type": "number"
      },
      "height": {
+      "description": "for cylinder, cone, prism, tube",
       "type": "number"
      },
      "sides": {
+      "description": "for kind prism",
       "type": "integer"
      },
      "wedge": {
@@ -6205,6 +6312,7 @@
       "type": "object"
      },
      "at": {
+      "description": "box: a corner; cylinder, cone, prism, tube: base centre; sphere, torus: centre",
       "type": "array",
       "items": {
        "type": "number"
@@ -6280,6 +6388,7 @@
     "type": "object",
     "properties": {
      "op": {
+      "description": "one of: fuse, cut, common",
       "type": "string",
       "enum": [
        "fuse",
@@ -6295,9 +6404,11 @@
       "description": "A body or a list of them. bodies: solid bodies by name (the tools)."
      },
      "keep": {
+      "description": "true hides the tool objects (else the tool removes them)",
       "type": "boolean"
      },
      "name": {
+      "description": "the label of the new result object (else the result takes the label of body)",
       "type": "string"
      }
     },
@@ -6348,6 +6459,7 @@
     "type": "object",
     "properties": {
      "op": {
+      "description": "one of: move, rotate, mirror, scale, linear, polar",
       "type": "string",
       "enum": [
        "move",
@@ -6363,12 +6475,13 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "by": {
+      "description": "for move: [dx,dy,dz]",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
-     "axis": {},
+     "axis": {"description": "for rotate and polar"},
      "angle": {
       "description": "angle 360 shares out evenly; less goes end to end.",
       "type": "number"
@@ -6380,22 +6493,25 @@
        "type": "number"
       }
      },
-     "normal": {},
-     "factor": {},
+     "normal": {"description": "for mirror"},
+     "factor": {"description": "for scale: a factor or [fx,fy,fz]"},
      "count": {
       "description": "count includes the original.",
       "type": "integer"
      },
      "step": {
+      "description": "for linear: [dx,dy,dz]",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "copy": {
+      "description": "true makes a new body instead",
       "type": "boolean"
      },
      "fuse": {
+      "description": "true: the copies are fused (mirror: joins both into the original); false keeps them apart in one body",
       "type": "boolean"
      },
      "name": {
@@ -6447,6 +6563,7 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "radius": {
+      "description": "mm",
       "type": "number"
      },
      "edges": {"description": "edges: [\"Edge3\", \"Face6\" (all its edges) …], from 1 as shape_query lists them, or \"all\"."},
@@ -6496,9 +6613,10 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "size": {
+      "description": "mm; the same on both faces",
       "type": "number"
      },
-     "edges": {},
+     "edges": {"description": "edges refs from 1, \"all\", or query, as for part_fillet"},
      "query": {
       "type": "object"
      },
@@ -6545,6 +6663,7 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "distance": {
+      "description": "mm, on all sides: + larger, - smaller",
       "type": "number"
      },
      "join": {
@@ -6692,6 +6811,7 @@
       "type": "number"
      },
      "direction": {
+      "description": "[x,y,z]: its own length, or length if given",
       "type": "array",
       "items": {
        "type": "number"
@@ -6710,6 +6830,7 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "op": {
+      "description": "one of: new, fuse, cut, common (default new without into, fuse with into)",
       "type": "string",
       "enum": [
        "new",
@@ -6777,6 +6898,7 @@
       "type": "number"
      },
      "solid": {
+      "description": "false gives a surface",
       "type": "boolean"
      },
      "into": {
@@ -6784,6 +6906,7 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "op": {
+      "description": "one of: new, fuse, cut, common; as part_extrude",
       "type": "string",
       "enum": [
        "new",
@@ -6875,6 +6998,7 @@
       "type": "boolean"
      },
      "solid": {
+      "description": "false makes a surface",
       "type": "boolean"
      },
      "maxDegree": {
@@ -6884,6 +7008,7 @@
       "maximum": 8
      },
      "samples": {
+      "description": "the number of points each profile becomes as a polygon (8 to 512)",
       "type": "integer",
       "minimum": 8,
       "maximum": 512
@@ -6897,6 +7022,7 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "op": {
+      "description": "one of: new, fuse, cut, common (as part_extrude)",
       "type": "string",
       "enum": [
        "new",
@@ -6987,6 +7113,7 @@
       "description": "A body's name or label; may be left out when there is one."
      },
      "op": {
+      "description": "one of: new, fuse, cut, common (as part_extrude)",
       "type": "string",
       "enum": [
        "new",
@@ -7038,24 +7165,28 @@
     "type": "object",
     "properties": {
      "objects": {
+      "description": "[names] of the objects that it holds",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "at": {
+      "description": "the placement (with axis and angle)",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "axis": {
+      "description": "the placement (axis + angle)",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "angle": {
+      "description": "the placement (axis + angle)",
       "type": "number"
      },
      "name": {
@@ -7091,6 +7222,7 @@
     "type": "object",
     "properties": {
      "compound": {
+      "description": "the compound to split into its pieces",
       "type": "string"
      }
     },
@@ -7133,18 +7265,22 @@
     "type": "object",
     "properties": {
      "compound": {
+      "description": "the compound to keep pieces of",
       "type": "string"
      },
      "keep": {
+      "description": "the filter: items, collision-pass, collision-fail, window-volume, window-area, window-length or window-distance",
       "type": "string"
      },
      "items": {
+      "description": "keep items: the pieces to keep, like [0, 2]",
       "type": "array",
       "items": {
        "type": "integer"
       }
      },
      "stencil": {
+      "description": "keep collision-pass, collision-fail and window-distance",
       "type": "string"
      },
      "from": {
@@ -7202,6 +7338,7 @@
     "type": "object",
     "properties": {
      "kind": {
+      "description": "one of: connect, embed, cutout",
       "type": "string",
       "enum": [
        "connect",
@@ -7210,15 +7347,18 @@
       ]
      },
      "objects": {
+      "description": "kind connect",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "base": {
+      "description": "kinds embed and cutout",
       "type": "string"
      },
      "cutter": {
+      "description": "kinds embed and cutout",
       "type": "string"
      },
      "name": {
@@ -7459,9 +7599,11 @@
       "type": "string"
      },
      "u": {
+      "description": "how far past each pair of opposite edges, as a fraction of the size in that direction (0.05 = 5% at each end; range -0.5 … 10)",
       "type": "number"
      },
      "v": {
+      "description": "how far past each pair of opposite edges, as a fraction of the size in that direction (0.05 = 5% at each end; range -0.5 … 10)",
       "type": "number"
      },
      "name": {
@@ -7511,6 +7653,7 @@
       }
      },
      "tolerance": {
+      "description": "mm (0.01); the edges must meet within it",
       "type": "number"
      },
      "solid": {
@@ -7609,9 +7752,11 @@
     "type": "object",
     "properties": {
      "start": {
+      "description": "{ edge, at, continuity, size } for the start; edge: \"Body.Edge3\"; at: 0…1 along it (default 0); continuity: 0…4 (1 tangent, 2 curvature, default); size: 1",
       "type": "object"
      },
      "end": {
+      "description": "{ edge, at, continuity, size } for the end; edge: \"Body.Edge3\"; at: 0…1 along it (default 1); continuity: 0…4 (1 tangent, 2 curvature, default); size: 1",
       "type": "object"
      },
      "name": {
@@ -8055,6 +8200,7 @@
       "type": "boolean"
      },
      "modelThread": {
+      "description": "sets FreeCAD's ModelThread as given",
       "type": "boolean"
      },
      "fit": {
@@ -8073,6 +8219,7 @@
       "type": "string"
      },
      "cut": {
+      "description": "one of counterbore, countersink, counterdrill",
       "type": "string"
      },
      "cutDiameter": {
@@ -8296,6 +8443,7 @@
       "type": "number"
      },
      "angle": {
+      "description": "deg, for a distance and an angle (one of size2 and angle)",
       "type": "number"
      }
     },
@@ -8416,6 +8564,7 @@
       "type": "number"
      },
      "outward": {
+      "description": "true: goes outward (default inward)",
       "type": "boolean"
      },
      "join": {
@@ -9031,6 +9180,7 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "feature": {
+      "description": "the feature whose properties change",
       "type": "string"
      },
      "values": {
@@ -9120,12 +9270,14 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "feature": {
+      "description": "the feature to remove from the PartDesign body",
       "type": "string"
      },
      "keepSketch": {
       "type": "boolean"
      },
      "force": {
+      "description": "true: the tool removes a feature that others use (else it refuses)",
       "type": "boolean"
      }
     },
@@ -9189,9 +9341,11 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "feature": {
+      "description": "the feature to suppress",
       "type": "string"
      },
      "suppressed": {
+      "description": "false brings it back",
       "type": "boolean"
      }
     },
@@ -9295,12 +9449,15 @@
     "type": "object",
     "properties": {
      "feature": {
+      "description": "the feature or sketch to move in the history of its body",
       "type": "string"
      },
      "after": {
+      "description": "another feature of the same body",
       "type": "string"
      },
      "before": {
+      "description": "another feature of the same body",
       "type": "string"
      }
     },
@@ -9355,6 +9512,7 @@
       "type": "string"
      },
      "feature": {
+      "description": "to set the tip; with a sketch or datum: the solid feature before it (left out: read the tip)",
       "type": "string"
      }
     },
@@ -9418,6 +9576,7 @@
       }
      },
      "axis": {
+      "description": "the axis that the shaft goes along; one of: x, y, z",
       "type": "string",
       "enum": [
        "x",
@@ -9879,6 +10038,7 @@
       "description": "The sketch's name; may be left out when there is one."
      },
      "distance": {
+      "description": "mm (out; negative is in)",
       "type": "number"
      },
      "geometry": {
@@ -10527,6 +10687,7 @@
       ]
      },
      "page": {
+      "description": "action read: the page to read",
       "type": "string"
      },
      "paper": {
@@ -10623,9 +10784,11 @@
       "type": "boolean"
      },
      "import": {
+      "description": "a presets file (JSON)",
       "type": "string"
      },
      "export": {
+      "description": "a presets file (JSON)",
       "type": "string"
      }
     },
@@ -10671,6 +10834,7 @@
     "type": "object",
     "properties": {
      "page": {
+      "description": "the page to put the view on",
       "type": "string"
      },
      "bodies": {
@@ -10791,9 +10955,11 @@
      },
      "faces": {"description": "faces: [\"Face6\" …], the part's own faces, from shape_query."},
      "spacing": {
+      "description": "mm apart",
       "type": "number"
      },
      "angle": {
+      "description": "degrees",
       "type": "number"
      }
     },
@@ -10865,6 +11031,7 @@
      "size": {"description": "size: left of it."},
      "length": {"description": "length: right of it; \"50\" or \"50-100\" for pitch."},
      "side": {
+      "description": "one of: arrow, other, both",
       "type": "string",
       "enum": [
        "arrow",
@@ -10930,6 +11097,7 @@
     "type": "object",
     "properties": {
      "page": {
+      "description": "the page to draw the section plane on",
       "type": "string"
      },
      "section": {
@@ -10950,6 +11118,7 @@
       "type": "string"
      },
      "fill": {
+      "description": "hatches cut faces",
       "type": "boolean"
      },
      "spaces": {
@@ -11025,6 +11194,7 @@
       "type": "string"
      },
      "front": {
+      "description": "which direction is front",
       "type": [
        "string",
        "array"
@@ -11086,6 +11256,7 @@
     "type": "object",
     "properties": {
      "view": {
+      "description": "the view to cut from",
       "type": "string"
      },
      "normal": {
@@ -11177,6 +11348,7 @@
       "items": {}
      },
      "radius": {
+      "description": "mm on the part; the circle of the detail view",
       "type": "number"
      },
      "scale": {
@@ -11239,6 +11411,7 @@
     "type": "object",
     "properties": {
      "view": {
+      "description": "the view to read",
       "type": "string"
      },
      "kind": {
@@ -11448,12 +11621,15 @@
     "type": "object",
     "properties": {
      "dimension": {
+      "description": "the dimension, by its name or label",
       "type": "string"
      },
      "plus": {
+      "description": "mm; equal values give ±",
       "type": "number"
      },
      "minus": {
+      "description": "mm; equal values give ±",
       "type": "number"
      },
      "fit": {
@@ -11516,12 +11692,14 @@
       "type": "string"
      },
      "on": {
+      "description": "a view ref to put a leader to",
       "type": [
        "string",
        "object"
       ]
      },
      "dimension": {
+      "description": "put the frame under this dimension",
       "type": "string"
      },
      "frame": {
@@ -11824,6 +12002,7 @@
     "type": "object",
     "properties": {
      "section": {
+      "description": "the section view to align with its base view",
       "type": "string"
      }
     },
@@ -11859,6 +12038,7 @@
      },
      "on": {"description": "on: a ref as td_dim takes it."},
      "at": {
+      "description": "[x, y] page mm: where the leader goes",
       "type": "array",
       "items": {}
      },
@@ -12000,6 +12180,7 @@
       "type": "string"
      },
      "unit": {
+      "description": "one of: mm2, cm2, m2",
       "type": "string",
       "enum": [
        "mm2",
@@ -12084,9 +12265,11 @@
       "type": "integer"
      },
      "prefix": {
+      "description": "diameter (⌀) | square (□) | count (n×, with count) | any text",
       "type": "string"
      },
      "count": {
+      "description": "with prefix count",
       "type": "integer"
      },
      "removePrefix": {
@@ -12134,9 +12317,11 @@
     "type": "object",
     "properties": {
      "view": {
+      "description": "the view",
       "type": "string"
      },
      "kind": {
+      "description": "one of: extent_h, extent_v, chamfer_h, chamfer_v, arc_length, axo_length",
       "type": "string",
       "enum": [
        "extent_h",
@@ -12240,6 +12425,7 @@
     "type": "object",
     "properties": {
      "dimension": {
+      "description": "the dimension to point at new references",
       "type": "string"
      },
      "view": {
@@ -12591,6 +12777,7 @@
       "description": "The face: \"Face6\", or a query { normal, near, area … } as shape_query takes (the largest match, or the nearest with near). Default: the largest face facing up. face: default the largest face that points up."
      },
      "at": {
+      "description": "[x,y,z]: the text is centred there (default: centred on the face)",
       "type": "array",
       "items": {
        "type": "number"
@@ -12617,6 +12804,7 @@
       "type": "string"
      },
      "rotate": {
+      "description": "degrees",
       "type": "number"
      },
      "tracking": {
@@ -12682,15 +12870,18 @@
     "type": "object",
     "properties": {
      "path": {
+      "description": "the SVG or DXF file",
       "type": "string"
      },
      "body": {
+      "description": "the body for mode emboss",
       "type": "string"
      },
      "face": {
       "description": "The face: \"Face6\", or a query { normal, near, area … } as shape_query takes (the largest match, or the nearest with near). Default: the largest face facing up."
      },
      "at": {
+      "description": "as draft_text",
       "type": "array",
       "items": {
        "type": "number"
@@ -12703,6 +12894,7 @@
       "type": "number"
      },
      "depth": {
+      "description": "mm thick, for mode extrude",
       "type": "number"
      },
      "mode": {
@@ -12715,6 +12907,7 @@
       ]
      },
      "rotate": {
+      "description": "as draft_text",
       "type": "number"
      },
      "mirror": {
@@ -12785,9 +12978,11 @@
     "type": "object",
     "properties": {
      "body": {
+      "description": "the whole body to copy",
       "type": "string"
      },
      "kind": {
+      "description": "one of: grid, polar, path",
       "type": "string",
       "enum": [
        "grid",
@@ -12795,7 +12990,7 @@
        "path"
       ]
      },
-     "count": {},
+     "count": {"description": "kind grid: [nx, ny, nz]; kind polar: count around center about axis; kind path: count along a curve"},
      "gap": {
       "description": "gap: mm between them (2).",
       "type": "number"
@@ -12818,12 +13013,13 @@
       }
      },
      "axis": {
+      "description": "kind polar: the axis the copies go around",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
-     "path": {},
+     "path": {"description": "kind path: a curve, an edge, a sketch or { points }"},
      "bodyOfPath": {
       "type": "string"
      },
@@ -12894,20 +13090,25 @@
       "type": "string"
      },
      "from": {
+      "description": "kind line",
       "type": "array",
       "items": {}
      },
      "to": {
+      "description": "kind line",
       "type": "array",
       "items": {}
      },
      "radius": {
+      "description": "kinds circle, arc, polygon (to corners), helix, spiral",
       "type": "number"
      },
      "start": {
+      "description": "kind arc: degrees, 0–360, counter-clockwise",
       "type": "number"
      },
      "end": {
+      "description": "kind arc: degrees, 0–360, counter-clockwise",
       "type": "number"
      },
      "major": {
@@ -12917,33 +13118,43 @@
       "type": "number"
      },
      "sides": {
+      "description": "kind polygon: regular",
       "type": "integer"
      },
      "pitch": {
+      "description": "kind helix",
       "type": "number"
      },
      "height": {
+      "description": "kind helix",
       "type": "number"
      },
      "taper": {
+      "description": "kind helix",
       "type": "number"
      },
      "leftHanded": {
+      "description": "kind helix",
       "type": "boolean"
      },
      "growth": {
+      "description": "kind spiral: for each turn",
       "type": "number"
      },
      "turns": {
+      "description": "kind spiral",
       "type": "number"
      },
      "length": {
+      "description": "kind plane",
       "type": "number"
      },
      "width": {
+      "description": "kind plane",
       "type": "number"
      },
      "points": {
+      "description": "kind polyline: the corners in place; kind bspline: the points it goes through",
       "type": "array",
       "items": {}
      },
@@ -12953,6 +13164,7 @@
      },
      "key": {"description": "key: selects one list."},
      "closed": {
+      "description": "kind polyline: closed; kind bspline: a smooth periodic loop",
       "type": "boolean"
      },
      "name": {
@@ -13003,6 +13215,7 @@
     "type": "object",
     "properties": {
      "mode": {
+      "description": "one of: slice, fragments, xor",
       "type": "string",
       "enum": [
        "slice",
@@ -13011,6 +13224,7 @@
       ]
      },
      "bodies": {
+      "description": "slice: one body; fragments and xor: the bodies",
       "type": "array",
       "items": {
        "type": "string"
@@ -13125,6 +13339,7 @@
       "type": "string"
      },
      "fix": {
+      "description": "true first repairs it",
       "type": "boolean"
      },
      "tolerance": {
@@ -13182,10 +13397,12 @@
       "type": "string"
      },
      "offset": {
+      "description": "[x, y, z], in the frame of the support",
       "type": "array",
       "items": {}
      },
      "rotate": {
+      "description": "degrees, in the frame of the support",
       "type": "number"
      }
     },
@@ -13277,9 +13494,11 @@
     "type": "object",
     "properties": {
      "a": {
+      "description": "an edge or wire by name, or one edge of a body as \"Box.Edge3\"",
       "type": "string"
      },
      "b": {
+      "description": "an edge or wire by name, or one edge of a body as \"Box.Edge3\"",
       "type": "string"
      },
      "reversed": {
@@ -13384,6 +13603,7 @@
     "type": "object",
     "properties": {
      "body": {
+      "description": "the body to make cross-sections of",
       "type": "string"
      },
      "normal": {
@@ -13461,6 +13681,7 @@
       "type": "boolean"
      },
      "maxFacets": {
+      "description": "the tool refuses more than this (60000)",
       "type": "integer"
      },
      "name": {
@@ -13512,6 +13733,7 @@
     "type": "object",
     "properties": {
      "body": {
+      "description": "the body that makes section curves with another body or a plane",
       "type": "string"
      },
      "with": {
@@ -13573,6 +13795,7 @@
     "type": "object",
     "properties": {
      "shape": {
+      "description": "the flat wire, sketch or face to offset",
       "type": "string"
      },
      "distance": {
@@ -13664,6 +13887,7 @@
       ]
      },
      "tolerance": {
+      "description": "build shell: mm that faces are sewn at (0.01)",
       "type": "number"
      },
      "name": {
@@ -13974,6 +14198,7 @@
     "type": "object",
     "properties": {
      "faces": {
+      "description": "the faces, like \"Body.Face6\"",
       "type": "array",
       "items": {
        "type": "string"
@@ -14090,6 +14315,7 @@
     "type": "object",
     "properties": {
      "object": {
+      "description": "the object to copy",
       "type": "string"
      },
      "scale": {"description": "scale: a factor or [x,y,z]."},
@@ -14203,6 +14429,7 @@
       "type": "string"
      },
      "file": {
+      "description": "your own .pat file, instead of FreeCAD's FCPAT.pat",
       "type": "string"
      },
      "scale": {
@@ -14263,6 +14490,7 @@
       "items": {}
      },
      "at": {
+      "description": "where the text is, [x,y,z]",
       "type": "array",
       "items": {}
      },
@@ -14324,12 +14552,14 @@
     "type": "object",
     "properties": {
      "at": {
+      "description": "[x,y,z], with normal",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "normal": {
+      "description": "given with at",
       "type": "array",
       "items": {
        "type": "number"
@@ -14396,6 +14626,7 @@
       "type": "string"
      },
      "points": {
+      "description": "kinds wire, bspline, bezier",
       "type": "array",
       "items": {}
      },
@@ -14403,18 +14634,23 @@
       "type": "boolean"
      },
      "length": {
+      "description": "kind rectangle: along x",
       "type": "number"
      },
      "height": {
+      "description": "kind rectangle: along y",
       "type": "number"
      },
      "radius": {
+      "description": "kinds circle, arc, polygon",
       "type": "number"
      },
      "start": {
+      "description": "kind arc: degrees, counter-clockwise from x",
       "type": "number"
      },
      "end": {
+      "description": "kind arc: degrees, counter-clockwise from x",
       "type": "number"
      },
      "major": {
@@ -14424,6 +14660,7 @@
       "type": "number"
      },
      "sides": {
+      "description": "kind polygon",
       "type": "integer"
      },
      "inscribed": {
@@ -14431,6 +14668,7 @@
       "type": "boolean"
      },
      "face": {
+      "description": "false: a closed shape is not a filled face",
       "type": "boolean"
      },
      "at": {
@@ -14483,42 +14721,54 @@
     "type": "object",
     "properties": {
      "object": {
+      "description": "the object to make an array of",
       "type": "string"
      },
      "kind": {
+      "description": "one of: ortho, polar, circular, path, points",
       "type": "string"
      },
-     "count": {},
+     "count": {"description": "ortho: [nx,ny,nz] with the original; polar and path: count"},
      "spacing": {
+      "description": "ortho: [dx,dy,dz] from one copy to the next",
       "type": "array",
       "items": {}
      },
      "angle": {
+      "description": "kind polar",
       "type": "number"
      },
      "center": {
+      "description": "kind polar (about z)",
       "type": "array",
       "items": {}
      },
      "rings": {
+      "description": "kind circular: rings, with the original",
       "type": "integer"
      },
      "ringSpacing": {
+      "description": "kind circular",
       "type": "number"
      },
      "tangentSpacing": {
+      "description": "kind circular",
       "type": "number"
      },
      "symmetry": {
+      "description": "kind circular",
       "type": "integer"
      },
      "path": {
+      "description": "kind path",
       "type": "string"
      },
      "align": {
+      "description": "kind path",
       "type": "boolean"
      },
      "points": {
+      "description": "kind points: an object whose points place the copies",
       "type": "string"
      },
      "link": {
@@ -14571,32 +14821,40 @@
       "type": "string"
      },
      "from": {
+      "description": "kind linear",
       "type": "array",
       "items": {}
      },
      "to": {
+      "description": "kind linear",
       "type": "array",
       "items": {}
      },
      "object": {
+      "description": "with vertices; kind radius / diameter",
       "type": "string"
      },
      "vertices": {
+      "description": "[i, j], numbered from 1; the dimension then follows the object",
       "type": "array",
       "items": {}
      },
      "edge": {
+      "description": "kind radius / diameter: the number of a circle or arc, from 1",
       "type": "integer"
      },
      "center": {
+      "description": "kind angular",
       "type": "array",
       "items": {}
      },
      "angles": {
+      "description": "kind angular: [a, b] degrees, counter-clockwise",
       "type": "array",
       "items": {}
      },
      "normal": {
+      "description": "kind angular",
       "type": "array",
       "items": {}
      },
@@ -14657,6 +14915,7 @@
       "type": "object"
      },
      "objects": {
+      "description": "for action apply: dimensions, labels",
       "type": "array",
       "items": {
        "type": "string"
@@ -14715,33 +14974,41 @@
       }
      },
      "by": {
+      "description": "op move: the move; op offset: a vector from its first edge; op stretch: moves the points inside box",
       "type": "array",
       "items": {}
      },
      "angle": {
+      "description": "op rotate",
       "type": "number"
      },
      "center": {
+      "description": "op rotate, scale",
       "type": "array",
       "items": {}
      },
      "axis": {
+      "description": "op rotate",
       "type": "array",
       "items": {}
      },
-     "factor": {},
+     "factor": {"description": "op scale"},
      "from": {
+      "description": "op mirror: the mirror line, in XY",
       "type": "array",
       "items": {}
      },
      "to": {
+      "description": "op mirror: the mirror line, in XY",
       "type": "array",
       "items": {}
      },
      "radius": {
+      "description": "op fillet",
       "type": "number"
      },
      "chamfer": {
+      "description": "op fillet",
       "type": "boolean"
      },
      "copy": {
@@ -14753,20 +15020,25 @@
       "type": "boolean"
      },
      "at": {
+      "description": "op split: the point to split at (else the middle)",
       "type": "array",
       "items": {}
      },
      "edge": {
+      "description": "op split: segment edge n (from 1)",
       "type": "integer"
      },
      "box": {
+      "description": "op stretch: [[min], [max]]; the points inside it move by by",
       "type": "array",
       "items": {}
      },
      "length": {
+      "description": "op extend: mm; negative trims",
       "type": "number"
      },
      "end": {
+      "description": "op extend: one of: start, end",
       "type": "string",
       "enum": [
        "start",
@@ -14814,6 +15086,7 @@
     "type": "object",
     "properties": {
      "body": {
+      "description": "the body of the job",
       "type": "string"
      },
      "toolbit": {
@@ -14944,6 +15217,7 @@
       "type": "string"
      },
      "base": {
+      "description": "kind engrave, vcarve: follow base (letters, a sketch)",
       "type": "array",
       "items": {
        "type": "string"
@@ -14957,6 +15231,7 @@
       "type": "string"
      },
      "side": {
+      "description": "kind profile, adaptive: outside | inside",
       "type": "string",
       "enum": [
        "outside",
@@ -14964,6 +15239,7 @@
       ]
      },
      "finish": {
+      "description": "kind adaptive: true adds a profile pass",
       "type": "boolean"
      },
      "stepDown": {
@@ -15203,18 +15479,23 @@
       "description": "The job's label; may be left out when there is one."
      },
      "diameter": {
+      "description": "mm, for the first tool of the job",
       "type": "number"
      },
      "feed": {
+      "description": "for the first tool of the job",
       "type": "number"
      },
      "plunge": {
+      "description": "mm/min, for the first tool of the job",
       "type": "number"
      },
      "rpm": {
+      "description": "for the first tool of the job",
       "type": "number"
      },
      "number": {
+      "description": "for the first tool of the job",
       "type": "integer"
      }
     },
@@ -15292,6 +15573,7 @@
       "type": "integer"
      },
      "name": {
+      "description": "the name of the tool; cam_op { tool } takes it",
       "type": "string"
      }
     },
@@ -15383,6 +15665,7 @@
       "description": "The job's label; may be left out when there is one."
      },
      "action": {
+      "description": "one of: export, import",
       "type": "string",
       "enum": [
        "export",
@@ -15496,21 +15779,27 @@
       "type": "string"
      },
      "count": {
+      "description": "kind tags: holding tabs on a profile",
       "type": "integer"
      },
      "width": {
+      "description": "kind tags: holding tabs",
       "type": "number"
      },
      "height": {
+      "description": "kind tags: holding tabs",
       "type": "number"
      },
      "angle": {
+      "description": "kind tags: holding tabs",
       "type": "number"
      },
      "style": {
+      "description": "kind dogbone: inside corners",
       "type": "string"
      },
      "margin": {
+      "description": "kind boundary: mm around the part",
       "type": "number"
      },
      "props": {
@@ -15642,9 +15931,11 @@
       "type": "string"
      },
      "safeHeight": {
+      "description": "mm above the top of the stock",
       "type": "number"
      },
      "clearance": {
+      "description": "mm above the top of the stock",
       "type": "number"
      },
      "order": {
@@ -15761,6 +16052,7 @@
       "description": "The job's label; may be left out when there is one."
      },
      "action": {
+      "description": "one of: active, copy, comment, stop, start",
       "type": "string",
       "enum": [
        "active",
@@ -15777,24 +16069,30 @@
       "type": "boolean"
      },
      "props": {
+      "description": "for action copy",
       "type": "object"
      },
      "text": {
+      "description": "for actions comment and stop",
       "type": "string"
      },
      "optional": {
+      "description": "for action stop: M0, or M1 when optional",
       "type": "boolean"
      },
      "after": {
+      "description": "for actions comment and stop",
       "type": "string"
      },
      "at": {
+      "description": "[x, y, z] for action start; omit at to clear it",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "name": {
+      "description": "for action copy",
       "type": "string"
      }
     },
@@ -15889,6 +16187,7 @@
       "description": "The job's label; may be left out when there is one."
      },
      "op": {
+      "description": "the operation to remove from the job",
       "type": "string"
      }
     },
@@ -16228,7 +16527,7 @@
      "name": {
       "type": "string"
      },
-     "ground": {}
+     "ground": {"description": "names another part to ground, or false for none (default: the first part)"}
     },
     "required": [
      "parts"
@@ -16320,6 +16619,7 @@
       "description": "The assembly's label; may be left out when there is one."
      },
      "part": {
+      "description": "the part to hold fixed, or to let move again",
       "type": "string"
      },
      "grounded": {
@@ -16427,12 +16727,15 @@
       "type": "number"
      },
      "radius1": {
+      "description": "rackpinion: the pinion's pitch radius; gears, belt: a radius (else read from round edges)",
       "type": "number"
      },
      "radius2": {
+      "description": "gears, belt: a radius (else read from round edges)",
       "type": "number"
      },
      "pitch": {
+      "description": "screw: mm a turn; chain: the chain pitch, mm (12.7)",
       "type": "number"
      },
      "reversed": {
@@ -16444,6 +16747,7 @@
       "type": "boolean"
      },
      "keep": {
+      "description": "true finds the offset and turn that hold placed parts; not with offset, rotate, gap, reversed, autoFlip",
       "type": "boolean"
      },
      "teeth1": {
@@ -16567,6 +16871,7 @@
       "description": "The assembly's label; may be left out when there is one."
      },
      "joint": {
+      "description": "the joint to remove, by label or object name",
       "type": "string"
      }
     },
@@ -16625,6 +16930,7 @@
       "description": "The assembly's label; may be left out when there is one."
      },
      "joint": {
+      "description": "the joint to move through a range",
       "type": "string"
      },
      "from": {
@@ -16961,6 +17267,7 @@
       "description": "The assembly's label; may be left out when there is one."
      },
      "joint": {
+      "description": "the joint to move",
       "type": "string"
      },
      "to": {
@@ -16976,6 +17283,7 @@
       "type": "boolean"
      },
      "turn": {
+      "description": "true turns a cylindrical joint",
       "type": "boolean"
      },
      "allowOverlap": {
@@ -17048,15 +17356,18 @@
       "description": "The assembly's label; may be left out when there is one."
      },
      "joint": {
+      "description": "the joint to set the limits of",
       "type": "string"
      },
      "min": {
+      "description": "degrees for revolute, mm for slider and cylindrical; an end you omit stays as it is",
       "type": [
        "number",
        "null"
       ]
      },
      "max": {
+      "description": "degrees for revolute, mm for slider and cylindrical; an end you omit stays as it is",
       "type": [
        "number",
        "null"
@@ -17127,6 +17438,7 @@
       ]
      },
      "gap": {
+      "description": "mm, the gap when the parts are stacked along an axis",
       "type": "number"
      },
      "parts": {
@@ -17137,6 +17449,7 @@
       }
      },
      "collapse": {
+      "description": "true puts the parts and the joints back",
       "type": "boolean"
      }
     },
@@ -17302,6 +17615,7 @@
     "type": "object",
     "properties": {
      "page": {
+      "description": "the page to list",
       "type": "string"
      }
     },
@@ -17341,6 +17655,7 @@
     "type": "object",
     "properties": {
      "page": {
+      "description": "the page to write to files",
       "type": "string"
      },
      "formats": {
@@ -17392,6 +17707,7 @@
     "type": "object",
     "properties": {
      "view": {
+      "description": "the view to add cosmetic geometry to",
       "type": "string"
      },
      "kind": {
@@ -17513,6 +17829,7 @@
     "type": "object",
     "properties": {
      "kind": {
+      "description": "one of: broken, draft, clip, clip_add, clip_remove, image, symbol, share, lock, stack, move",
       "type": "string",
       "enum": [
        "broken",
@@ -17529,9 +17846,11 @@
       ]
      },
      "locked": {
+      "description": "kind lock",
       "type": "boolean"
      },
      "to": {
+      "description": "kind stack: one of top, bottom, up, down",
       "type": "string",
       "enum": [
        "top",
@@ -17541,39 +17860,48 @@
       ]
      },
      "page": {
+      "description": "kind move: the page to move the view to",
       "type": "string"
      },
      "view": {
       "type": "string"
      },
      "object": {
+      "description": "kind draft: a Draft object",
       "type": "string"
      },
      "breaks": {
+      "description": "kind broken",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "gap": {
+      "description": "kind broken",
       "type": "number"
      },
      "clip": {
+      "description": "kind clip_add, clip_remove",
       "type": "string"
      },
      "width": {
+      "description": "kind clip, image",
       "type": "number"
      },
      "height": {
+      "description": "kind clip, image",
       "type": "number"
      },
      "frame": {
+      "description": "kind clip",
       "type": "boolean"
      },
      "path": {
       "type": "string"
      },
      "scale": {
+      "description": "kind symbol",
       "type": "number"
      },
      "direction": {
@@ -17634,6 +17962,7 @@
       "type": "string"
      },
      "action": {
+      "description": "one of: align_h, align_v, style, extend, shorten, erase",
       "type": "string",
       "enum": [
        "align_h",
@@ -17645,16 +17974,19 @@
       ]
      },
      "refs": {
+      "description": "align: two points or an edge; style: edges",
       "type": "array",
       "items": {}
      },
      "style": {
+      "description": "action style: solid, dashed, dotted, dashdot, dashdotdot or none",
       "type": "string"
      },
      "weight": {
+      "description": "mm; action style",
       "type": "number"
      },
-     "color": {},
+     "color": {"description": "action style"},
      "items": {
       "description": "items: td_cosmetic's lines by order from 0; all when omitted.",
       "type": "array",
@@ -17663,6 +17995,7 @@
       }
      },
      "by": {
+      "description": "mm; actions extend and shorten",
       "type": "number"
      },
      "centerlines": {
@@ -17720,6 +18053,7 @@
     "type": "object",
     "properties": {
      "kind": {
+      "description": "one of: area, from_shape, edges, compound, array, stop, fixture",
       "type": "string",
       "enum": [
        "area",
@@ -17736,27 +18070,33 @@
       "type": "string"
      },
      "sources": {
+      "description": "kinds area, from_shape and edges",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "workplane": {
+      "description": "kind area, like \"Body.Face3\"",
       "type": "string"
      },
      "ops": {
+      "description": "kinds compound and array",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "props": {
+      "description": "kinds area and array (Type, Copies, Offset …)",
       "type": "object"
      },
      "mandatory": {
+      "description": "kind stop: true gives M0, else M1",
       "type": "boolean"
      },
      "fixture": {
+      "description": "kind fixture, like G54",
       "type": "string"
      },
      "name": {
@@ -17875,6 +18215,7 @@
       "type": "string"
      },
      "description": {
+      "description": "the template holds a description",
       "type": "string"
      }
     },
@@ -17917,6 +18258,7 @@
     "type": "object",
     "properties": {
      "action": {
+      "description": "one of: flip_dimension, heal",
       "type": "string",
       "enum": [
        "flip_dimension",
@@ -18260,6 +18602,7 @@
     "type": "object",
     "properties": {
      "op": {
+      "description": "one of: hull, minkowski",
       "type": "string",
       "enum": [
        "hull",
@@ -18267,6 +18610,7 @@
       ]
      },
      "objects": {
+      "description": "names of the objects",
       "type": "array",
       "items": {
        "type": "string"
@@ -18329,6 +18673,7 @@
       "type": "string"
      },
      "limit": {
+      "description": "the most materials in the answer (20)",
       "type": "integer"
      }
     },
@@ -18562,6 +18907,7 @@
       ]
      },
      "analysis": {
+      "description": "the analysis to add the object to",
       "type": "string"
      },
      "refs": {"description": "refs: [\"Body.Face3\", …] or { body, faces: [queries] }."},
@@ -18570,12 +18916,15 @@
       "type": "object"
      },
      "mesh": {
+      "description": "where a refinement, equation or nonlinear material needs one",
       "type": "string"
      },
      "solver": {
+      "description": "where a refinement, equation or nonlinear material needs one",
       "type": "string"
      },
      "material": {
+      "description": "where a refinement, equation or nonlinear material needs one",
       "type": "string"
      },
      "new": {
@@ -18630,6 +18979,7 @@
     "type": "object",
     "properties": {
      "action": {
+      "description": "one of: netgen, to_mesh, clear_groups",
       "type": "string",
       "enum": [
        "netgen",
@@ -18638,9 +18988,11 @@
       ]
      },
      "body": {
+      "description": "for action netgen",
       "type": "string"
      },
      "mesh": {
+      "description": "for actions to_mesh and clear_groups",
       "type": "string"
      },
      "result": {
@@ -18650,9 +19002,11 @@
       "type": "string"
      },
      "props": {
+      "description": "for action netgen",
       "type": "object"
      },
      "name": {
+      "description": "for action to_mesh",
       "type": "string"
      }
     },
@@ -18781,6 +19135,7 @@
       }
      },
      "pressure": {
+      "description": "MPa",
       "type": "number"
      },
      "gravity": {
@@ -18791,6 +19146,7 @@
       "type": "number"
      },
      "timeout": {
+      "description": "seconds (default 300)",
       "type": "number"
      }
     },
@@ -19020,12 +19376,14 @@
       ]
      },
      "dofs": {
+      "description": "for kind pin: the directions held, from \"x\", \"y\", \"z\"; the others are free",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "move": {
+      "description": "for kind move: [dx,dy,dz] mm, null for free",
       "type": "array",
       "items": {}
      },
@@ -19248,6 +19606,7 @@
       "type": "integer"
      },
      "timeout": {
+      "description": "s (300)",
       "type": "number"
      }
     },
@@ -19306,9 +19665,11 @@
      },
      "air": {"description": "air: false for no air."},
      "conductivity": {
+      "description": "W/(m·K); else k comes from the card",
       "type": "number"
      },
      "timeout": {
+      "description": "s (300)",
       "type": "number"
      }
     },
@@ -19431,6 +19792,7 @@
       "type": "integer"
      },
      "timeout": {
+      "description": "s (300)",
       "type": "number"
      }
     },
@@ -19559,6 +19921,7 @@
     "type": "object",
     "properties": {
      "kind": {
+      "description": "one of: histogram, line, table",
       "type": "string",
       "enum": [
        "histogram",
@@ -19575,12 +19938,14 @@
       ]
      },
      "bins": {
+      "description": "kind histogram: bins (20)",
       "type": "integer"
      },
      "line": {
       "type": "object"
      },
      "points": {
+      "description": "kind table: [[x,y,z] ...]",
       "type": "array",
       "items": {}
      },
@@ -19681,6 +20046,7 @@
       "type": "string"
      },
      "solver": {
+      "description": "one of: calculix, elmer",
       "type": "string",
       "enum": [
        "calculix",
@@ -19707,12 +20073,14 @@
       }
      },
      "temperatures": {
+      "description": "for heat: [{ faces, celsius }]",
       "type": "array",
       "items": {
        "type": "object"
       }
      },
      "heat": {
+      "description": "for heat: [{ faces, watts }]",
       "type": "array",
       "items": {
        "type": "object"
@@ -19873,15 +20241,16 @@
       ]
      },
      "type": {"description": "type for faces: plane, cylinder, cone, sphere, torus, bspline. type for edges: line, circle, ellipse, bspline."},
-     "normal": {},
+     "normal": {"description": "[x,y,z]: for flat or curved faces, outward at the centre"},
      "axis": {"description": "axis: the direction of a line, or the axis of a circle or cylinder, in either direction."},
      "within": {
+      "description": "degrees for normal and axis (1)",
       "type": "number"
      },
-     "radius": {},
-     "area": {},
-     "length": {},
-     "near": {},
+     "radius": {"description": "a number or [least, most]"},
+     "area": {"description": "a number or [least, most]"},
+     "length": {"description": "a number or [least, most]"},
+     "near": {"description": "[x,y,z] or { point, within }: nearest first"},
      "inside": {
       "description": "inside { min, max }: the centre is in that box.",
       "type": "object"
@@ -19891,15 +20260,19 @@
       "type": "boolean"
      },
      "x": {
+      "description": "the coordinate of the centre, within tol",
       "type": "number"
      },
      "y": {
+      "description": "the coordinate of the centre, within tol",
       "type": "number"
      },
      "z": {
+      "description": "the coordinate of the centre, within tol",
       "type": "number"
      },
      "tol": {
+      "description": "(default 0.01) for x / y / z",
       "type": "number"
      },
      "of": {
@@ -20409,6 +20782,7 @@
     "type": "object",
     "properties": {
      "inspection": {
+      "description": "the inspection to split by the faces of the nominal body",
       "type": "string"
      },
      "body": {
@@ -20463,6 +20837,7 @@
     "type": "object",
     "properties": {
      "inspection": {
+      "description": "the inspection to write",
       "type": "string"
      },
      "name": {
@@ -20510,6 +20885,7 @@
     "type": "object",
     "properties": {
      "text": {
+      "description": "the question or remark to pin",
       "type": "string"
      },
      "at": {
@@ -20519,6 +20895,7 @@
       }
      },
      "body": {
+      "description": "with faces, instead of at",
       "type": "string"
      },
      "faces": {"description": "faces: \"Face6\", or shape_query's filters."}
@@ -20755,12 +21132,15 @@
       "type": "string"
      },
      "view": {
+      "description": "iso, or top, front, right …; front looks from -Y, with Z up; top looks down -Z, with +Y up; right looks from +X",
       "type": "string"
      },
      "width": {
+      "description": "pixels for each picture (480)",
       "type": "integer"
      },
      "height": {
+      "description": "pixels for each picture (360)",
       "type": "integer"
      },
      "path": {
@@ -20819,6 +21199,7 @@
     "type": "object",
     "properties": {
      "op": {
+      "description": "one of: join, dress",
       "type": "string",
       "enum": [
        "join",
@@ -20826,18 +21207,22 @@
       ]
      },
      "trajectories": {
+      "description": "op join: names, in order",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "trajectory": {
+      "description": "op dress",
       "type": "string"
      },
      "speed": {
+      "description": "mm/s; for every waypoint",
       "type": "number"
      },
      "acceleration": {
+      "description": "for every waypoint",
       "type": "number"
      },
      "cont": {
@@ -20855,6 +21240,7 @@
       "items": {}
      },
      "add": {
+      "description": "op dress: UseOrientation makes ypr replace the orientations",
       "type": "string"
      },
      "name": {
@@ -21065,9 +21451,11 @@
     "type": "object",
     "properties": {
      "robot": {
+      "description": "the robot to check the trajectory on",
       "type": "string"
      },
      "trajectory": {
+      "description": "the trajectory to check",
       "type": "string"
      },
      "samples": {
@@ -21120,6 +21508,7 @@
       "type": "string"
      },
      "trajectory": {
+      "description": "the trajectory to write as KUKA KRL (.src)",
       "type": "string"
      },
      "path": {
@@ -21171,6 +21560,7 @@
     "type": "object",
     "properties": {
      "path": {
+      "description": "the IFC file to open",
       "type": "string"
      }
     },
@@ -21556,9 +21946,11 @@
       "type": "string"
      },
      "range": {
+      "description": "limits the read, like \"A1:D20\" (400 cells for each call)",
       "type": "string"
      },
      "cells": {
+      "description": "limits the read (400 cells for each call)",
       "type": "array",
       "items": {
        "type": "string"
@@ -21629,9 +22021,11 @@
       }
      },
      "at": {
+      "description": "the start of rows (default A1)",
       "type": "string"
      },
      "rows": {
+      "description": "[[…], …] from at",
       "type": "array",
       "items": {
        "type": "array",
@@ -21769,9 +22163,11 @@
       "type": "string"
      },
      "range": {
+      "description": "the range to clear, like \"A1:C4\" (up to 20000 cells)",
       "type": "string"
      },
      "force": {
+      "description": "true: the tool refuses only if a user fails, not if an alias is in use",
       "type": "boolean"
      }
     },
@@ -21817,6 +22213,7 @@
       "type": "string"
      },
      "range": {
+      "description": "the range of cells to format",
       "type": "string"
      },
      "style": {
@@ -21837,12 +22234,14 @@
       }
      },
      "color": {
+      "description": "\"#rrggbb\" (null clears)",
       "type": [
        "string",
        "null"
       ]
      },
      "background": {
+      "description": "\"#rrggbb\" (null clears)",
       "type": [
        "string",
        "null"
@@ -22122,6 +22521,7 @@
       "type": "string"
      },
      "replace": {
+      "description": "true: all cells of the sheet go (for a sheet that holds cells)",
       "type": "boolean"
      }
     },
@@ -22170,6 +22570,7 @@
     "type": "object",
     "properties": {
      "sheet": {
+      "description": "the sheet to write to a CSV / TSV file",
       "type": "string"
      },
      "path": {
@@ -22217,6 +22618,7 @@
       "type": "string"
      },
      "kind": {
+      "description": "one of: line, bar, scatter (scatter needs x)",
       "type": "string",
       "enum": [
        "line",
@@ -22803,6 +23205,7 @@
     "type": "object",
     "properties": {
      "object": {
+      "description": "the object to place by point pairs",
       "type": "string"
      },
      "pairs": {
@@ -22862,6 +23265,7 @@
       "type": "string"
      },
      "file": {
+      "description": "the .FCStd path (relative: in the session's folder), to link to an object in it",
       "type": "string"
      },
      "kind": {
@@ -22879,18 +23283,21 @@
       }
      },
      "at": {
+      "description": "the placement of the link",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "axis": {
+      "description": "with angle: the placement of the link",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "angle": {
+      "description": "with axis: the placement of the link",
       "type": "number"
      },
      "count": {
@@ -22958,6 +23365,7 @@
     "type": "object",
     "properties": {
      "action": {
+      "description": "one of: replace, unlink, import, import_all",
       "type": "string",
       "enum": [
        "replace",
@@ -22967,15 +23375,18 @@
       ]
      },
      "link": {
+      "description": "actions replace and unlink",
       "type": "string"
      },
      "links": {
+      "description": "action import",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
      "to": {
+      "description": "action replace: the object to point the link at",
       "type": "string"
      },
      "name": {
@@ -23050,6 +23461,7 @@
     "type": "object",
     "properties": {
      "objects": {
+      "description": "the objects to copy",
       "type": "array",
       "items": {
        "type": "string"
@@ -23382,13 +23794,15 @@
     "type": "object",
     "properties": {
      "objects": {
+      "description": "the objects to colour",
       "type": "array",
       "items": {
        "type": "string"
       }
      },
-     "color": {},
+     "color": {"description": "\"#rrggbb\" or [r,g,b] 0–1"},
      "random": {
+      "description": "true: random colour (instead of color)",
       "type": "boolean"
      },
      "transparency": {
@@ -23516,12 +23930,15 @@
       "type": "number"
      },
      "parent": {
+      "description": "action replace: it uses new where it used old",
       "type": "string"
      },
      "old": {
+      "description": "action replace: what parent used",
       "type": "string"
      },
      "new": {
+      "description": "action replace: what parent uses instead",
       "type": "string"
      }
     },
@@ -23678,18 +24095,21 @@
       "type": "string"
      },
      "at": {
+      "description": "where on the shape the flange is (ToolBase)",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "axis": {
+      "description": "with angle: where on the shape the flange is (ToolBase)",
       "type": "array",
       "items": {
        "type": "number"
       }
      },
      "angle": {
+      "description": "with axis: where on the shape the flange is (ToolBase)",
       "type": "number"
      }
     },
@@ -23731,6 +24151,7 @@
       "type": "string"
      },
      "split": {
+      "description": "a cell, like \"A1\": any cell of a merged cell",
       "type": "string"
      }
     },
@@ -23973,6 +24394,7 @@
     "type": "object",
     "properties": {
      "name": {
+      "description": "the parameter to remove",
       "type": "string"
      }
     },
@@ -24169,6 +24591,7 @@
       "type": "string"
      },
      "kind": {
+      "description": "one of: gear, sprocket",
       "type": "string",
       "enum": [
        "gear",
@@ -24176,39 +24599,50 @@
       ]
      },
      "teeth": {
+      "description": "the number of teeth, for a gear or a sprocket",
       "type": "integer"
      },
      "module": {
+      "description": "kind gear",
       "type": "number"
      },
      "pressureAngle": {
+      "description": "kind gear (20)",
       "type": "number"
      },
      "internal": {
+      "description": "kind gear: with rim mm of wall",
       "type": "boolean"
      },
      "rim": {
+      "description": "mm of wall, with internal",
       "type": "number"
      },
      "shift": {
+      "description": "kind gear",
       "type": "number"
      },
      "highPrecision": {
       "type": "boolean"
      },
      "pitch": {
+      "description": "kind sprocket: 9.525 for #35 / 12.7 for #40",
       "type": "number"
      },
      "roller": {
+      "description": "kind sprocket: the roller diameter",
       "type": "number"
      },
      "thickness": {
+      "description": "mm",
       "type": "number"
      },
      "bore": {
+      "description": "mm",
       "type": "number"
      },
      "at": {
+      "description": "the position on the plane",
       "type": "array",
       "items": {}
      },
@@ -24277,6 +24711,7 @@
       "type": "string"
      },
      "sketch": {
+      "description": "the closed sketch to sweep in a helix",
       "type": "string"
      },
      "axis": {
@@ -24287,12 +24722,15 @@
       ]
      },
      "pitch": {
+      "description": "mm for each turn (give two of pitch, height, turns)",
       "type": "number"
      },
      "height": {
+      "description": "mm (give two of pitch, height, turns)",
       "type": "number"
      },
      "turns": {
+      "description": "give two of pitch, height, turns",
       "type": "number"
      },
      "taper": {
@@ -24300,6 +24738,7 @@
       "type": "number"
      },
      "growth": {
+      "description": "mm for each turn, with height and turns (a spiral)",
       "type": "number"
      },
      "leftHanded": {
@@ -24371,6 +24810,7 @@
       "type": "string"
      },
      "features": {
+      "description": "the features to repeat",
       "type": "array",
       "items": {
        "type": "string"
@@ -24437,9 +24877,11 @@
     "type": "object",
     "properties": {
      "body": {
+      "description": "the body the datum is placed from the origin of",
       "type": "string"
      },
      "kind": {
+      "description": "one of: line, point, lcs",
       "type": "string",
       "enum": [
        "line",
@@ -24448,6 +24890,7 @@
       ]
      },
      "direction": {
+      "description": "kind line: the direction (along z by default)",
       "type": "array",
       "items": {}
      },
@@ -24463,6 +24906,7 @@
       "items": {}
      },
      "rotate": {
+      "description": "kind lcs: { axis, angle }",
       "type": "object"
      },
      "refs": {
@@ -24530,6 +24974,7 @@
     "type": "object",
     "properties": {
      "body": {
+      "description": "the body that gets the shape binder",
       "type": "string"
      },
      "from": {
@@ -24690,9 +25135,11 @@
       "items": {}
      },
      "rotate": {
+      "description": "{ center, angle deg ccw }",
       "type": "object"
      },
      "scale": {
+      "description": "{ center, factor }",
       "type": "object"
      },
      "move": {
@@ -25102,6 +25549,7 @@
       "type": "integer"
      },
      "op": {
+      "description": "one of: degree, knot",
       "type": "string",
       "enum": [
        "degree",
@@ -25109,12 +25557,15 @@
       ]
      },
      "by": {
+      "description": "op degree: +1 raises, -1 lowers; op knot: with knot, raises or lowers its multiplicity",
       "type": "integer"
      },
      "param": {
+      "description": "op knot: inserts a knot there, with multiplicity",
       "type": "number"
      },
      "knot": {
+      "description": "op knot: the knot's index from 1",
       "type": "integer"
      },
      "multiplicity": {
@@ -25282,6 +25733,7 @@
     "type": "object",
     "properties": {
      "sketch": {
+      "description": "the sketch to move",
       "type": "string"
      },
      "plane": {
@@ -25436,7 +25888,7 @@
      "The answer gives the sizes as saved."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's. cell: true gives each view that size instead."}, "view": {"type": "string", "description": "view: first turn to a standard view (fit true). front looks from -Y toward +Y (it shows the -Y side), with Z up. top looks down -Z, with +Y up the screen. right looks from +X. iso looks from the front, the right and above."}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture. views [..]: up to 6, or \"all\"."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's. cell: true gives each view that size instead."}, "view": {"type": "string", "description": "view: first turn to a standard view (fit true). front looks from -Y toward +Y (it shows the -Y side), with Z up. top looks down -Z, with +Y up the screen. right looks from +X. iso looks from the front, the right and above."}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture. views [..]: up to 6, or \"all\"."}, "fit": {"type": "boolean", "description": "false: the view is not fitted again"}, "width": {"type": "integer", "description": "the whole picture; several views share it (800)"}, "height": {"type": "integer", "description": "the whole picture; several views share it (600)"}, "background": {"type": "string"}, "inline": {"type": "boolean", "description": "true: the picture is also in the answer"}, "path": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/view.py)",
    "date": "2026-11-22",
@@ -25907,7 +26359,7 @@
      "Answer: deleted, errors, health."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"objects": {}, "force": {"type": "boolean", "description": "FreeCAD itself deletes without a question and leaves the users broken; force: true allows that."}}, "required": ["objects"], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"objects": {"description": "names or labels of the objects to delete"}, "force": {"type": "boolean", "description": "FreeCAD itself deletes without a question and leaves the users broken; force: true allows that."}}, "required": ["objects"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
@@ -25939,7 +26391,7 @@
      "Answer: name, from, to."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "label": {"type": "string"}}, "required": ["object", "label"], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "label": {"type": "string", "description": "the new label"}}, "required": ["object", "label"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
@@ -25969,7 +26421,7 @@
      "Answer: group, type, holds."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["add", "remove", "dissolve", "link", "list"]}, "group": {"type": "string"}, "kind": {"type": "string", "enum": ["folder", "part"], "description": "kind: folder (App::DocumentObjectGroup, no placement) | part (App::Part: its Placement moves all in it)."}, "objects": {"type": "array", "items": {"type": "string"}}, "object": {"type": "string"}, "count": {"type": "integer"}, "at": {"type": "array", "items": {}}, "step": {"type": "array", "items": {}}, "visible": {"type": "boolean", "description": "visible: false hides the objects of a group."}, "name": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["add", "remove", "dissolve", "link", "list"], "description": "one of: add, remove, dissolve, link, list"}, "group": {"type": "string", "description": "add, remove: the group to put objects into or take them out of; dissolve: the group that goes"}, "kind": {"type": "string", "enum": ["folder", "part"], "description": "kind: folder (App::DocumentObjectGroup, no placement) | part (App::Part: its Placement moves all in it)."}, "objects": {"type": "array", "items": {"type": "string"}, "description": "add, remove: the objects to put into the group or take out of it"}, "object": {"type": "string"}, "count": {"type": "integer"}, "at": {"type": "array", "items": {}}, "step": {"type": "array", "items": {}}, "visible": {"type": "boolean", "description": "visible: false hides the objects of a group."}, "name": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
@@ -26046,7 +26498,7 @@
      "Answer: format, count, objects (name, label, type, volume or mesh), health."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"path": {"type": "string", "description": "path: a relative path is in the session's folder."}, "name": {"type": "string", "description": "name: the label."}, "split": {"type": "boolean"}, "solid": {"type": "boolean", "description": "solid: true makes a body of the triangles (up to 200000; slow above some tens of thousands)."}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number"}}, "required": ["path"], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"path": {"type": "string", "description": "path: a relative path is in the session's folder."}, "name": {"type": "string", "description": "name: the label."}, "split": {"type": "boolean", "description": "STEP, IGES, BREP: true makes a body for each solid"}, "solid": {"type": "boolean", "description": "solid: true makes a body of the triangles (up to 200000; slow above some tens of thousands)."}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number", "description": "PNG, JPG, BMP: width in mm of the image plane"}}, "required": ["path"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
@@ -26082,7 +26534,7 @@
      "The answer gives the tolerance used (toleranceUnit mm). fileUnit is the unit of the numbers in the file: mm, or m for glb, gltf and dae. verifyUnits gives the unit of each number of verify."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"objects": {"description": "objects: the one body when omitted; several go as one compound."}, "format": {"type": "string", "enum": ["step", "iges", "brep", "stl", "obj", "3mf", "ply", "off", "wrl", "x3d", "glb", "gltf", "dae", "dxf", "svg"], "description": "format: or from path's extension."}, "path": {"type": "string"}, "tolerance": {"type": "number", "description": "tolerance: the chord error, 0.01 mm."}, "colors": {"type": "object"}, "view": {"type": "string", "enum": ["top", "bottom", "front", "back", "right", "left", "iso"]}, "hidden": {"type": "boolean", "description": "hidden: true adds hidden lines on their own layer."}, "section": {"type": "number", "description": "section: a section at z mm instead."}}, "required": [], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"objects": {"description": "objects: the one body when omitted; several go as one compound."}, "format": {"type": "string", "enum": ["step", "iges", "brep", "stl", "obj", "3mf", "ply", "off", "wrl", "x3d", "glb", "gltf", "dae", "dxf", "svg"], "description": "format: or from path's extension."}, "path": {"type": "string", "description": "the file to write"}, "tolerance": {"type": "number", "description": "tolerance: the chord error, 0.01 mm."}, "colors": {"type": "object", "description": "{label: \"#rrggbb\"}, for a scene in glTF (glb, gltf) or Collada (dae)"}, "view": {"type": "string", "enum": ["top", "bottom", "front", "back", "right", "left", "iso"]}, "hidden": {"type": "boolean", "description": "hidden: true adds hidden lines on their own layer."}, "section": {"type": "number", "description": "section: a section at z mm instead."}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
@@ -26151,7 +26603,7 @@
      "Answer: set { name: { was, now, type } }, appliesAtNextLaunch."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"path": {"type": "string", "description": "path: the group."}, "name": {"type": "string"}, "value": {}, "values": {"type": "object"}, "type": {"type": "string", "description": "type: bool, int, uint, float, string."}}, "required": [], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"path": {"type": "string", "description": "path: the group."}, "name": {"type": "string", "description": "the name of the setting (with value)"}, "value": {"description": "the value of the setting (with name)"}, "values": {"type": "object", "description": "{ name: value }"}, "type": {"type": "string", "description": "type: bool, int, uint, float, string."}}, "required": [], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/app.py)",
    "date": "2026-11-16",
@@ -26309,7 +26761,7 @@
      "Changes nothing."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"menu": {"type": "string", "description": "menu: one top menu only, all of it."}, "limit": {"type": "integer"}}, "required": [], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"menu": {"type": "string", "description": "menu: one top menu only, all of it."}, "limit": {"type": "integer", "description": "without menu: the first limit items (400)"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/app.py)",
    "date": "2026-11-16",
@@ -26460,7 +26912,7 @@
      "Changes nothing."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"index": {"type": "integer", "description": "index 2, 3 … for older ones."}, "original": {"type": "boolean"}}, "required": [], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"index": {"type": "integer", "description": "index 2, 3 … for older ones."}, "original": {"type": "boolean", "description": "true: the screenshot without the person's marks"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/app.py)",
    "date": "2026-11-16",
@@ -26548,7 +27000,7 @@
      "Answer: installed / updated / removed, folder, smoke."
     ]
    },
-   "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": {"type": "string"}, "query": {"type": "string"}, "url": {"type": "string"}, "branch": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"], "description": "one of: list, search, install, update, remove"}, "name": {"type": "string", "description": "the add-on, for install, update and remove"}, "query": {"type": "string", "description": "part of a name, for search in the official catalog"}, "url": {"type": "string", "description": "an https / git address or a folder; else the catalog (install; the first update of a hand-copied add-on)"}, "branch": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/unattended.py)",
    "date": "2026-11-16",
