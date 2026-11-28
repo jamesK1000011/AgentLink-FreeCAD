@@ -110,7 +110,8 @@ def cards(body, want):
         return body
     bad = [w for w in want if w not in seen and w not in CARD_FIELDS]
     if bad:
-        raise ToolError("invalid_input", f"what: {', '.join(bad)} is not a card field. The fields: {', '.join(sorted(set(seen) | set(CARD_FIELDS) - {"description", "inputSchema"} if any("does" in c for c in every(body)) else seen))}.")
+        shown = sorted((set(seen) | set(CARD_FIELDS)) - {"description", "inputSchema"}) if any("does" in c for c in every(body)) else sorted(seen)
+        raise ToolError("invalid_input", "what: " + ", ".join(bad) + " is not a card field. The fields: " + ", ".join(shown) + ".")
 
     def narrow(b):
         b = dict(b)
