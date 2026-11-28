@@ -1587,8 +1587,8 @@ class Server:
         return result
 
     def _sketch_words(self, params, result, filled, sk, before=None):
-        """filled: the sketch a tool took when none was named, as
-        "pd_pad.sketch=Sketch 2 (open in edit in the window)". sketchNote: a
+        """filled: the sketch a tool took when none was named, as a record
+        { tool, input, value, from: openInEdit | madeLast | onlySketch }. sketchNote: a
         change to the geometry of a sketch a feature uses while its body
         has an unused sketch (decision 4, D-b), with the measured change of
         the body (before: pd_common.used_mark's reading from before the
@@ -1615,7 +1615,8 @@ class Server:
         if filled:
             had = body.get("filled")
             had = list(had) if isinstance(had, list) else ([had] if had else [])
-            body["filled"] = list(dict.fromkeys(had + [f"{name}.{w}" for w in filled]))
+            new = [{"tool": name, **w} if isinstance(w, dict) else {"tool": name, "text": str(w)} for w in filled]
+            body["filled"] = had + [w for w in new if w not in had]
         if note:
             body["sketchNote"] = note
         body.update(tail)

@@ -507,6 +507,36 @@ def key(state):
             d.get("title"), tuple(d.get("buttons") or ()), tuple(state.get("rules") or ()))
 
 
+def record(state, tools=()):
+    """The next part as a record (owner, 28 Nov: answers as records), or None
+    with no window: { dialog: { title, buttons }, editing: { sketch, dof } |
+    { object }, taskPanel: { buttons }, likelyNext: [ { tool, why } ],
+    workbench, statusBar }. With a dialog in front no tool is named:
+    dialog_answer presses its buttons."""
+    if not state or not state.get("window"):
+        return None
+    out = {}
+    d = state.get("dialog")
+    if d:
+        out["dialog"] = {"title": d.get("title") or "untitled", "buttons": list(d.get("buttons") or [])}
+    sk = state.get("sketch")
+    if sk:
+        out["editing"] = {"sketch": sk.get("name"), **({"dof": sk.get("dof")} if sk.get("dof") is not None else {})}
+    elif state.get("editing"):
+        out["editing"] = {"object": state["editing"]}
+    p = state.get("panel")
+    if p:
+        out["taskPanel"] = {"buttons": list(p.get("buttons") or [])}
+    picks = [t if isinstance(t, dict) else {"tool": str(t), "why": ""} for t in (tools or ())][:MAX_TOOLS]
+    if picks and not d:
+        out["likelyNext"] = [{"tool": t.get("tool"), **({"why": t["why"]} if t.get("why") else {})} for t in picks]
+    if state.get("workbench"):
+        out["workbench"] = state["workbench"]
+    if state.get("status"):
+        out["statusBar"] = state["status"]
+    return out or None
+
+
 def compose(state, tools=(), limit=MAX):
     """The hint, or None when there is nothing to say (no window).
     state: { window, workbench, editing, sketch { name, dof }, panel

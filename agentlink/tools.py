@@ -1707,7 +1707,7 @@ def _next_quick(session):
 
 
 def next_hint(session, news_only=False):
-    """The "next" line for session_state (always, when there is a window)
+    """The "next" record for session_state (always, when there is a window)
     and for the health check (news_only: only when the workbench, the edit
     state, the selection, a task panel or a dialog is not as it was at the
     last hint — told by a few attribute reads, so a call that leaves the
@@ -1728,7 +1728,7 @@ def next_hint(session, news_only=False):
         k = nexthint.key(state)
         if news_only and getattr(session, "_next_said", None) == k:
             return None
-        line = nexthint.compose(state, tools_now)
+        line = nexthint.record(state, tools_now)
         if line:
             session._next_said = k
         return line

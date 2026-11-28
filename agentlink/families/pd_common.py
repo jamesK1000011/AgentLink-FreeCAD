@@ -222,7 +222,8 @@ def took(session, sk, why):
     the call's own answer notes; nothing in a dry reading (needs.py)."""
     got = getattr(session, "filled_now", None) if session is not None else None
     if isinstance(got, list) and not _dry():
-        got.append(f"sketch={sk.Label} ({why})")
+        # A record (28 Nov: answers as records): the input, the value it took, and from where.
+        got.append({"input": "sketch", "value": sk.Label, "from": why})
 
 
 def note_named(session, sk):
@@ -246,14 +247,14 @@ def sketch_of(doc, ref, body=None, session=None):
         if body is not None:
             sk = [o for o in sk if body.hasObject(o)]
         if session is not None:
-            for o, why in ((sketch_in_edit(doc), "open in edit in the window"), (made_sketch(session, doc), "you made it last")):
+            for o, why in ((sketch_in_edit(doc), "openInEdit"), (made_sketch(session, doc), "madeLast")):
                 if o is not None and any(o is x for x in sk):
                     took(session, o, why)
                     note_named(session, o)
                     return o
         if len(sk) == 1:
             if session is not None:
-                took(session, sk[0], "the only sketch" + (f" in {body.Label}" if body is not None else ""))
+                took(session, sk[0], "onlySketch")
                 note_named(session, sk[0])
             return sk[0]
         where = f" in {body.Label}" if body is not None else ""

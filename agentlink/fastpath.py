@@ -526,7 +526,7 @@ class Run:
                 args[k] = UNKNOWN
                 continue
             args[k] = [v] if (props.get(k) or {}).get("type") == "array" else v
-            self.filled.append(f"{tool.name}.{k}={_label(doc, v)}")
+            self.filled.append({"tool": tool.name, "input": k, "value": _label(doc, v), "from": "block" if self.block_ctx.get(src) else "session"})
         # What this call names becomes current.
         for k in BLOCK_FROM:
             if isinstance(args.get(k), str) and k in props:
@@ -910,7 +910,7 @@ def _run(server, session, steps, a):
             run.note_made(before, name, args)
         if ok and isinstance(body, dict) and isinstance(body.get("filled"), list):
             # A sketch the tool took when none was named (pd_common.sketch_of).
-            run.filled += [str(x) for x in body["filled"]]
+            run.filled += [x for x in body["filled"] if x not in run.filled]
         row = {"step": where, "tool": name, "ok": ok, **({"result": body} if ok else {"error": kinded(body.get("error"))})}
         run.rows.append(row)
         record.write({"running": True, "ran": len(run.rows), "results": run.rows})
@@ -976,7 +976,7 @@ def _run(server, session, steps, a):
         if run.warnings:
             out["warnings"] = run.warnings[:12]
         if run.filled:
-            out["filled"] = list(dict.fromkeys(run.filled))[:12]
+            out["filled"] = run.filled[:12]
         if state["cp"]:
             out["checkpoint"] = state["cp"]
         if rel:
