@@ -86,10 +86,16 @@ def report(session, o, tool, extra=None, check=True):
         out["unchecked"] = f"Not checked for soundness: the call was out of time ({len(o.Shape.Faces):,} faces). body_check {o.Label} checks it (it is timed and given its own deadline)."
         return out
     s = geo.soundness(o.Shape)
-    out = picks.finish(session, tool, lambda: {"body": o.Label, **geo.stats(o.Shape), "sound": s["ok"]}, recompute=False, extra=extra)
+    key = FEATURE_KEY.get(tool, "body")
+    out = picks.finish(session, tool, lambda: {key: o.Label, **geo.stats(o.Shape), "sound": s["ok"]}, recompute=False, extra=extra)
     if not s["ok"]:
         out["problems"] = s["problems"]
     return out
+
+
+# The answer's key for the made object where it is a Part feature (Part::Box,
+# Part::Cylinder …), not a PartDesign Body (s1127f QA: "body": "Box").
+FEATURE_KEY = {"part_primitive": "feature"}
 
 
 def open_edges(sh):
@@ -674,21 +680,45 @@ def tools(session):
         o = picks.bake(s, base, shape, name, consumed=consumed, keep=keep)
         return o, list(getattr(s, "last_hidden", []) or [])
 
-    def inputs_left(objs, result):
-        """[{object, type, visible}] for each input of a boolean that is in
-        the document after it, other than the result (s1127e QA, H4: with a
-        name, the base Part::Box stayed in the document, visible and uncut,
-        and the answer did not say so)."""
-        out = []
-        names = {x.Name for x in doc().Objects}
+    ORIGIN_TYPES = ("App::Origin", "App::Line", "App::Plane", "App::Point")
+
+    def input_members(objs):
+        """[{name, label, top}] of a boolean's inputs and of what they hold
+        (a PartDesign Body's features and sketches; not its Origin), read
+        before the boolean: what can stay in the document after it."""
+        out, seen = [], set()
         for o in objs:
             try:
-                if o is None or o is result or o.Name not in names:
+                for x, top in [(o, True)] + [(m, False) for m in (getattr(o, "Group", None) or [])]:
+                    if x.Name in seen or (not top and x.TypeId in ORIGIN_TYPES):
+                        continue
+                    seen.add(x.Name)
+                    out.append({"name": x.Name, "label": x.Label, "top": top})
+            except Exception:  # noqa: BLE001 - not read: not listed
+                continue
+        return out
+
+    def inputs_left(members, result):
+        """[{object, type, visible}] for each input, and each object an input
+        held, that is in the document after the boolean, other than the
+        result (s1127e QA H4; s1127f: a removed Body2's AdditiveCylinder
+        stayed, free and visible, and was not listed). As FreeCAD has it."""
+        out = []
+        d = doc()
+        for m in members:
+            try:
+                o = d.getObject(m["name"])
+                if o is None or o is result:
                     continue
                 out.append({"object": o.Label, "type": o.TypeId, "visible": bool(getattr(o, "Visibility", True))})
             except Exception:  # noqa: BLE001 - removed meanwhile: not listed
                 continue
         return out
+
+    def removed_of(members):
+        """The labels of the inputs that are no longer in the document."""
+        d = doc()
+        return [m["label"] for m in members if m["top"] and d.getObject(m["name"]) is None]
 
     # ---- transforms ----
 
@@ -923,7 +953,7 @@ def tools(session):
     # What the tools' entries (agentlink/data/tools.json) call by name.
     helpers = {"carry_material": lambda src, copies: picks.carry_material(s, src, copies), "doc": doc, "finish": finish, "report": lambda o, tool, extra=None, check=True: report(s, o, tool, extra, check),
                "unique": lambda label, *own: s.unique(label, *own), "solid_body": lambda ref: picks.solid_body(s, ref),
-               "bake": lambda base, shape, name=None: picks.bake(s, base, shape, name), "baked": baked, "inputs_left": inputs_left, "clean": geo.clean,
+               "bake": lambda base, shape, name=None: picks.bake(s, base, shape, name), "baked": baked, "inputs_left": inputs_left, "input_members": input_members, "removed_of": removed_of, "clean": geo.clean,
                "find": lambda ref, *what: picks.find(doc(), ref, *what), "positive": positive, "num": picks.num, "vec3": picks.vec3,
                "direction": picks.direction, "placed": picks.placement, "placement_json": picks.placement_json, "ref_list": picks.ref_list,
                "split_ref": picks.split_ref, "element": picks.element,

@@ -5370,7 +5370,7 @@
   },
   "part_primitive": {
    "group": "model",
-   "description": "Add a FreeCAD Part primitive (mm, degrees). It is a Part feature such as Part::Box or Part::Cylinder, not a PartDesign Body. The pd_ tools take a PartDesign Body only. kind box { size [x,y,z] }: a corner at at. kind cylinder { radius, height }. kind cone { radius (base), radius2 (top) }; either can be 0. kind prism { sides, radius (centre to corner), height }. kind tube { radius, radius2 (bore), height }. Cylinder, cone, prism and tube have the base centred at at, with axis +z or along direction. kind sphere { radius } and torus { radius (ring), radius2 (tube) }: centred at at. kind wedge { wedge: { xmin, ymin, zmin, x2min, z2min, xmax, ymax, zmax, x2max, z2max } }. The front face of a wedge is at ymin, the rear face (x2, z2) at ymax. rotate { axis, angle }: turns it about at. It is parametric until a boolean, fillet or other part_ step makes it a plain shape. Until then, object_set changes Length / Width / Height (box x, y, z), Radius, Radius1 / Radius2. Radius1 / Radius2 are the cone base / top, or the torus ring / tube. Also Polygon / Circumradius, Xmin … Z2max, OuterRadius / InnerRadius. Answer: body (the Part feature's label), volume, area, faces, solids, box, sound, type, placement. type is FreeCAD's TypeId, for example Part::Box.",
+   "description": "Add a FreeCAD Part primitive (mm, degrees). It is a Part feature such as Part::Box or Part::Cylinder, not a PartDesign Body. The pd_ tools take a PartDesign Body only. kind box { size [x,y,z] }: a corner at at. kind cylinder { radius, height }. kind cone { radius (base), radius2 (top) }; either can be 0. kind prism { sides, radius (centre to corner), height }. kind tube { radius, radius2 (bore), height }. Cylinder, cone, prism and tube have the base centred at at, with axis +z or along direction. kind sphere { radius } and torus { radius (ring), radius2 (tube) }: centred at at. kind wedge { wedge: { xmin, ymin, zmin, x2min, z2min, xmax, ymax, zmax, x2max, z2max } }. The front face of a wedge is at ymin, the rear face (x2, z2) at ymax. rotate { axis, angle }: turns it about at. It is parametric until a boolean, fillet or other part_ step makes it a plain shape. Until then, object_set changes Length / Width / Height (box x, y, z), Radius, Radius1 / Radius2. Radius1 / Radius2 are the cone base / top, or the torus ring / tube. Also Polygon / Circumradius, Xmin … Z2max, OuterRadius / InnerRadius. Answer: feature (the Part feature's label), volume, area, faces, solids, box, sound, type, placement. type is FreeCAD's TypeId, for example Part::Box.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -5452,7 +5452,7 @@
   },
   "part_boolean": {
    "group": "model",
-   "description": "Do a fuse, cut or common of body with bodies. bodies: solid bodies by name (the tools). body: the body that is kept. You must name it when more than one body shows. common with several bodies keeps what body shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. With no name, the result takes the label of body. With name, the result is a new object with that label, and body stays in the document as it was. It is a plain shape, with coplanar faces merged. The tool removes bodies (keep: true hides them). A hidden body is still a body to other tools. A PartDesign Body as body gives a new Body on the result, and the tool hides the old one. Faces and edges of the result get new numbers. The tool refuses, and keeps bodies, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, inputsLeft, hidden + hiddenNote. inputsLeft gives each input still in the document: object, type, visible. object_delete of the result shows the inputs again. A boolean gives a plain shape with no history. Its faces get new names.",
+   "description": "Do a fuse, cut or common of body with bodies. bodies: solid bodies by name (the tools). body: the body that is kept. You must name it when more than one body shows. common with several bodies keeps what body shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. With no name, the result takes the label of body. With name, the result is a new object with that label, and body stays in the document as it was. It is a plain shape, with coplanar faces merged. The tool removes the tool objects (keep: true hides them). Objects that a removed PartDesign Body held can stay in the document. A hidden body is still a body to other tools. A PartDesign Body as body gives a new Body on the result, and the tool hides the old one. Faces and edges of the result get new numbers. The tool refuses, and keeps bodies, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, inputsLeft, hidden + hiddenNote. inputsLeft gives each input, and each object an input held, that is still in the document: object, type, visible. removed gives the inputs that are no longer in the document. object_delete of the result shows the inputs again. A boolean gives a plain shape with no history. Its faces get new names.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -5502,9 +5502,9 @@
     {"when": "=op == 'fuse'", "then": [{"let": {"lost": "=fuse_dropped(bs, tl, res)"}}, {"refuse": {"fmt": "fuse: nothing of {', '.join(lost)} was added to {base.Label} although it reaches outside {base.Label}'s box (volume change {res.Volume - bs.Volume:.2f} mm³): OCC dropped the tool. Nothing was changed; the tools are kept."}, "code": "failed", "when": "=lost"}]},
     {"refuse": {"fmt": "common: {base.Label} and {', '.join(t.Label for t in tl)} do not overlap (least distance {bs.distToShape(shapes[0])[0]:.3f} mm) — nothing would be left."}, "code": "failed", "when": "=op == 'common' and res.Volume < 1e-6"},
     {"when": "=not changed(bs, res)", "then": [{"let": {"dist": "=min(bs.distToShape(x)[0] for x in shapes)"}}, {"let": {"why": "='they do not touch' if dist > 1e-6 else ('the tools lie inside it' if op == 'fuse' else 'they only touch it')"}}, {"refuse": {"fmt": "{op} changed nothing in {base.Label}: {why} (least distance {dist:.3f} mm)."}, "code": "failed"}]},
-    {"let": {"o, hid": "=baked(base, res, a.name, consumed=tl, keep=bool(a.keep))"}}
+    {"let": {"members": "=input_members([base] + tl)"}}, {"let": {"o, hid": "=baked(base, res, a.name, consumed=tl, keep=bool(a.keep))"}}
    ],
-   "answer": {"via": "report", "with": ["=o", "=tool", "$fields"], "fields": {"op": "=op", "volumeChange": "=round(o.Shape.Volume - bs.Volume, 2)", "kept": {"when": "=a.keep", "value": "=[t.Label for t in tl]"}, "removed": {"when": "=not a.keep", "value": "=[t.Label for t in tl]"}, "inputsLeft": {"when": "=inputs_left([base] + tl, o)", "value": "=inputs_left([base] + tl, o)"}, "hidden": {"when": "=hid", "value": "=hid"}, "hiddenNote": {"when": "=hid", "value": {"fmt": "Hidden so the result is seen alone: {', '.join(hid)} — still bodies to other tools, not drawn by view_render. object_delete {o.Label} takes the result back and shows them again; object_set {{ Visibility: true }} shows one."}}, "fuzzy": {"when": "=fuzzy", "value": "=fuzzy"}, "fuzzyNote": {"when": "=fuzzy", "value": {"fmt": "OCC made an invalid result first. The tool tried again with a fuzzy value of {fuzzy} mm, and that result is valid."}}, "note": {"when": "=len(o.Shape.Solids) > 1", "value": {"fmt": "{len(o.Shape.Solids)} separate solids: pieces that do not touch."}}}}
+   "answer": {"via": "report", "with": ["=o", "=tool", "$fields"], "fields": {"op": "=op", "volumeChange": "=round(o.Shape.Volume - bs.Volume, 2)", "kept": {"when": "=a.keep", "value": "=[t.Label for t in tl]"}, "removed": {"when": "=not a.keep and removed_of(members)", "value": "=removed_of(members)"}, "inputsLeft": {"when": "=inputs_left(members, o)", "value": "=inputs_left(members, o)"}, "hidden": {"when": "=hid", "value": "=hid"}, "hiddenNote": {"when": "=hid", "value": {"fmt": "Hidden so the result is seen alone: {', '.join(hid)} — still bodies to other tools, not drawn by view_render. object_delete {o.Label} takes the result back and shows them again; object_set {{ Visibility: true }} shows one."}}, "fuzzy": {"when": "=fuzzy", "value": "=fuzzy"}, "fuzzyNote": {"when": "=fuzzy", "value": {"fmt": "OCC made an invalid result first. The tool tried again with a fuzzy value of {fuzzy} mm, and that result is valid."}}, "note": {"when": "=len(o.Shape.Solids) > 1", "value": {"fmt": "{len(o.Shape.Solids)} separate solids: pieces that do not touch."}}}}
   },
   "part_transform": {
    "group": "model",
@@ -6866,7 +6866,7 @@
     {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)"}},
-    {"refuse": {"fmt": "{b.Label} has no solid to groove: pd_pad or pd_revolution first."}, "code": "invalid_state", "when": "=before <= 0"},
+    {"refuse": {"fmt": "{b.Label} has no solid to groove."}, "code": "invalid_state", "when": "=before <= 0"},
     {"let": {"angle": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
     {"let": {"side": "=a.sides or 'one'"}},
@@ -7414,6 +7414,7 @@
     "with": ["=b", "=f", "pd_linear_pattern", "=before"],
     "then": [
      {"put": {"repeated": "=took"}, "when": "=whole"},
+     {"do": "=out.update(pattern_facts(b, f))"},
      {"do": "=not_given(out, a, {'direction': 'x', 'count': f.Occurrences, 'length': None if 'spacing' in a else num_json(f.Length), 'reversed': False})"}
     ]
    }
@@ -7500,6 +7501,7 @@
     "with": ["=b", "=f", "pd_polar_pattern", "=before"],
     "then": [
      {"put": {"repeated": "=took"}, "when": "=whole"},
+     {"do": "=out.update(pattern_facts(b, f))"},
      {"do": "=not_given(out, a, {'axis': 'z', 'count': f.Occurrences, 'angle': 360, 'reversed': False})"}
     ]
    }
@@ -7548,7 +7550,7 @@
     {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
-    {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
+    {"refuse": {"fmt": "{b.Label} has no solid to cut."}, "code": "invalid_state", "when": "=sub and before <= 0"},
     {"let": {"f": "=new(b, 'PartDesign::' + ('Subtractive' if sub else 'Additive') + 'Loft', 'Loft')"}},
     {"set": {"f.Profile": "=sk"}},
     {"let": {"secs": "=[sketch_of(r, b) for r in (a.sections or [])]"}},
@@ -7606,7 +7608,7 @@
     {"let": {"spec": "=tube_spec(a.sketch) if made else None", "sk": "=None if made else sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not made and not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
-    {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
+    {"refuse": {"fmt": "{b.Label} has no solid to cut."}, "code": "invalid_state", "when": "=sub and before <= 0"},
     {"let": {"path, names, start, tangent, flip": "=pipe_path(b, a.path, a.edges, sk)"}},
     {"refuse": "=closed_tube_words(path, names, spec)", "when": "=made and spec[1] is not None and path_closed(path, names)"},
     {"let": {"held": "=None"}},
@@ -21293,7 +21295,7 @@
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
     {"let": {"b": "=first([p for p in sk.InList if p.TypeId == 'PartDesign::Body'])"}},
-    {"refuse": {"fmt": "{sk.Label} is in no body: attach works on a body's sketch — sketch_new makes one in a body, and sketch_carbon copies this one into it."}, "code": "invalid_state", "when": "=b is None"},
+    {"refuse": {"fmt": "{sk.Label} is in no body: this tool attaches a sketch of a body."}, "code": "invalid_state", "when": "=b is None"},
     {"when": "=a.get('edge') is not None or a.get('repair')", "then": [{"refuse": "edge or repair: not with plane or face.", "when": "='plane' in a or 'face' in a"}, {"let": {"extra": "=attach_edge(sk, b, a)"}}, {"answer": {"via": "finish", "with": ["sketch_attach", "$fields"], "late": true, "fields": {"axes": "=axes(world_pl(sk))", "...state": "=state(sk)", "...extra": "=extra"}}}]},
     {"refuse": {"fmt": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face {{ at: [x,y,z], normal: [x,y,z] }}, one of them, not both."}, "when": "=('plane' in a) == ('face' in a)"},
     {"let": {"link, what": "=plane_ref(b, a['plane'] if 'plane' in a else a['face'], 'plane')"}},
@@ -21540,7 +21542,7 @@
   },
   "doc_close": {
    "group": "doc",
-   "description": "Close open documents. documents: each by internal name, label or .FCStd path (the current document when omitted). The tool refuses a label that two documents share, and gives their names. The tool refuses a document changed since its save (or never saved and not empty), and closes nothing. First use doc_save. Or discard: true closes WITHOUT a save, and the changes are lost. discard shows no save dialog. This tool has no save input. Work moves to another open document. Answer: document, label, open, discarded. open: the labels of the documents still open, each as \"Label (Name)\" where two share a label. discarded: the documents that lost changes. You cannot undo this.",
+   "description": "Close open documents. documents: each by internal name, label or .FCStd path (the current document when omitted). A name that FreeCAD lists a document under is taken first. A label that two documents share, given as no document's name, is refused with their names. The tool refuses a document changed since its save (or never saved and not empty), and closes nothing. discard: true closes WITHOUT a save, and the changes are lost. discard shows no save dialog. This tool has no save input. Work moves to another open document. Answer: closed, document, label, open, discarded. closed, discarded and the refusal give each document as label (name). open: the labels of the documents still open, each as \"Label (Name)\" where two share a label. discarded: the documents that lost changes. You cannot undo this.",
    "inputSchema": {"type": "object", "properties": {"documents": {"type": "array", "items": {"type": "string"}}, "discard": {"type": "boolean"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
@@ -21552,10 +21554,10 @@
     {"let": {"listed": "=listed_docs()", "picked": "=[]"}},
     {"let": {"docs": "=list(listed.values())"}},
     {"each": "r", "in": "=refs", "steps": [{"let": {"d, hits": "=doc_hits(r, listed)"}}, {"refuse": {"fmt": "{r!r}: {len(hits)} open documents have that label — give the name in brackets: {doc_names(hits)}."}, "when": "=len(hits) > 1"}, {"let": {"d": "=d if d is not None else hits[0] if hits else own_doc(r)"}}, {"refuse": {"fmt": "{r!r}: no open document by that name, label or path — open, as label (name): {doc_names(docs)}. doc_switch with no arguments lists them with their files."}, "code": "not_found", "when": "=d is None"}, {"push": {"picked": "=d"}, "when": "=not any([d.Name == x.Name for x in picked])"}]},
-    {"let": {"lost": "=[d.Label for d in picked if unsaved(d)]"}},
+    {"let": {"lost": "=[d.Label + ' (' + d.Name + ')' for d in picked if unsaved(d)]"}},
     {"when": "=lost and not a.get('discard')", "then": [{"let": {"marks": "=touched_marks(picked, lost)"}}, {"let": {"which": "=' (objects marked changed — ' + marks + ')' if marks else ''"}}, {"refuse": {"fmt": "Changed since saved: {', '.join(lost)}{which} — nothing was closed. doc_close {{ documents, discard: true }} closes without saving, and the changes are lost."}, "code": "invalid_state"}]},
     {"let": {"closed": "=[]", "was": "=current_name()"}},
-    {"each": "d", "in": "=picked", "steps": [{"push": {"closed": "=d.Label"}}, {"do": "=close_doc(d.Name)"}]},
+    {"each": "d", "in": "=picked", "steps": [{"push": {"closed": "=d.Label + ' (' + d.Name + ')'"}}, {"do": "=close_doc(d.Name)"}]},
     {"let": {"still": "=listed_docs()"}},
     {"do": "=switch(back_to(still))", "when": "=was not in still"}
    ],

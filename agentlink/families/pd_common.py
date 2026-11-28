@@ -258,7 +258,7 @@ def sketch_of(doc, ref, body=None, session=None):
             return sk[0]
         where = f" in {body.Label}" if body is not None else ""
         if not sk:
-            raise ToolError("invalid_input", f"sketch: there is no sketch{where} yet. sketch_new makes one.")
+            raise ToolError("invalid_input", f"sketch: there is no sketch{where} yet.")
         why = "No sketch is open in edit, and you made none here. " if session is not None else ""
         raise ToolError("invalid_input", f"sketch: say which. {why}The sketches{where}, unused first and newest first: {sketch_list(sk)}.")
     o = renamed_sketch(session, doc, ref)
@@ -272,7 +272,7 @@ def sketch_of(doc, ref, body=None, session=None):
     # 24 Nov (Gemma: "Sketch1" for "Sketch 2"): the same ordered, marked
     # list as say-which, and where the names come from.
     if not sk:
-        raise ToolError("not_found", f"sketch {ref!r}: no such sketch — there is none yet: sketch_new makes one.")
+        raise ToolError("not_found", f"sketch {ref!r}: no such sketch — there is no sketch yet.")
     raise ToolError("not_found", f"sketch {ref!r}: no such sketch. The sketches, unused first and newest first: {sketch_list(sk)}.")
 
 
@@ -1147,6 +1147,10 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
             # The profile makes no face (live, 22 Nov: a circle across the
             # outline's edge, twice): the sketch's measured state.
             fact = profile_words(feat)
+        if "topods::wire" in first["error"].lower() or ("wire" in first["error"].lower() and "Pipe" in str(getattr(feat, "TypeId", ""))):
+            # s1127f QA: pd_pipe refused with "TopoDS::Wire" and no word on
+            # which input: each input's wires, as measured.
+            fact = pipe_wire_words(feat)
         if "multiple solids" in first["error"].lower():
             # FreeCAD 1.1: a body takes several solids only while its
             # AllowCompound is true (the default).
@@ -1194,6 +1198,8 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
     note = geo.box_note(body.Shape) if "box" in out else ""
     if note:
         out["boxNote"] = note
+    if line and keep.get("fills"):
+        line += " " + keep["fills"][0].upper() + keep["fills"][1:] + "."
     if line and keep.get("lies"):
         line += " " + keep["lies"]
     elif line and feat is not None and keep.get("old") is None:
@@ -1214,7 +1220,89 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
         line += " FreeCAD's shape check (isValid) says that the body's shape is not valid. FreeCAD gave no error."
     if line:
         out = {"result": line, **out}
-    return picks.finish(session, tool, out, recompute=False)
+    return check_in_result(picks.finish(session, tool, out, recompute=False))
+
+
+def pipe_wire_words(feat):
+    """"Profile Sketch: 1 wire (closed). Spine PathSketch (Edge1, Edge2): 2
+    wires, 3 edges, 1 point where 3 or more edges meet." for a pipe or loft
+    whose build failed on a wire; "" when not read. Facts of the inputs as
+    FreeCAD has them; nothing on which to change."""
+    def words(what, shape, subs=None):
+        try:
+            if subs:
+                edges = [shape.getElement(x) for x in subs if str(x).startswith("Edge")]
+                shape = Part.Compound(edges) if edges else shape
+            # FreeCAD's own sorting of edges into connected chains (Part.sortEdges).
+            wires = [Part.Wire(es) for es in Part.sortEdges(list(shape.Edges))] if shape.Edges else []
+            closed = sum(1 for w in wires if w.isClosed())
+            ends = {}
+            for e in shape.Edges:
+                for v in e.Vertexes:
+                    k = tuple(round(c, 6) for c in (v.Point.x, v.Point.y, v.Point.z))
+                    ends[k] = ends.get(k, 0) + 1
+            branch = sum(1 for n in ends.values() if n >= 3)
+            return (f"{what}: {len(wires)} wire{'' if len(wires) == 1 else 's'} ({closed} closed), {len(shape.Edges)} edge{'' if len(shape.Edges) == 1 else 's'}"
+                    + (f", {branch} point{'' if branch == 1 else 's'} where 3 or more edges meet" if branch else ""))
+        except Exception:  # noqa: BLE001 - not read
+            return ""
+    out = []
+    try:
+        prof = getattr(feat, "Profile", None)
+        p, psubs = (prof[0], prof[1]) if isinstance(prof, (list, tuple)) else (prof, None)
+        if p is not None:
+            out.append(words(f"Profile {p.Label}", p.Shape, psubs))
+        sp = getattr(feat, "Spine", None)
+        if isinstance(sp, (list, tuple)) and sp and sp[0] is not None:
+            out.append(words(f"Spine {sp[0].Label}" + (f" ({', '.join(sp[1])})" if sp[1] else ""), sp[0].Shape, sp[1]))
+    except Exception:  # noqa: BLE001
+        pass
+    out = [x for x in out if x]
+    return ("; ".join(out) + ".") if out else ""
+
+
+FILLS_LOOKED = 30  # earlier subtractive features looked at by fills_cuts
+
+
+def fills_cuts(feat, body, reg, tol=0.01):
+    """"the new material fills 50 mm³ of the cut of Pocket" for each earlier
+    subtractive feature of the body whose own solid (AddSubShape) the new
+    material meets (s1127f QA: a mirror filled a pocket again, and no word
+    named it). "" when none or not read."""
+    try:
+        group = list(body.Group)
+        mine = group.index(feat) if feat in group else len(group)
+        out = []
+        for o in group[:mine][-FILLS_LOOKED:]:
+            if add_sub(o) != "subtractive":
+                continue
+            t = getattr(o, "AddSubShape", None)
+            if t is None or t.isNull():
+                continue
+            v = reg.common(in_body_frame(body, t) or t).Volume
+            if v > tol:
+                out.append(f"the new material fills {rl.num(v)} mm³ of the cut of {o.Label}")
+        return "; ".join(out)
+    except Exception:  # noqa: BLE001 - a reading only
+        return ""
+
+
+def check_in_result(out):
+    """The answer with Check Geometry's finding of its health put in the
+    result line too (s1127f QA: "Check Geometry reports Error in Edge:
+    BOPAlgo SelfIntersect" was in health only). Never raises."""
+    try:
+        h = out.get("health") if isinstance(out, dict) else None
+        facts = h.get("facts") if isinstance(h, dict) else None
+        if isinstance(facts, str) and isinstance(out.get("result"), str):
+            for part in re.split(r";\s*", facts):
+                i = part.find("Check Geometry reports")
+                if i >= 0:
+                    out["result"] = out["result"].rstrip() + " " + part[i:].rstrip(".") + "."
+                    break
+    except Exception:  # noqa: BLE001 - a reading only
+        pass
+    return out
 
 
 # ---- what FreeCAD stored (facts only, 27 Nov) ---------------------------------------------
@@ -1483,6 +1571,11 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
             nb, ob = exact_box(reg), exact_box(old)
             out = {"added": span_text(geo.bound_box(reg)), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
             out.update(profile_results(feat, reg, old, tol, cut=False, rec=_profile_rec(keep)))
+            fills = fills_cuts(feat, body, reg, tol)
+            if fills:
+                out["fills"] = fills
+                if keep is not None:
+                    keep["fills"] = fills
             return out
         reg = old.cut(new)
         if reg.isNull() or reg.Volume <= tol:

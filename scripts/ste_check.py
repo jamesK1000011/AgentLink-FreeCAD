@@ -71,6 +71,7 @@ WAIVERS = {
     ("part_boolean", "shape_query"): "the advice to use shape_query again is gone (s1127e QA, facts only); the card says faces and edges get new numbers",
     ("part_transform", "shape_query"): "the advice to use shape_query again is gone (s1127e QA, facts only); the card says faces and edges are renumbered",
     ("part_sweep", "must"): "'the profile must already be at the start of the path' is no rule (s1127e QA, facts only): the card says the tool does not move the profile",
+    ("doc_close", "doc_save"): "the advice 'First use doc_save.' is gone (s1127f QA, facts only); the card says the tool refuses a document changed since its save",
     ("sheet_table", "configs"): "the input configs is gone (27 Nov): make takes one configuration (config, values), and add makes each next one; no alias, rule R5",
 }
 

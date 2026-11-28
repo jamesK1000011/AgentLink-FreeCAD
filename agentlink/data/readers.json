@@ -671,6 +671,7 @@
    ],
    "changers": [
     "new",
+    "pattern_facts",
     "pipe_options",
     "repair_refs",
     "set_sides",
@@ -851,6 +852,7 @@
     "element",
     "find",
     "fuse_dropped",
+    "input_members",
     "inputs_left",
     "num",
     "placed",
@@ -860,6 +862,7 @@
     "positive",
     "profile_normal",
     "ref_list",
+    "removed_of",
     "rotation",
     "solid_body",
     "spans_said",

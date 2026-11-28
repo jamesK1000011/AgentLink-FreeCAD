@@ -1131,7 +1131,7 @@ class QaS1127e(unittest.TestCase):
         steps = json.dumps(e["steps"])
         for w in ("Move a tool into the base", "may repair it", "Overlap the pieces clearly", "Check each with body_check"):
             self.assertNotIn(w, steps)
-        self.assertIn("def inputs_left(objs, result):", source("families", "model.py"))
+        self.assertIn("def inputs_left(members, result):", source("families", "model.py"))
 
     def test_5_a_given_diameter_that_was_not_set_is_said(self):
         got = child('''
@@ -1204,6 +1204,85 @@ class QaS1127e(unittest.TestCase):
         self.assertIn("def same_label(d, base=None):", source("families", "doc.py"))
         # H17: no mesh clause on a shape-less object
         self.assertNotIn("a mesh becomes a body", source("families", "picks.py"))
+
+
+class QaS1127f(unittest.TestCase):
+    """Blind QA of the retests s1127f (qa-s1127f/QA-REPORT.md): the hub items."""
+
+    def test_1_part_boolean_lists_what_a_removed_body_held_and_removed_is_measured(self):
+        e = entries()["part_boolean"]
+        steps, ans = json.dumps(e["steps"]), json.dumps(e["answer"])
+        self.assertIn("input_members([base] + tl)", steps)
+        self.assertLess(steps.index("input_members([base] + tl)"), steps.index("=baked(base, res"))
+        self.assertIn("removed_of(members)", ans)
+        self.assertIn("inputs_left(members, o)", ans)
+        self.assertNotIn("[t.Label for t in tl]\"}, \"inputsLeft", ans)
+        self.assertIn("Objects that a removed PartDesign Body held can stay in the document.", e["description"])
+        src = source("families", "model.py")
+        for f in ("def input_members(objs):", "def inputs_left(members, result):", "def removed_of(members):"):
+            self.assertIn(f, src)
+
+    def test_2_doc_close_gives_label_and_name(self):
+        e = entries()["doc_close"]
+        steps = json.dumps(e["steps"])
+        self.assertIn("d.Label + ' (' + d.Name + ')' for d in picked if unsaved(d)", steps)
+        self.assertIn('"closed": "=d.Label + \' (\' + d.Name + \')\'"', steps)
+        self.assertNotIn("First use doc_save", e["description"])
+        self.assertIn("closed, discarded and the refusal give each document as label (name).", e["description"])
+
+    def test_3_pattern_copies_are_placed_as_freecad_places_them(self):
+        got = child('''
+        from agentlink.families import feature
+        FreeCAD = sys.modules["FreeCAD"]
+        V = FreeCAD.Vector
+        line = types.SimpleNamespace(TypeId="App::Line", Placement=FreeCAD.Placement(V(0, 0, 0), FreeCAD.Rotation()))
+        lin = types.SimpleNamespace(TypeId="PartDesign::LinearPattern", Occurrences=3, Reversed=False, Mode="Extent", Length=20.0, Offset=0.0,
+                                    Occurrences2=1, Direction=(line, [""]))
+        pls = feature.pattern_copies(lin)
+        one = types.SimpleNamespace(TypeId="PartDesign::LinearPattern", Occurrences=1)
+        other = types.SimpleNamespace(TypeId="PartDesign::Mirrored", Occurrences=2)
+        print(json.dumps([[list(p.Base) for p in pls], feature.pattern_copies(one), feature.pattern_copies(other)]))
+        ''')
+        self.assertEqual(got[0], [[10.0, 0.0, 0.0], [20.0, 0.0, 0.0]])
+        self.assertEqual(got[1:], [[], None])
+        for n in ("pd_polar_pattern", "pd_linear_pattern"):
+            self.assertIn("pattern_facts(b, f)", json.dumps(entries()[n]["answer"]))
+        src = source("families", "feature.py")
+        self.assertIn("360.0 / n if abs(ang - 360.0) < 1e-9 else ang / (n - 1)", src)  # FeaturePolarPattern.cpp's step
+        self.assertIn('"copiesChanging": changed, "pairsSharingVolume": pairs', src)
+
+    def test_4_the_advice_and_the_body_key_are_gone(self):
+        texts = json.dumps(entries()) + source("families", "pd_common.py")
+        for w in ("First use doc_save", "sketch_new makes one", "pd_pad something first", "pd_pad or pd_revolution first"):
+            self.assertNotIn(w, texts, w)
+        self.assertIn('FEATURE_KEY = {"part_primitive": "feature"}', source("families", "model.py"))
+        self.assertIn("Answer: feature (the Part feature's label)", entries()["part_primitive"]["description"])
+
+    def test_5_check_geometry_goes_in_the_result_line(self):
+        got = child('''
+        out = {"result": "Pipe added material, volume change +1328.89 mm³.", "health": {"facts": "shape: Body: valid, closed, 1 solid, Check Geometry reports Error in Edge: BOPAlgo SelfIntersect and 3 more; time: 2 of 15 minutes used"}}
+        quiet = {"result": "Pad added material.", "health": "nothing new"}
+        print(json.dumps([pc.check_in_result(out)["result"], pc.check_in_result(quiet)["result"]]))
+        ''')
+        self.assertEqual(got[0], "Pipe added material, volume change +1328.89 mm³. Check Geometry reports Error in Edge: BOPAlgo SelfIntersect and 3 more.")
+        self.assertEqual(got[1], "Pad added material.")
+
+    def test_5_a_pipe_wire_failure_says_each_inputs_wires_and_a_fill_names_the_cut(self):
+        pdc = source("families", "pd_common.py")
+        self.assertIn("fact = pipe_wire_words(feat)", pdc)
+        self.assertIn("Part.sortEdges(list(shape.Edges))", pdc)
+        self.assertIn("fills = fills_cuts(feat, body, reg, tol)", pdc)
+        got = child('''
+        class R:
+            def common(s, t): return types.SimpleNamespace(Volume=50.0 if t == "cut" else 0.0)
+        pk = types.SimpleNamespace(TypeId="PartDesign::Pocket", Label="Pocket", AddSubShape=types.SimpleNamespace(isNull=lambda: False))
+        pad = types.SimpleNamespace(TypeId="PartDesign::Pad", Label="Pad")
+        me = types.SimpleNamespace(TypeId="PartDesign::Mirrored", Label="Mirrored")
+        body = types.SimpleNamespace(Group=[pad, pk, me])
+        pc.in_body_frame = lambda b, t: "cut"
+        print(json.dumps(pc.fills_cuts(me, body, R())))
+        ''')
+        self.assertEqual(got, "the new material fills 50 mm³ of the cut of Pocket")
 
 
 if __name__ == "__main__":

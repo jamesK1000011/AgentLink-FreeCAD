@@ -105,6 +105,121 @@ def hole_spots(sk, f):
     return n, bool(mask & 1)
 
 
+def _axis_line(ref):
+    """(base, direction) of a pattern's Axis or Direction link, in the body's
+    frame, as FreeCAD reads it (FeaturePolarPattern.cpp,
+    FeatureLinearPattern.cpp): an origin or datum line by its Placement (its
+    x), a sketch's H_Axis, V_Axis or N_Axis by the sketch's Placement, a
+    straight edge of a shape. None when it is none of these."""
+    V = FreeCAD.Vector
+    try:
+        obj, subs = ref if isinstance(ref, (list, tuple)) else (ref, [""])
+        sub = (subs[0] if isinstance(subs, (list, tuple)) and subs else subs) or ""
+        pl = obj.Placement
+        t = str(getattr(obj, "TypeId", ""))
+        if t.startswith("Sketcher::"):
+            d = {"H_Axis": V(1, 0, 0), "V_Axis": V(0, 1, 0), "N_Axis": V(0, 0, 1)}.get(sub)
+            if d is not None:
+                return pl.Base, pl.Rotation.multVec(d)
+        if t in ("App::Line", "PartDesign::Line") and not sub:
+            return pl.Base, pl.Rotation.multVec(V(1, 0, 0))
+        if sub.startswith("Edge"):
+            e = obj.Shape.getElement(sub)
+            if type(e.Curve).__name__ in ("Line", "LineSegment"):
+                p0, p1 = e.Vertexes[0].Point, e.Vertexes[-1].Point
+                return p0, (p1 - p0)
+    except Exception:  # noqa: BLE001 - not read
+        return None
+    return None
+
+
+def pattern_copies(f):
+    """The Placements FreeCAD puts the original at for each copy of a
+    PolarPattern or LinearPattern (the original first is left out), as its
+    getTransformations works them out (FreeCAD 1.1 sources); None when they
+    are not read (another axis kind, a second direction)."""
+    V = FreeCAD.Vector
+    n = int(getattr(f, "Occurrences", 1) or 1)
+    if n < 2:
+        return []
+    t = str(getattr(f, "TypeId", ""))
+    rev = -1.0 if getattr(f, "Reversed", False) else 1.0
+    mode = str(getattr(f, "Mode", "Extent"))
+    if t == "PartDesign::PolarPattern":
+        line = _axis_line(getattr(f, "Axis", None))
+        if line is None:
+            return None
+        base, d = line
+        ang = float(getattr(f.Angle, "Value", f.Angle))
+        if mode == "Spacing":
+            step = float(getattr(f.Offset, "Value", f.Offset))
+        else:
+            step = 360.0 / n if abs(ang - 360.0) < 1e-9 else ang / (n - 1)
+        out = []
+        for k in range(1, n):
+            rot = FreeCAD.Rotation(d, rev * step * k)
+            out.append(FreeCAD.Placement(base - rot.multVec(base), rot))
+        return out
+    if t == "PartDesign::LinearPattern":
+        if int(getattr(f, "Occurrences2", 1) or 1) > 1:
+            return None
+        line = _axis_line(getattr(f, "Direction", None))
+        if line is None:
+            return None
+        d = V(line[1])
+        if d.Length < 1e-12:
+            return None
+        d.normalize()
+        step = float(getattr(f.Offset, "Value", f.Offset)) if mode == "Spacing" else float(getattr(f.Length, "Value", f.Length)) / (n - 1)
+        return [FreeCAD.Placement(d * (rev * step * k), FreeCAD.Rotation()) for k in range(1, n)]
+    return None
+
+
+def pattern_facts(b, f, tol=0.01):
+    """{copies} for a PolarPattern or LinearPattern of features (s1127f QA:
+    8 copies of a hole cut less than 8 holes, and nothing said so): each
+    copy is the originals' own solids (AddSubShape) placed as FreeCAD places
+    them; measured against the body before the pattern (its BaseFeature):
+    how many copies change it, the volume each takes alone, and how many
+    pairs of occurrences share volume. {} when not measured."""
+    try:
+        base = getattr(f, "BaseFeature", None)
+        old = base.Shape if base is not None else None
+        tools = [o.AddSubShape for o in (getattr(f, "Originals", None) or []) if not o.AddSubShape.isNull()]
+        places = pattern_copies(f)
+        if old is None or old.isNull() or not tools or places is None or not places:
+            return {}
+        import Part
+
+        tool = tools[0] if len(tools) == 1 else Part.makeCompound(tools)
+        subtractive = any(str(getattr(o, "TypeId", "")).split("::")[-1].startswith(("Pocket", "Groove", "Hole", "Subtractive")) for o in f.Originals)
+        each = []
+        shapes = [tool]
+        for pl in places:
+            c = tool.copy()
+            c.Placement = pl.multiply(c.Placement)
+            shapes.append(c)
+            v = c.common(old).Volume if subtractive else c.cut(old).Volume
+            each.append(v)
+        changed = sum(1 for v in each if v > tol)
+        pairs = 0
+        for i in range(len(shapes)):
+            for j in range(i + 1, len(shapes)):
+                try:
+                    if shapes[i].common(shapes[j]).Volume > tol:
+                        pairs += 1
+                except Exception:  # noqa: BLE001 - one pair not read
+                    continue
+        verb = "takes" if subtractive else "adds"
+        vols = sorted({round(v, 2) for v in each})
+        words = (f"{len(places)} copies of the original (Occurrences {len(places) + 1}): {changed} change the body before the pattern"
+                 f" (each copy alone {verb} {', '.join(pc.rl.num(v) for v in vols)} mm³); "
+                 f"{pairs} pair{'' if pairs == 1 else 's'} of occurrences share volume")
+        return {"copies": words, "copiesChanging": changed, "pairsSharingVolume": pairs}
+    except Exception:  # noqa: BLE001 - a reading only
+        return {}
+
+
 def hole_size_facts(a, f, sk):
     """{diameterNotSet, circles} for pd_hole's answer (s1127e QA, H6): the
     given diameter that was not set, and the circles of the sketch whose size
@@ -553,7 +668,7 @@ def tools(session):
                "edge_words": pc.edge_words, "plane_ref": lambda *x: pc.plane_ref(*x), "axis_ref": lambda *x: pc.axis_ref(*x), "support_prop": pc.support_prop,
                "ref_snapshot": pc.ref_snapshot, "repair_refs": pc.repair_refs, "broken": pc.newly_broken,
                # the family's
-               "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots, "hole_size_facts": hole_size_facts, "holes_cut": pc.holes_cut,
+               "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots, "hole_size_facts": hole_size_facts, "pattern_facts": pattern_facts, "holes_cut": pc.holes_cut,
                "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body,
                "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec, "path_closed": path_closed, "closed_tube_words": closed_tube_words,
                "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options, "not_given": pc.not_given, "thread_change": thread_change, "fit_word": fit_word}

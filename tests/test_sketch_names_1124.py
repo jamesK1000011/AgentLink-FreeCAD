@@ -144,7 +144,7 @@ class TheRule(unittest.TestCase):
                                               "Sketch 3 (not used), Sketch 2 (used by Pad 2), Sketch (used by Pad).")
         self.assertEqual(got["only"], "Sketch 5")
         self.assertEqual(got["onlyFilled"], ["sketch=Sketch 5 (the only sketch in Body 2)"])
-        self.assertEqual(got["none"], ["invalid_input", "sketch: there is no sketch in Body 3 yet. sketch_new makes one."])
+        self.assertEqual(got["none"], ["invalid_input", "sketch: there is no sketch in Body 3 yet."])
         self.assertEqual((got["dry"], got["dryNoted"]), ("Sketch 5", [[], None]))
 
     def test_sketch_of_stays_a_reader_for_dry_readings(self):
