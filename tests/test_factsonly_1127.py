@@ -33,6 +33,12 @@ from agentlink.families import pd_common as pc
 ''' % (ROOT, HERE)
 
 
+def _cw(entry):
+    """Every word of a tools.json entry: its card and its inputs' meanings (agentlink.tooldata.card_words)."""
+    from agentlink.tooldata import card_words
+    return card_words(entry)
+
+
 def child(body):
     r = subprocess.run([sys.executable, "-c", CHILD + textwrap.dedent(body)], capture_output=True, text=True, timeout=120, cwd=HERE)
     if r.returncode != 0:
@@ -126,7 +132,7 @@ class NothingRefusedThatFreeCADKept(unittest.TestCase):
         for name, gone in (("pd_pad", "a pad inside the body"), ("pd_pocket", "refuses a pocket that cuts nothing"), ("pd_groove", "refuses a groove"),
                            ("pd_chamfer", "refuses only a chamfer"), ("pd_hole", "modelThread makes nothing"), ("doc_save", "saved only after"),
                            ("doc_new", "saves only after")):
-            self.assertNotIn(gone, e[name]["description"], name)
+            self.assertNotIn(gone, _cw(e[name]), name)
 
     def test_the_save_gate_is_gone(self):
         self.assertFalse(os.path.exists(os.path.join(ROOT, "agentlink", "measured.py")))
@@ -164,8 +170,7 @@ class WhatFreeCADStored(unittest.TestCase):
         out = pc.not_given({}, a, {"radius": 1, "sides": "one", "reversed": False, "angle": 1.5, "length": None, "extent": "length"})
         print(json.dumps([out, pc.not_given({}, {"radius": 2}, {"radius": 1})]))
         ''')
-        self.assertEqual(got[0], {"notGiven": "radius not given, so radius is 1; reversed not given, so reversed is false; angle not given, so angle is 1.5; "
-                                              "extent not given, so extent is length"})
+        self.assertEqual(got[0], {"notGiven": {"radius": 1, "reversed": False, "angle": 1.5, "extent": "length"}})  # a record since 28 Nov
         self.assertEqual(got[1], {})
 
     def test_every_core_feature_tool_says_what_was_not_given(self):
@@ -200,7 +205,7 @@ class FreeCADsDefaults(unittest.TestCase):
             s = json.dumps(e[name]["steps"])
             self.assertIn('{"set": {"f.Occurrences": "=n"}, "when": "=n is not None"}', s, name)
             self.assertIn("n < 1", s, name)  # FreeCAD's Occurrences takes 1
-        self.assertIn("FreeCAD's default: 3", e["pd_polar_pattern"]["description"])
+        self.assertIn("FreeCAD's default: 3", _cw(e["pd_polar_pattern"]))
 
     def test_two_sides_keeps_freecads_second_side(self):
         got = child('''
@@ -214,9 +219,9 @@ class FreeCADsDefaults(unittest.TestCase):
         self.assertEqual(got, ["Two sides", "Length", 5.0, True])
 
     def test_the_fit_words_are_mapped_in_the_card(self):
-        d = entries()["pd_hole"]["description"]
+        d = _cw(entries()["pd_hole"])
         self.assertIn("fit: close|normal|loose is FreeCAD's ThreadFit Fine|Medium|Coarse for ISO metric", d)
-        self.assertIn("LinearPattern also has Direction2 and Occurrences2", entries()["pd_linear_pattern"]["description"])
+        self.assertIn("LinearPattern also has Direction2 and Occurrences2", _cw(entries()["pd_linear_pattern"]))
 
 
 class SketchAddDefaults(unittest.TestCase):
@@ -253,7 +258,7 @@ class BlindfoldGaps(unittest.TestCase):
         self.assertEqual(got, [None, {"at": [10.0, 0.0, 5.0], "axis": [0.0, 0.0, 1.0], "angle": 90.0}, None])
         self.assertIn('out["bodyPlacement"] = placed', source("families", "pd_common.py"))
         self.assertIn('row["placement"] = placed', source("tools.py"))
-        self.assertIn('row["bounds"] = resultline.box_text(', source("tools.py"))  # session_state: where each body is
+        self.assertIn('row["bounds"] = {ax: [', source("tools.py"))  # session_state: where each body is (a record since 28 Nov)
 
     def test_the_new_body_says_its_placement_and_allow_compound(self):
         f = entries()["pd_body_new"]["answer"]["fields"]
@@ -303,7 +308,7 @@ class BlindfoldGaps(unittest.TestCase):
     def test_export_says_the_tolerance_used_and_the_unit(self):
         f = entries()["export"]["answer"]["fields"]
         self.assertEqual(f["tolerance"], {"when": "=tol is not None", "value": "=tol"})
-        self.assertEqual(f["notGiven"]["value"], "tolerance not given, so tolerance is 0.01")
+        self.assertEqual(f["notGiven"]["value"], {"tolerance": 0.01})
         self.assertIn("fileUnit", f)
         self.assertEqual(f["toleranceUnit"], {"when": "=tol is not None", "value": "mm"})
         self.assertIn('return None if fmt in ("wrl", "x3d") else "mm"', source("families", "doc.py"))
@@ -319,7 +324,7 @@ class OpinionOut(unittest.TestCase):
     def test_no_advice_word_in_a_data_tools_card(self):
         for name, e in entries().items():
             for w in self.ADVICE:
-                self.assertNotIn(w, e["description"], f"{name}: {w!r}")
+                self.assertNotIn(w, _cw(e), f"{name}: {w!r}")
 
     def test_no_advice_in_the_core_code_texts(self):
         for path, gone in ((("families", "pd_common.py"), ("If you meant", "Try a smaller", "feature_remove {first", "Choose a face away")),
@@ -536,7 +541,7 @@ class MeasuredFactsCorrected(unittest.TestCase):
     def test_doc_save_does_not_answer_touched_or_modified(self):
         e = entries()["doc_save"]
         self.assertNotIn("modified_state", json.dumps(e["answer"]))
-        self.assertNotIn("touched", e["description"])
+        self.assertNotIn("touched", _cw(e))
 
     def test_the_used_sketch_note_says_when_the_body_is_not_recomputed(self):
         got = child('''
@@ -589,7 +594,7 @@ class HubFactsOfTheBrief(unittest.TestCase):
     def test_each_feature_card_says_what_result_holds(self):
         said = "result says what changed and where: the material, the body before, each axis, the contact, the solids."
         e = entries()
-        cards = [n for n in e if said in e[n]["description"]]
+        cards = [n for n in e if said in _cw(e[n])]
         self.assertEqual(len(cards), 14)
         for n in ("pd_pad", "pd_pocket", "pd_hole", "pd_fillet", "pd_linear_pattern", "pd_pipe"):
             self.assertIn(n, cards)
@@ -850,7 +855,7 @@ class ReviewFixes(unittest.TestCase):
         e = entries()
         for name, gone in (("pd_boolean", "refuses a fuse or cut"), ("pd_primitive", "Use a primitive"), ("pd_primitive", "must overlap"),
                            ("sketch_attach", "Use it when"), ("part_from_mesh", "first use meshobj_decimate")):
-            self.assertNotIn(gone, e[name]["description"], name)
+            self.assertNotIn(gone, _cw(e[name]), name)
         steps = json.dumps({n: e[n]["steps"] for n in ("pd_pad", "pd_pocket", "pd_hole", "pd_revolution", "pd_groove")})
         for gone in ("pd_pad (or pd_primitive) first", "or two features", "make the hole by diameter, then feature_edit", "make it one-sided, then feature_edit"):
             self.assertNotIn(gone, steps, gone)
@@ -919,7 +924,7 @@ class LiveProof1127(unittest.TestCase):
         for key in ('out["openEnds"] = gaps', 'out["branches"] = branches', 'out["meets"] = cross', 'st["moved"] = words'):
             self.assertIn(key, src, key)
         self.assertNotIn('out["todo"]', src)
-        self.assertIn("meets: each pair of closed wires that meet, with every point where they meet.", entries()["sketch_state"]["description"])
+        self.assertIn("meets: each pair of closed wires that meet, with every point where they meet.", _cw(entries()["sketch_state"]))
 
     def test_each_number_of_an_export_has_its_unit(self):
         got = child('''
@@ -981,14 +986,18 @@ class LiveProofB3fc1d0(unittest.TestCase):
     def test_a_part_container_recompute_and_doc_close_lines_carry_their_result(self):
         from agentlink.protocol import step_line
 
-        self.assertEqual(step_line(54, "part_container", {"part": "Box1", "objects": ["BC"]}), "call 54: part_container Box1: objects BC")
+        # Records since 28 Nov (answers as records).
+        self.assertEqual(step_line(54, "part_container", {"part": "Box1", "objects": ["BC"]}),
+                         {"call": 54, "tool": "part_container", "object": "Box1", "objects": ["BC"]})
         self.assertEqual(step_line(102, "recompute", {"recomputed": 3, "ok": False, "errors": [{"object": "Fillet", "error": "x"}]}),
-                         "call 102: recompute: 3 objects recomputed; 1 failing: Fillet")
-        self.assertEqual(step_line(103, "recompute", {"recomputed": 1, "ok": True, "errors": []}), "call 103: recompute: 1 object recomputed; 0 failing")
+                         {"call": 102, "tool": "recompute", "recomputed": 3, "failing": ["Fillet"]})
+        self.assertEqual(step_line(103, "recompute", {"recomputed": 1, "ok": True, "errors": []}),
+                         {"call": 103, "tool": "recompute", "recomputed": 1, "failing": []})
         self.assertEqual(step_line(5, "doc_close", {"closed": ["lp2_fail"], "discarded": ["lp2_fail"], "open": ["AgentLink"]}),
-                         "call 5: doc_close: closed lp2_fail; discarded lp2_fail")
+                         {"call": 5, "tool": "doc_close", "closed": ["lp2_fail"], "discarded": ["lp2_fail"]})
         many = step_line(7, "part_container", {"part": "P", "objects": [f"B{i}" for i in range(8)]})
-        self.assertEqual(many, "call 7: part_container P: objects B0, B1, B2, B3, B4 and 3 more")
+        self.assertEqual(many["objects"], [f"B{i}" for i in range(8)])
+        self.assertEqual(step_line(8, "pd_pad", None, {"code": "invalid_input"}), {"call": 8, "tool": "pd_pad", "refused": "invalid_input"})
 
     def test_a_reads_and_doc_close_are_not_left_out_of_the_steps(self):
         src = source("protocol.py")
@@ -1094,7 +1103,7 @@ class QaS1127e(unittest.TestCase):
         print(json.dumps([n0, out, n1, out2, n2, out3]))
         ''')
         self.assertEqual(got, [0, {"volumeChange": 0.0, "holeSpots": 2}, 2, {"volumeChange": -50.0, "holeSpots": 3}, 2, {"volumeChange": -50.0}])
-        self.assertIn("holes is the number of holes that removed material (0 when the volume change is 0 mm³)", entries()["pd_hole"]["description"])
+        self.assertIn("holes is the number of holes that removed material (0 when the volume change is 0 mm³)", _cw(entries()["pd_hole"]))
 
     def test_2_the_words_follow_the_measured_change_and_the_type(self):
         got = child('''
@@ -1126,8 +1135,8 @@ class QaS1127e(unittest.TestCase):
     def test_4_part_boolean_lists_the_inputs_left_in_the_document(self):
         e = entries()["part_boolean"]
         self.assertIn('"inputsLeft"', json.dumps(e["answer"]))
-        self.assertIn("With name, the result is a new object with that label, and body stays in the document as it was.", e["description"])
-        self.assertNotIn("Trap", e["description"])
+        self.assertIn("With name, the result is a new object with that label, and body stays in the document as it was.", _cw(e))
+        self.assertNotIn("Trap", _cw(e))
         steps = json.dumps(e["steps"])
         for w in ("Move a tool into the base", "may repair it", "Overlap the pieces clearly", "Check each with body_check"):
             self.assertNotIn(w, steps)
@@ -1181,8 +1190,8 @@ class QaS1127e(unittest.TestCase):
         print(json.dumps([pc.part_solids_words(doc), pc.part_solids_words(types.SimpleNamespace(Objects=[]))]))
         ''')
         self.assertEqual(got, [" The document has Box (Part::Box): a Part feature, not a PartDesign Body.", ""])
-        self.assertIn("It is a Part feature such as Part::Box or Part::Cylinder, not a PartDesign Body.", entries()["part_primitive"]["description"])
-        self.assertNotIn("as a body", entries()["part_primitive"]["description"])
+        self.assertIn("It is a Part feature such as Part::Box or Part::Cylinder, not a PartDesign Body.", _cw(entries()["part_primitive"]))
+        self.assertNotIn("as a body", _cw(entries()["part_primitive"]))
 
     def test_9_other_accuracy_items(self):
         from agentlink import timelimit
@@ -1217,7 +1226,7 @@ class QaS1127f(unittest.TestCase):
         self.assertIn("removed_of(members)", ans)
         self.assertIn("inputs_left(members, o)", ans)
         self.assertNotIn("[t.Label for t in tl]\"}, \"inputsLeft", ans)
-        self.assertIn("Objects that a removed PartDesign Body held can stay in the document.", e["description"])
+        self.assertIn("Objects that a removed PartDesign Body held can stay in the document.", _cw(e))
         src = source("families", "model.py")
         for f in ("def input_members(objs):", "def inputs_left(members, result):", "def removed_of(members):"):
             self.assertIn(f, src)
@@ -1227,8 +1236,8 @@ class QaS1127f(unittest.TestCase):
         steps = json.dumps(e["steps"])
         self.assertIn("d.Label + ' (' + d.Name + ')' for d in picked if unsaved(d)", steps)
         self.assertIn('"closed": "=d.Label + \' (\' + d.Name + \')\'"', steps)
-        self.assertNotIn("First use doc_save", e["description"])
-        self.assertIn("closed, discarded and the refusal give each document as label (name).", e["description"])
+        self.assertNotIn("First use doc_save", _cw(e))
+        self.assertIn("closed, discarded and the refusal give each document as label (name).", _cw(e))
 
     def test_3_pattern_copies_are_placed_as_freecad_places_them(self):
         got = child('''
@@ -1256,7 +1265,7 @@ class QaS1127f(unittest.TestCase):
         for w in ("First use doc_save", "sketch_new makes one", "pd_pad something first", "pd_pad or pd_revolution first"):
             self.assertNotIn(w, texts, w)
         self.assertIn('FEATURE_KEY = {"part_primitive": "feature"}', source("families", "model.py"))
-        self.assertIn("Answer: feature (the Part feature's label)", entries()["part_primitive"]["description"])
+        self.assertIn("Answer: feature (the Part feature's label)", _cw(entries()["part_primitive"]))
 
     def test_5_check_geometry_goes_in_the_result_line(self):
         got = child('''

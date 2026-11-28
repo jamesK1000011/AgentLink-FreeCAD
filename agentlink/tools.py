@@ -318,7 +318,7 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
         from .protocol import ROLLED_BACK, note_rolled_back
 
         note_rolled_back(getattr(s, "server", None), ROLLED_BACK if out.get("result") == "rolled_back"
-                         else f"; the rollback was partial: {undone} of {made} steps of this {label} were taken back")
+                         else {"partial": True, "undone": undone, "of": made})
     return out
 
 # Seconds a batch starts calls for before it answers with what ran and where
@@ -993,7 +993,8 @@ class Session:
                 from . import resultline
 
                 b = geo.bound_box(sh)
-                row["bounds"] = resultline.box_text((b.XMin, b.XMax, b.YMin, b.YMax, b.ZMin, b.ZMax))
+                # A record (owner, 28 Nov: answers as records): { x: [min, max], y, z } in mm.
+                row["bounds"] = {ax: [round(lo, 3) + 0.0, round(hi, 3) + 0.0] for ax, lo, hi in (("x", b.XMin, b.XMax), ("y", b.YMin, b.YMax), ("z", b.ZMin, b.ZMax))}
                 note = geo.box_note(sh)
                 if note:
                     row["boxNote"] = note

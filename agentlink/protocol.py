@@ -1941,39 +1941,37 @@ STEPS_CHARS = 30_000  # characters of step lines in one answer (half of MAX_REPL
 
 
 def step_line(n, name, body, error=None):
-    """One line of the session's steps, from a call's answer (body) or its
-    refusal (error)."""
+    """One record of the session's steps, from a call's answer (body) or its
+    refusal (error) (owner, 28 Nov: answers as records):
+    { call, tool, object, volumeChange, objects, closed, discarded,
+      recomputed, failing, historyStep } or { call, tool, refused }."""
+    out = {"call": n, "tool": name}
     if isinstance(error, dict):
-        return f"call {n}: {name}: refused {error.get('code')}"
+        out["refused"] = error.get("code")
+        return out
     body = body if isinstance(body, dict) else {}
     what = next((body[k] for k in STEP_OBJECT_KEYS if isinstance(body.get(k), str) and body[k]), None)
-    out = f"call {n}: {name}" + (f" {what}" if what else "")
-    facts = []
+    if what:
+        out["object"] = what
     v = body.get("volumeChange")
     if isinstance(v, (int, float)) and not isinstance(v, bool):
-        from . import resultline
-
-        facts.append(f"volume change {resultline.signed(v)} mm³")
+        out["volumeChange"] = v
     # The measured result of a call that has no volume change (27 Nov live
     # proof, a: "54 part_container" and "102 recompute" said nothing).
-    objs = _step_names(body.get("objects"))
-    if objs:
-        facts.append("objects " + objs)
-    for k in ("closed", "discarded"):
-        got = _step_names(body.get(k))
-        if got:
-            facts.append(f"{k} {got}")
+    for k in ("objects", "closed", "discarded"):
+        got = body.get(k)
+        if isinstance(got, list) and any(isinstance(x, str) and x for x in got):
+            out[k] = [x for x in got if isinstance(x, str) and x]
     n_re = body.get("recomputed")
     if isinstance(n_re, int) and not isinstance(n_re, bool):
-        facts.append(f"{n_re} object{'' if n_re == 1 else 's'} recomputed")
+        out["recomputed"] = n_re
     errs = body.get("errors")
     if isinstance(errs, list) and ("recomputed" in body or errs):
-        names = _step_names([e.get("object") or e.get("label") if isinstance(e, dict) else e for e in errs])
-        facts.append(f"{len(errs)} failing" + (f": {names}" if names else "") if errs else "0 failing")
+        out["failing"] = [e.get("object") or e.get("label") if isinstance(e, dict) else e for e in errs]
     st = body.get("step")
     if isinstance(st, int) and not isinstance(st, bool):
-        facts.append(f"history step {st}")
-    return out + (": " + "; ".join(facts) if facts else "")
+        out["historyStep"] = st
+    return out
 
 
 def _step_names(xs):
@@ -2025,47 +2023,46 @@ def note_refused(server, name, code, where=""):
         log = getattr(server, "_step_log", None)
         if log is None:
             log = server._step_log = []
-        log.append(f"call {len(log) + 1}: {name}: refused {code}" + (f" ({where})" if where else ""))
+        log.append({"call": len(log) + 1, "tool": name, "refused": code, **({"where": where} if where else {})})
     except Exception:  # noqa: BLE001 - a record only
         pass
 
 
-ROLLED_BACK = "; taken back by rollback"
+ROLLED_BACK = True
 
 
 def note_rolled_back(server, words=ROLLED_BACK):
-    """The lines of the batch or fast block in hand marked with words (taken
-    back, or how many steps a partial rollback took back): its rollback
-    ran. Refused lines made nothing and stay as they are."""
+    """The records of the batch or fast block in hand get rolledBack: true
+    (or how many steps a partial rollback took back): its rollback ran.
+    Refused records made nothing and stay as they are."""
     try:
         log = getattr(server, "_step_log", None) or []
         marks = getattr(server, "_steps_marks", None) or []
         if not marks:
             return
         for i in range(marks[-1], len(log)):
-            if ": refused " not in log[i] and not log[i].endswith(words):
-                log[i] += words
+            if isinstance(log[i], dict) and "refused" not in log[i] and "rolledBack" not in log[i]:
+                log[i]["rolledBack"] = words
     except Exception:  # noqa: BLE001 - a record only
         pass
 
 
 def steps_part(server, limit=STEPS_CHARS):
-    """{ steps: [lines], stepsLeftOut?: words } for session_state: the
-    newest lines that fit limit characters, and how many older lines are
-    left out (said each time it applies)."""
+    """{ steps: [records], stepsLeftOut?: n } for session_state: the newest
+    records that fit limit characters, and how many older records are left
+    out (the batch records in batches/ hold the calls of each batch)."""
     log = list(getattr(server, "_step_log", None) or [])
     kept, used = [], 0
     for ln in reversed(log):
-        if kept and used + len(ln) + 4 > limit:
+        size = len(compact(ln)) + 1
+        if kept and used + size > limit:
             break
         kept.append(ln)
-        used += len(ln) + 4
+        used += size
     kept.reverse()
     out = {"steps": kept}
     if len(kept) < len(log):
-        n = len(log) - len(kept)
-        out["stepsLeftOut"] = (f"{n} older line{'s' if n != 1 else ''} are not shown: steps holds {limit} characters at most. "
-                               "The batch records (batches/ in the session folder) hold the calls of each batch.")
+        out["stepsLeftOut"] = len(log) - len(kept)
     return out
 
 

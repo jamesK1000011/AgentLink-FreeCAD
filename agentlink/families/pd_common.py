@@ -1170,7 +1170,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint="", se
         # Where the body is, not only its size (24 Nov QA: a centred
         # sketch on XZ gave the right size 40 as z -20..20, in 7 of 9 runs).
         try:
-            out["bounds"] = span_text(geo.bound_box(body.Shape))
+            out["bounds"] = span_rec(geo.bound_box(body.Shape))
         except Exception:  # noqa: BLE001 - a reading only
             pass
     keep = {}
@@ -1380,15 +1380,17 @@ def stored_values(feat):
 
 
 def not_given(out, a, defaults):
-    """Put notGiven into the answer out: "<input> not given, so <input> is
-    <value>" for each input of defaults ({input: the value the tool used})
+    """Put notGiven into the answer out: { <input>: <value> } for each
+    input of defaults ({input: the value the tool used})
     that the call a did not give (the form sketch_add uses for center).
     Returns out. A default of None is passed over (the input does not
     apply to this call). Nothing is put when the call gave them all."""
     try:
-        words = [f"{k} not given, so {k} is {_default_word(v)}" for k, v in (defaults or {}).items() if v is not None and a.get(k) is None]
-        if words and isinstance(out, dict):
-            out["notGiven"] = "; ".join(words)
+        # A record, not a sentence (owner, 28 Nov: answers as records): each input
+        # the call left out, with the value FreeCAD used. { "extent": "length" }.
+        got = {k: v for k, v in (defaults or {}).items() if v is not None and a.get(k) is None}
+        if got and isinstance(out, dict):
+            out["notGiven"] = got
     except Exception:  # noqa: BLE001 - a reading only
         pass
     return out
@@ -1415,28 +1417,29 @@ def _num(x):
     return f"{round(x, 2):g}"
 
 
-def changed_words(old, new):
-    """What moved from one body reading to the next, in one short line:
-    "volume +5250, box z 5→40, faces 6→14"; "" when nothing did."""
-    parts = []
+def changed_rec(old, new):
+    """What moved from one body reading to the next, as a record (owner,
+    28 Nov: answers as records): { "volume": [old, new], "faces": [6, 14],
+    "box": { "z": [5, 40] }, "bounds": {...} }; {} when nothing did."""
+    out = {}
     try:
         if isinstance(old.get("volume"), (int, float)) and isinstance(new.get("volume"), (int, float)):
             d = new["volume"] - old["volume"]
             if abs(d) > max(0.01, 1e-7 * max(abs(old["volume"]), abs(new["volume"]))):
-                parts.append(f"volume {'+' if d > 0 else '-'}{_num(abs(d))}")
+                out["volume"] = [round(old["volume"], 2), round(new["volume"], 2)]
         ob, nb = old.get("box"), new.get("box")
         if isinstance(ob, (list, tuple)) and isinstance(nb, (list, tuple)) and len(ob) == len(nb) == 3:
-            moved = [f"{ax} {_num(a)}→{_num(b)}" for ax, a, b in zip("xyz", ob, nb) if abs(b - a) > 1e-3]
+            moved = {ax: [round(a, 2), round(b, 2)] for ax, a, b in zip("xyz", ob, nb) if abs(b - a) > 1e-3}
             if moved:
-                parts.append("box " + ", ".join(moved))
+                out["box"] = moved
         for k in ("faces", "solids"):
             if isinstance(old.get(k), int) and isinstance(new.get(k), int) and old[k] != new[k]:
-                parts.append(f"{k} {old[k]}→{new[k]}")
-        if old.get("bounds") and new.get("bounds") and old["bounds"] != new["bounds"] and not any(p.startswith("box ") for p in parts):
-            parts.append(f"bounds now {new['bounds']}")  # moved, the same size
+                out[k] = [old[k], new[k]]
+        if old.get("bounds") and new.get("bounds") and old["bounds"] != new["bounds"] and "box" not in out:
+            out["bounds"] = new["bounds"]  # moved, the same size
     except Exception:  # noqa: BLE001 - a reading only
-        return ""
-    return ", ".join(parts)
+        return {}
+    return out
 
 
 def with_changed(session, body, out, before):
@@ -1457,7 +1460,7 @@ def with_changed(session, body, out, before):
             return out
         if abs(last["volume"] - before) > max(0.01, 1e-6 * max(abs(before), 1.0)):
             return out
-        words = changed_words(last, out)
+        words = changed_rec(last, out)
         if not words:
             return out
         lead = [k for k in ("feature", "type", "where") if k in out]
@@ -1479,6 +1482,11 @@ WHERE_LIDS = 40  # faces of the removed region looked at for where it opens
 def _r(x):
     v = round(x, 2)
     return 0.0 if v == 0 else v
+
+
+def span_rec(bb):
+    """A bounding box as a record: { "x": [-30, 30], "y": [-15, 15], "z": [0, 5] } (mm)."""
+    return {"x": [_r(bb.XMin), _r(bb.XMax)], "y": [_r(bb.YMin), _r(bb.YMax)], "z": [_r(bb.ZMin), _r(bb.ZMax)]}
 
 
 def span_text(bb):
@@ -1569,7 +1577,7 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
             if keep is not None:
                 keep["reg"], keep["cut"] = reg, False
             nb, ob = exact_box(reg), exact_box(old)
-            out = {"added": span_text(geo.bound_box(reg)), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
+            out = {"added": span_rec(geo.bound_box(reg)), "beyond": beyond_sides(nb, ob), "where": added_sentence(nb, ob)}
             out.update(profile_results(feat, reg, old, tol, cut=False, rec=_profile_rec(keep)))
             fills = fills_cuts(feat, body, reg, tol)
             if fills:
@@ -1582,7 +1590,7 @@ def where_went(feat, body, delta, tol=0.01, keep=None):
             return {}
         if keep is not None:
             keep["reg"], keep["cut"] = reg, True
-        out = {"removed": span_text(geo.bound_box(reg))}
+        out = {"removed": span_rec(geo.bound_box(reg))}
         diag = max(old.BoundBox.DiagonalLength, 1.0)
         # The old body's surface, not its solid: a point inside a solid is at
         # distance 0 from it (live, 25 Nov: a hollow's inner walls were listed).
