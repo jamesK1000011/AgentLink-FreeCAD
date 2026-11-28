@@ -1365,7 +1365,10 @@ class Server:
             else:
                 return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"{method}: not supported."}}
         except Exception as e:  # a protocol error, not a tool's
-            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32603, "message": str(e)}}
+            import traceback as _tb
+
+            where = " | ".join(x.strip() for x in _tb.format_exc().strip().splitlines()[-4:])[:600]
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32603, "message": f"{type(e).__name__}: {e}", "data": {"where": where}}}
         return None if mid is None else {"jsonrpc": "2.0", "id": mid, "result": result}
 
     def call(self, params):

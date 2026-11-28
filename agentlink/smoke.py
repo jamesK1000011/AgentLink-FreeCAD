@@ -104,7 +104,12 @@ def run():
         fails.extend(extstate.smoke_failures(ext["leftOut"], extstate.before_list(os.environ.get(extstate.BEFORE))))
 
         def call(name, args):
-            r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
+            reply = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})
+            if not isinstance(reply, dict) or "result" not in reply:
+                # A protocol error: the raw fault, as the server gave it.
+                fails.append(f"{name}: no result: {json.dumps(reply)[:400]}")
+                return None
+            r = reply["result"]
             body = json.loads(r["content"][0]["text"])
             if r.get("isError"):
                 fails.append(f"{name}: {body.get('error', {}).get('message', body)}"[:300])
@@ -125,7 +130,10 @@ def run():
         except Exception:
             pass
     except Exception as e:
-        fails.append(f"the server did not start: {type(e).__name__}: {e}")
+        import traceback
+
+        tb = traceback.format_exc().strip().splitlines()
+        fails.append(f"the server did not start: {type(e).__name__}: {e} | " + " | ".join(x.strip() for x in tb[-6:])[:900])
     out["ok"] = not fails
     out["ms"] = int((time.time() - t0) * 1000)
     return out
