@@ -89,7 +89,7 @@
      "means": "in the window, one line under 400 characters, most urgent first: a dialog and its buttons, a sketch in edit and its DoF, or a task panel; up to 3 likely next tools, likeliest first, with why; the workbench and the status bar text"
     },
     "options": {
-     "means": "the likely next steps as numbered calls"
+     "means": "the likely next steps: step, and a list of { n, tool, args, ask }; pick is the call that runs option 1"
     },
     "documents": {
      "means": "every open document: name, label, unsaved, byAgent; the agent's own has agent: true"
@@ -120,6 +120,12 @@
     },
     "machine": {
      "means": "chip, cores, memory, fan, heavy-job slots; also while heavy jobs run or wait"
+    },
+    "agentDocumentOwner": {
+     "means": "whose the agent's document is: agent (an agent made it), start (the empty start document Agent Link made) or person"
+    },
+    "rule": {
+     "means": "with the person's document: do not change, save or close it unless they ask"
     }
    },
    "refusalNotes": [

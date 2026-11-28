@@ -819,11 +819,11 @@ class Session:
         opts = self._options_state().get("options")
         if opts:
             got["options"] = opts
-        got["note"] = (("The agent's document is one an agent made. " if mine else
-                        f"{self.doc.Label} is an empty start document that Agent Link made, not the person's. " if is_start_doc(self.doc) else
-                        f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
-                       + "doc_new makes a new document: run { \"calls\": [ { \"tool\": \"doc_new\", \"name\": \"Part\" } ] }. "
-                       "session_state reads all of this again.")
+        # Whose document it is, as a record (28 Nov: answers as records); the person's
+        # document keeps its rule beside it. How to make a document is doc_new's card.
+        got["agentDocumentOwner"] = "agent" if mine else ("start" if is_start_doc(self.doc) else "person")
+        if got["agentDocumentOwner"] == "person":
+            got["rule"] = "This is the person's document: do not change, save or close it unless they ask."
         return got
 
     # Every top-level part that session_state's answer can have: the names
@@ -2931,9 +2931,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         def summary(out):
             if out.get("answered_early"):
                 return out
-            from .batchrec import ORDER_NOTE
-
-            out["order"] = ORDER_NOTE
+            # The order rule is a fact of batch's own card (data/hubcards.json effects),
+            # not of each answer (28 Nov: answers as records).
             rows = out.get("results") or []
             n = len(calls)
             out["done"] = [first + j for j, r in enumerate(rows) if isinstance(r, dict) and r.get("ok") and not r.get("takenBack")]

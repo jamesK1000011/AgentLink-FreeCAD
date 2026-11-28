@@ -324,21 +324,20 @@ def option_words(o):
 
 
 def line(opts, limit=MAX_LINE):
-    """The one short line a changing answer carries: "step 76: 1 … ; 2 …".
-    Options at the end are left out to keep it under limit."""
+    """The short form a changing answer carries, as a record (owner, 28 Nov:
+    answers as records): { step, list: [ { n, tool, args?, ask? } ] }.
+    session_state gives each option in full (public)."""
     if not opts or not opts.get("list"):
         return None
-    head = f"step {opts['step']}: "
-    words = [option_words(o) for o in opts["list"]]
-    n = len(words)
-    while words and len(head) + len("; ".join(words)) > limit:
-        words.pop()
-    if not words:
-        return None
-    # Options left out to keep the line short are counted (27 Nov: a list
-    # that is cut says so); session_state gives them all.
-    more = f"; and {n - len(words)} more (session_state gives them)" if len(words) < n else ""
-    return head + "; ".join(words) + more
+    rows = []
+    for o in opts["list"]:
+        r = {"n": o["n"], "tool": o["tool"]}
+        if o.get("arguments"):
+            r["args"] = o["arguments"]
+        if o.get("ask"):
+            r["ask"] = [a.get("arg") for a in o["ask"] if isinstance(a, dict)]
+        rows.append(r)
+    return {"step": opts["step"], "list": rows}
 
 
 def public(opts):
@@ -359,38 +358,24 @@ def public(opts):
 
 
 def pick_how(opts, static=None):
-    """How to run the first option, made from that option itself (its own
-    ask and that ask's sample), so the example fits the option it names
-    (local-model runs, 23 Nov: option 1 was doc_new, which asks for name,
-    and the fixed example gave length). PICK_HOW when there is no option.
-    static: pick is not listed (the static list, the default): the example
-    is a run call, which a client that sends only listed tools can make;
-    classic keeps the short form (design 1h, 24 Nov). None: read the mode."""
+    """The call that runs the first option, as data (owner, 28 Nov: answers
+    as records), made from that option itself (its own ask and that ask's
+    sample: local-model runs, 23 Nov). static: pick is not listed (the
+    default): the call is a run call, which a client that sends only listed
+    tools can make; classic: the pick call itself. A value the option asks
+    for and has no sample for is null."""
     rows = (opts or {}).get("list") or []
     if static is None:
         static = pick_unlisted()
-    if not rows:
-        return as_run(PICK_FLAT, 1, PICK_TAIL) if static else PICK_HOW
-    o = rows[0]
-    n = o.get("n", 1)
-    ask = o.get("ask") or []
-    if not ask:
-        args, tail = f"{{ option: {n} }}", ""
-        flat = f'"option": {n}'
-    else:
-        a = ask[0]
-        v = a.get("sample", ASK_SAMPLE.get(a.get("arg")))
-        if v is None:
-            args, tail = f"{{ option: {n}, fill: {{ {a['arg']}: your value }} }}", ""
-            flat = f'"option": {n}, "fill": {{ "{a["arg"]}": your value }}'
-        else:
-            args = f"{{ option: {n}, fill: {{ {a['arg']}: {json.dumps(v, ensure_ascii=False)} }} }}"
-            flat = f'"option": {n}, "fill": {{ "{a["arg"]}": {json.dumps(v, ensure_ascii=False)} }}'
-            tail = ""
-            if not isinstance(v, bool) and isinstance(v, (int, float, str)):
-                text = f"{_val(v)}{a.get('unit') or ''}" if a.get("unit") == "mm" else _val(v)
-                tail = (f"; option: \"{n}, {text}\" also works" if static else f"; the text \"{n}, {text}\" also works")
-    return as_run(flat, n, tail) if static else f"pick {args} runs option {n}{tail}"
+    step = {"tool": "pick", "option": 1, "fill": {"length": 4}}
+    if rows:
+        o = rows[0]
+        step = {"tool": "pick", "option": o.get("n", 1)}
+        ask = o.get("ask") or []
+        if ask:
+            a = ask[0]
+            step["fill"] = {a["arg"]: a.get("sample", ASK_SAMPLE.get(a.get("arg")))}
+    return {"tool": "run", "calls": [step]} if static else step
 
 
 def as_run(flat, n, tail=""):
