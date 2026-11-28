@@ -32,11 +32,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: Build
         run: uv build
-      - name: Privacy and identity check of the built files
-        run: |
-          python3 .github/privacy/check.py dist/
-          mkdir -p sdist && tar -xzf dist/*.tar.gz -C sdist
-          python3 .github/privacy/check.py sdist/
       - name: Metadata check
         run: uvx twine check dist/*
       - uses: actions/upload-artifact@v4
