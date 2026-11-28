@@ -86,12 +86,12 @@ def state():
 
 
 def mark_health(h, now=None):
-    """The time line added at the end of a health verdict (once), from half
-    the limit on (matters). Never raises."""
+    """The time line set as health.time, from half the limit on (matters).
+    Never raises."""
     try:
-        ln = line(now) if matters(now) else None
-        if ln and isinstance(h, dict) and ln not in str(h.get("facts", "")):
-            h["facts"] = f"{h.get('facts', '')}; {ln}".lstrip("; ")
+        ln = used(now) if matters(now) else None
+        if ln and isinstance(h, dict):
+            h["time"] = ln
     except Exception:  # noqa: BLE001
         pass
     return h

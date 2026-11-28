@@ -717,15 +717,18 @@ def check_row(where, tool, body):
 
 
 def _health_words(body):
-    """The health's facts of a call whose health has a fault that FreeCAD
-    reports (once.FAULT: a recompute error new or from before, a shape that
-    is not valid or not closed, flagged constraints, a dialog) or that was
-    not read; else None."""
+    """The health's fields of a call whose health has a fault that FreeCAD
+    reports (health.fault_in: a recompute error new or from before, a shape
+    that is not valid or not closed, flagged constraints, a dialog) or that
+    was not read, as compact JSON; else None."""
+    import json
+
+    from . import health as _h
     from . import once
 
     h = body.get("health") if isinstance(body, dict) else None
-    if isinstance(h, dict) and (h.get("errors") or (isinstance(h.get("facts"), str) and once.FAULT.search(h["facts"]))):
-        return _cut(h.get("facts") or "recompute errors")
+    if isinstance(h, dict) and _h.fault_in(h):
+        return _cut(json.dumps({k: v for k, v in h.items() if k not in once.HEALTH_ASIDE}, default=str, ensure_ascii=False, separators=(",", ":")))
     return None
 
 

@@ -79,18 +79,18 @@ class Plan(unittest.TestCase):
 class HeldAnswer(unittest.TestCase):
     def test_no_stale_reading_is_left_in(self):
         body = {"sketch": "S", "added": [1], "state": {"solver": "solved", "dof": 2, "wires": 1, "closedWires": 1, "openVertices": [[0, 0]], "wiresMeet": 0, "selfCrossing": "not tested", "openEnds": ["close"], "meets": ["m"], "moved": ["x"]},
-                "bodyAfter": {"volume": 10}, "health": {"facts": "S: fully constrained"}}
+                "bodyAfter": {"volume": 10}, "health": {"sketches": [{"sketch": "S", "state": "fully constrained"}]}}
         out = H.held_answer("sketch_edit", body)
         self.assertEqual(out["state"], {"solver": "solved", "dof": 2})
         self.assertNotIn("bodyAfter", out)
         self.assertEqual(out["build"], "held")
         h = out["health"]
         self.assertEqual(h["build"], "held")
-        self.assertTrue(h["facts"].startswith("build: held"))
+        self.assertNotIn("facts", h)
         self.assertNotIn("ok", h)
         self.assertIn("bodyAfter", h["leftOut"])
         self.assertIn("state.wires", h["leftOut"])
-        self.assertNotIn("fully constrained", h["facts"])
+        self.assertNotIn("sketches", h)
 
     def test_nothing_to_leave_out(self):
         out = H.held_answer("object_set", {"object": "Pad", "set": {}})
@@ -100,7 +100,7 @@ class HeldAnswer(unittest.TestCase):
 
 class Run(unittest.TestCase):
     def test_one_build_for_the_run(self):
-        h, log = new({"facts": "S: 0 DoF"})
+        h, log = new({"recompute": "ok", "sketches": [{"sketch": "S", "dof": 0}]})
         d = Doc()
         self.assertTrue(h.begin(d))
         self.assertTrue(d.RecomputesFrozen)
@@ -112,7 +112,7 @@ class Run(unittest.TestCase):
         self.assertFalse(d.RecomputesFrozen)
         self.assertEqual(d.built, 1)
         self.assertEqual({k: e[k] for k in ("when", "held", "calls", "recomputed")}, {"when": "end", "held": 3, "calls": [3, 5], "recomputed": 4})
-        self.assertEqual(e["health"], {"facts": "S: 0 DoF"})
+        self.assertEqual(e["health"], {"recompute": "ok", "sketches": [{"sketch": "S", "dof": 0}]})
         # The health is read once, after the build, for every held tool.
         self.assertEqual(log, ["mark", ("check", ["sketch_add", "sketch_constrain", "object_set"]), "snapshot"])
         self.assertFalse(h.active)
@@ -125,10 +125,10 @@ class Run(unittest.TestCase):
         d = Doc()
         h.begin(d)
         h.note(0, "object_set")
-        self.assertEqual(h.build("end")["health"], {"facts": "recompute: FreeCAD reports no recompute error"})
+        self.assertEqual(h.build("end")["health"], {"recompute": "ok", "fault": False})
 
     def test_a_build_that_breaks_something(self):
-        h, _ = new({"facts": "1 object failed", "errors": [{"object": "Pad", "new": True}]})
+        h, _ = new({"recompute": {"failing": [{"object": "Pad", "error": "x"}]}, "fault": True})
         d = Doc()
         h.begin(d)
         h.note(0, "sketch_edit")
@@ -175,7 +175,7 @@ class Run(unittest.TestCase):
         e = h.build("end")
         self.assertFalse(d.RecomputesFrozen)
         self.assertIn("boom", e["error"])
-        self.assertIn("boom", e["health"]["facts"])  # facts only (27 Nov): the error is in the facts
+        self.assertIn("boom", e["health"]["recomputeFailed"])  # the error is a field of the health
         self.assertTrue(H.build_failed(e))
 
 

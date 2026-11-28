@@ -15,7 +15,7 @@ from agentlink.protocol import Server, Tool  # noqa: E402
 
 class BatchTo(unittest.TestCase):
     def test_a_stopped_batch_keeps_its_note(self):
-        got = {"results": [{"tool": "pd_pad", "ok": True, "result": {"feature": "Pad", "health": {"facts": "sound"}}},
+        got = {"results": [{"tool": "pd_pad", "ok": True, "result": {"feature": "Pad", "health": {"recompute": "ok", "fault": False}}},
                            {"tool": "sketch_state", "ok": False, "error": {"code": "not_found", "message": "no sketch X"}}],
                "ran": 2, "notRun": 3, "next": 7, "heavy": {"index": 7, "tool": "wall_read", "arguments": {}},
                "note": "Stopped before calls.7 (wall_read): a heavy read … then batch again with the calls from index 8 on."}
@@ -24,7 +24,7 @@ class BatchTo(unittest.TestCase):
         self.assertEqual(out["toNote"], batchrec.TO_NOTE)
         self.assertEqual((out["next"], out["notRun"], out["heavy"]["tool"]), (7, 3, "wall_read"))
         self.assertEqual(out["written"], {"path": "run.json", "bytes": 1234})
-        self.assertEqual(out["results"], [{"i": 5, "tool": "pd_pad", "ok": True, "health": "sound"},
+        self.assertEqual(out["results"], [{"i": 5, "tool": "pd_pad", "ok": True, "health": {"recompute": "ok", "fault": False}},
                                           {"i": 6, "tool": "sketch_state", "ok": False, "error": "not_found: no sketch X"}])
 
     def test_a_budget_stop_keeps_its_note_too(self):

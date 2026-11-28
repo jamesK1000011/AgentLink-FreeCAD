@@ -43,7 +43,7 @@ MIN_CHARS = 60
 NOTHING_NEW = "nothing new"
 # Keys of a health reading that are not its finding: timing, the hints put
 # beside it, the status bar's text.
-HEALTH_ASIDE = {"ms", "msBy", "overlapPairs", "saidBefore", "options", "appliesNow", "statusBar", "next"}
+HEALTH_ASIDE = {"ms", "msBy", "overlapPairs", "saidBefore", "options", "appliesNow", "next"}
 
 # Coded tools' standing keys: { tool: { key: values or None (any value) } }.
 # Filled with the literal texts where a key also carries words that change.
@@ -55,12 +55,10 @@ CODED = {
     "batch": {},
 }
 
-# Words of health.facts for what FreeCAD reports as a fault (agentlink/health.py
-# words them): a reading with one is given whole each time, never as
-# NOTHING_NEW. It decides only what is said again, not how a result is graded.
-FAULT = re.compile(r"failed to recompute|still failing|not recomputed yet|NOT valid|NOT closed|conflicting|redundant|malformed|a dialog is open|"
-                   r"did not run|not read|switched off|Check Geometry reports|empty shape|recompute failed|volume -?[0-9.e+-]+ mm³")
-STANDING = re.compile(r"^(?:recompute: )?\d+ objects? still failing from before this call: ")
+# What FreeCAD reports as a fault is read from the health's typed fields
+# (agentlink/health.py fault_in): a reading with one is given whole each
+# time, never as NOTHING_NEW. It decides only what is said again, not how a
+# result is graded.
 
 # Left-out words that are not named in saidBefore: they say how Agent Link
 # itself works (a batch's own notes), or their reading stays in
@@ -178,35 +176,54 @@ def health_content(h):
     """The part of a health reading that is the check's own finding: the
     key a repeat is told by (no timing, no hints beside it, no status bar
     text, which changes as the window does)."""
-    return json.dumps({k: v for k, v in h.items() if k not in HEALTH_ASIDE}, sort_keys=True, default=str)
+    body = {k: v for k, v in h.items() if k not in HEALTH_ASIDE}
+    w = body.get("window")
+    if isinstance(w, dict) and "statusBar" in w:
+        rest = {k: v for k, v in w.items() if k != "statusBar"}
+        if rest:
+            body["window"] = rest
+        else:
+            del body["window"]
+    return json.dumps(body, sort_keys=True, default=str)
+
+
+def subject(h):
+    """What a health reading is about: the first record's name (a sketch's,
+    then a shape's, then the first object that failed), "" when none."""
+    for key, field in (("sketches", "sketch"), ("shapes", "object")):
+        for x in h.get(key) or []:
+            if isinstance(x, dict) and x.get(field):
+                return str(x[field])
+    rc = h.get("recompute")
+    for x in (rc.get("failing") if isinstance(rc, dict) else None) or []:
+        if isinstance(x, dict) and x.get("object"):
+            return str(x["object"])
+    return ""
 
 
 def quiet_health(st, tool, out):
-    """A changing tool's health given as NOTHING_NEW when its facts are
+    """A changing tool's health given as NOTHING_NEW when its fields are
     the ones last given in this conversation and FreeCAD reports no fault
-    in them (FAULT: a recompute error, a shape that is not valid or not
-    closed, flagged constraints, a dialog, a check that did not run). The check itself ran: only its
-    words are left out. A reading that differs, or one with such a fault, is
-    given whole and is then the last one given. The lines beside it (options,
-    appliesNow) move to the answer itself. Explicit reads (body_check,
-    session_state …) do not change the document, and keep theirs whole.
-    True when the health was left out."""
+    in them (health.fault_in: a recompute error, a shape that is not valid
+    or not closed, flagged constraints, a dialog, a check that did not run).
+    The check itself ran: only its words are left out. A reading that
+    differs, or one with such a fault, is given whole and is then the last
+    one given. The lines beside it (options, appliesNow) move to the answer
+    itself. Explicit reads (body_check, session_state …) do not change the
+    document, and keep theirs whole. True when the health was left out."""
+    from . import health as _health
+
     h = out.get("health")
     if not isinstance(h, dict) or not getattr(tool, "changes", False) or getattr(tool, "name", tool) == "batch":
         return False
     key = health_content(h)
-    # Per subject (the verdict's head: "Body", "Sketch 2"): a build that
-    # goes sketch, feature, sketch, feature alternates two verdicts, so one
+    # Per subject (the first record's name: "Body", "Sketch 2"): a build that
+    # goes sketch, feature, sketch, feature alternates two readings, so one
     # "last given" never matched (live, 25 Nov: no answer in a batch was quiet).
-    v = h.get("facts")
-    head = v.split("; ", 1)[0] if isinstance(v, str) else ""
-    # A fact is "source: subject: words": the subject is its second part.
-    bits = head.split(": ")
-    subject = bits[1].strip() if len(bits) > 2 else ""
+    name = subject(h)
     last = st.setdefault("healthBy", {})
-    fault = bool(h.get("errors") or h.get("needRecompute") or h.get("sketches")) or bool(isinstance(v, str) and FAULT.search(v))
-    if fault or key != last.get(subject):
-        last[subject] = key
+    if _health.fault_in(h) or key != last.get(name):
+        last[name] = key
         st["health"] = key
         return False
     out["health"] = NOTHING_NEW
@@ -217,21 +234,22 @@ def quiet_health(st, tool, out):
 
 
 def thin_health(st, h):
-    """A health reading with the standing part of its facts ("N objects
-    still failing from before this call: …") left out while it is what was
-    last said; named in health.saidBefore (failing)."""
+    """A health reading with the standing part of its recompute
+    (failingBefore: the objects still failing from before the call) left
+    out while it is what was last said; named in health.saidBefore
+    (failing)."""
     gone = []
-    v = h.get("facts")
-    if isinstance(v, str):
-        parts = v.split("; ")
-        part = next((p for p in parts if STANDING.match(p)), None)
-        if part is None:
-            st["failing"] = None
-        elif part != st["failing"]:
+    rc = h.get("recompute")
+    v = rc.get("failingBefore") if isinstance(rc, dict) else None
+    if v is None:
+        st["failing"] = None
+    else:
+        part = {"failingBefore": v, **({"more": rc["failingBeforeMore"]} if rc.get("failingBeforeMore") else {})}
+        if part != st["failing"]:
             st["failing"] = part
         else:
-            rest = [p for p in parts if p is not part]
-            h["facts"] = "; ".join(rest) if rest else "as before"
+            rest = {k: x for k, x in rc.items() if k not in ("failingBefore", "failingBeforeMore")}
+            h["recompute"] = rest or "as before"
             gone.append("failing")
     if gone:
         h["saidBefore"] = sorted(set(h.get("saidBefore") or []) | set(gone))

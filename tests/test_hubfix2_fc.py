@@ -87,14 +87,14 @@ class Hubfix2(Base):
         d.recompute()
         box.Width = 7  # after the recompute: waits for the next one
         h = health.attach(s, Changing("sets_after_recompute"), m, {})["health"]
-        self.assertIn("Kept", h.get("needRecompute", []), h)
+        self.assertIn("Kept", (h.get("recompute") or {}).get("notRecomputed", []), h)
         d.recompute()
         # One object's own recompute leaves FreeCAD's mark on it; it is up to date.
         m = health.mark(s)
         box.Width = 8
         box.recompute()
         h = health.attach(s, Changing("recomputes_one"), m, {})["health"]
-        self.assertNotIn("Kept", h.get("needRecompute", []), h)
+        self.assertNotIn("Kept", h["recompute"].get("notRecomputed", []) if isinstance(h["recompute"], dict) else [], h)
         d.recompute()
 
     def test_6_a_guard_does_not_refuse_for_what_was_failing_before(self):

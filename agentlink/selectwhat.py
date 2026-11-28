@@ -66,12 +66,7 @@ def health_has_fault(h):
 
     if not isinstance(h, dict):
         return h is not None
-    if h.get("errors") or h.get("needRecompute") or h.get("taskPanel"):
-        return True
-    facts = str(h.get("facts") or "")
-    if facts.startswith(_health.NOT_READ) or "did not run" in facts:
-        return True
-    return _health.last_fault()
+    return bool(h.get("fault")) or _health.fault_in(h) or _health.last_fault()
 
 
 def answer(body, want):

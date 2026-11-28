@@ -180,10 +180,10 @@ class Files(unittest.TestCase):
 
     def test_the_row_left_in_the_reply(self):
         w = {"path": "p", "bytes": 3}
-        row = C.written_row("mk", {**ANSWER, "health": {"facts": "1 object failed", "todo": "fix", "errors": [1]}}, w)
+        row = C.written_row("mk", {**ANSWER, "health": {"recompute": {"failing": [{"object": "Pad", "error": "x"}]}, "fault": True, "ms": 300}}, w)
         self.assertEqual(row["written"], w)
         self.assertEqual(row["keys"], ["bodies", "loops", "n", "health"])
-        self.assertEqual(row["health"], {"facts": "1 object failed", "errors": [1]})  # facts only: no todo
+        self.assertEqual(row["health"], {"recompute": {"failing": [{"object": "Pad", "error": "x"}]}, "fault": True})  # the fields, no timing
         self.assertNotIn("result", row)
         self.assertEqual(C.written_row("mk", [1, 2, 3], w)["length"], 3)
         self.assertNotIn("health", C.written_row("mk", ANSWER, w))

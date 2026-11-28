@@ -7,10 +7,10 @@ from agentlink import batchrec
 
 class Lines(unittest.TestCase):
     GOT = {"ran": 4, "results": [
-        {"tool": "a", "ok": True, "result": {"health": {"facts": "recompute: FreeCAD reports no recompute error"}}},
+        {"tool": "a", "ok": True, "result": {"health": {"recompute": "ok", "fault": False}}},
         {"tool": "b", "ok": False, "error": {"code": "invalid_input", "message": "m"}},
-        {"tool": "c", "ok": True, "result": {"health": {"facts": "recompute: 1 object failed to recompute: Pad (x)", "errors": [{"object": "Pad"}]}}},
-        {"tool": "d", "ok": True, "result": {"health": {"facts": "Cube: valid, closed, 1 solid; Asm: assembly solved"}}},
+        {"tool": "c", "ok": True, "result": {"health": {"recompute": {"failing": [{"object": "Pad", "error": "x"}]}, "fault": True}}},
+        {"tool": "d", "ok": True, "result": {"health": {"recompute": "ok", "fault": False, "shapes": [{"object": "Cube", "valid": True, "closed": True, "solids": 1}], "addons": {"Asm": ["assembly solved"]}}}},
     ]}
 
     def test_all_keeps_a_line_a_call(self):

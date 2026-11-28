@@ -382,8 +382,8 @@ class HealthIsWhatFreeCADReports(unittest.TestCase):
             self.assertNotIn(gone, h, gone)
         self.assertFalse(os.path.exists(os.path.join(ROOT, "agentlink", "practice.py")))
         self.assertFalse(os.path.exists(os.path.join(ROOT, "agentlink", "fusehint.py")))
-        for src in ('lines.append(f"recompute: ', 'lines.append("solver: " + r["line"])', 'lines.append("shape: " + r["line"])', '"measured: " + x["line"]',
-                    'f"{_owner}: "', 'f"window: a dialog is open: '):
+        for src in ('rc["failing"] = ', 'sk_out.append(sketch_record(r))', 'shapes_out.append(shape_record(r))', 'measured.append({"parts"',
+                    'addons.setdefault(_owner, [])', 'win["dialog"] = '):
             self.assertIn(src, h, src)
 
     def test_a_limit_that_is_used_is_said_with_the_true_reason(self):
@@ -397,12 +397,12 @@ class HealthIsWhatFreeCADReports(unittest.TestCase):
     def test_the_health_of_a_call_with_no_news(self):
         from agentlink import health
 
-        self.assertEqual(health.NOTHING, "recompute: FreeCAD reports no recompute error")
+        self.assertEqual(health.nothing(), {"recompute": "ok", "fault": False})
         out = health.attach(types.SimpleNamespace(doc=None), "pd_pad", {"depth": 0}, {})
-        self.assertEqual(out["health"], {"facts": "health: not read (no document)"})  # 27 Nov review: not read is not "no error"
+        self.assertEqual(out["health"], {"notRead": "no document", "fault": False})  # 27 Nov review: not read is not "no error"
         doc = types.SimpleNamespace(Name="D", Objects=[])
         out = health.attach(types.SimpleNamespace(doc=doc), "pd_pad", health.mark(types.SimpleNamespace(doc=doc)), {})
-        self.assertEqual(out["health"], {"facts": health.NOTHING})  # the state pass ran on every object: none failed
+        self.assertEqual(out["health"], health.nothing())  # the state pass ran on every object: none failed
 
     def test_body_check_reads_freecads_checks_only(self):
         t = source("tools.py")
@@ -423,8 +423,8 @@ class HealthIsWhatFreeCADReports(unittest.TestCase):
     def test_lines_refused_keeps_calls_with_a_recompute_error(self):
         from agentlink import batchrec
 
-        got = {"results": [{"tool": "a", "ok": True, "result": {"health": {"facts": "shape: B: valid, closed, 2 solids"}}},
-                           {"tool": "b", "ok": True, "result": {"health": {"facts": "recompute: 1 object failed to recompute: Pad (x)", "errors": [{"object": "Pad"}]}}},
+        got = {"results": [{"tool": "a", "ok": True, "result": {"health": {"recompute": "ok", "fault": False, "shapes": [{"object": "B", "valid": True, "closed": True, "solids": 2}]}}},
+                           {"tool": "b", "ok": True, "result": {"health": {"recompute": {"failing": [{"object": "Pad", "error": "x"}]}, "fault": True}}},
                            {"tool": "c", "ok": False, "error": {"code": "failed", "message": "m"}}]}
         out = batchrec.to_reply(got, 0, "p", 1, lines="refused")
         self.assertEqual([r["i"] for r in out["results"]], [1, 2])
@@ -716,10 +716,13 @@ class ReviewFixes(unittest.TestCase):
     def test_a1_fast_does_not_say_no_error_over_a_fault_or_an_unread_health(self):
         from agentlink import fastpath
 
-        for facts in ("recompute: 1 object still failing from before this call: Pad001", "the health check did not run (KeyError: x)",
-                      "health: not read (no document)", "shape: Body: NOT valid, closed, 1 solid", "window: a dialog is open: Missing link"):
-            self.assertEqual(fastpath._health_words({"health": {"facts": facts}}), facts, facts)
-        self.assertIsNone(fastpath._health_words({"health": {"facts": "shape: Body: valid, closed, 1 solid"}}))
+        import json
+
+        for h in ({"recompute": {"failingBefore": ["Pad001"]}, "fault": True}, {"notRead": "the health check did not run (KeyError: x)", "fault": True},
+                  {"notRead": "no document", "fault": False}, {"recompute": "ok", "fault": True, "shapes": [{"object": "Body", "valid": False, "closed": True, "solids": 1}]},
+                  {"recompute": "ok", "fault": True, "window": {"dialog": "Missing link"}}):
+            self.assertEqual(json.loads(fastpath._health_words({"health": h})), h, h)
+        self.assertIsNone(fastpath._health_words({"health": {"recompute": "ok", "fault": False, "shapes": [{"object": "Body", "valid": True, "closed": True, "solids": 1}]}}))
         run = types.SimpleNamespace(calls=1, made=[], health_bad=1)
         self.assertIn("health: a fault or no reading after 1 call (warnings)", fastpath._summary(run, True, 0.1, None, None))
         run.health_bad = 0
@@ -730,10 +733,10 @@ class ReviewFixes(unittest.TestCase):
         from agentlink import health
 
         got = health.check(types.SimpleNamespace(doc=None), "pd_pad", {"depth": 0})
-        self.assertEqual(got, {"facts": "health: not read (no document)"})
+        self.assertEqual(got, {"notRead": "no document", "fault": False})
         h = source("health.py")
-        self.assertIn('lines.append(f"recompute: not read ({len(objs)} objects, and the State flags are read for {MAX_OBJECTS} at most)")', h)
-        self.assertIn('return {"facts": health.NOT_READ}', source("tools.py"))
+        self.assertIn('rc["notRead"] = f"{len(objs)} objects, and the State flags are read for {MAX_OBJECTS} at most"', h)
+        self.assertIn('return health.not_read("the build was not run")', source("tools.py"))
 
     def test_a3_wires_meet_counts_every_pair(self):
         got = child('''
@@ -1269,7 +1272,7 @@ class QaS1127f(unittest.TestCase):
 
     def test_5_check_geometry_goes_in_the_result_line(self):
         got = child('''
-        out = {"result": "Pipe added material, volume change +1328.89 mm³.", "health": {"facts": "shape: Body: valid, closed, 1 solid, Check Geometry reports Error in Edge: BOPAlgo SelfIntersect and 3 more; time: 2 of 15 minutes used"}}
+        out = {"result": "Pipe added material, volume change +1328.89 mm³.", "health": {"recompute": "ok", "fault": True, "shapes": [{"object": "Body", "valid": True, "closed": True, "solids": 1, "checkErrors": ["Error in Edge: BOPAlgo SelfIntersect", "a", "b", "c"]}], "time": "2 of 15 minutes used"}}
         quiet = {"result": "Pad added material.", "health": "nothing new"}
         print(json.dumps([pc.check_in_result(out)["result"], pc.check_in_result(quiet)["result"]]))
         ''')

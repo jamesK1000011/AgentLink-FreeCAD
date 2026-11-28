@@ -79,20 +79,20 @@ class BatchRecord:
 
 # The file's own note in a batch { to } reply.
 TO_NOTE = ("Each call's whole answer is in the file (results[i].result; a call with a writeTo of its own: in that file, written here); "
-           "here: ok, a refusal's words and the health's facts. record_read { path: the file, at: \"results.0.result\" } gives any part of it "
+           "here: ok, a refusal's words and the health. record_read { path: the file, at: \"results.0.result\" } gives any part of it "
            "back (results count from this part's first call, i minus start).")
 
 
-# The part of a health verdict that stands from call to call: the objects
-# that were failing before the call (agentlink/health.py words it).
-STANDING = re.compile(r"^(?:recompute: )?\d+ objects? still failing from before this call: ")
-STANDING_NOTE = ("A line's health leaves out the part \"… still failing from before this call: …\" when it is the same as in the "
-                 "last line that gave it: it is said at the first call it shows in and again only when it changes "
-                 "(\"as before\": nothing else was said). The file has the whole health of every call.")
+# The part of a health reading that stands from call to call: the objects
+# that were failing before the call (health.recompute.failingBefore).
+STANDING_NOTE = ("A line's health leaves out recompute.failingBefore when it is the same as in the "
+                 "last line that gave it: it is given at the first call it shows in and again only when it changes "
+                 "(\"as before\": nothing else was given). The file has the whole health of every call.")
 
 
 # Said once a conversation, not on every reply (agentlink/once.py).
 from . import once as _once  # noqa: E402
+from . import health as _health  # noqa: E402
 
 
 def clock_start(prev, now=None):
@@ -119,19 +119,16 @@ _once.register("batch", "healthNote", STANDING_NOTE)
 
 
 def brief_verdicts(verdicts):
-    """A run of health verdicts for a batch's compact lines: the standing
-    part (STANDING) is kept where it first shows and where it changes, and
-    left out where it repeats the last one given; the rest of each verdict
-    is untouched. A verdict that was only the repeated part reads "as
-    before". Returns (the verdicts, whether anything was left out); None
-    stays None."""
+    """A run of health readings for a batch's compact lines: the standing
+    part (recompute.failingBefore) is kept where it first shows and where
+    it changes, and left out where it repeats the last one given; the rest
+    of each reading is untouched. A recompute that was only the repeated
+    part reads "as before". Returns (the readings, whether anything was
+    left out); None stays None."""
     out, last, cut = [], None, False
     for v in verdicts:
-        if not isinstance(v, str):
-            out.append(v)
-            continue
-        parts = v.split("; ")
-        standing = next((p for p in parts if STANDING.match(p)), None)
+        rc = v.get("recompute") if isinstance(v, dict) else None
+        standing = ({"failingBefore": rc["failingBefore"], "more": rc.get("failingBeforeMore")} if isinstance(rc, dict) and rc.get("failingBefore") else None)
         if standing is None:
             out.append(v)
             continue
@@ -139,8 +136,8 @@ def brief_verdicts(verdicts):
             last = standing
             out.append(v)
             continue
-        rest = [p for p in parts if p is not standing]
-        out.append("; ".join(rest) if rest else "as before")
+        rest = {k: x for k, x in rc.items() if k not in ("failingBefore", "failingBeforeMore")}
+        out.append({**v, "recompute": rest or "as before"})
         cut = True
     return out, cut
 
@@ -164,10 +161,10 @@ def to_reply(got, first, path, size, lines="all"):
         else:
             res = r.get("result")
             h = res.get("health") if isinstance(res, dict) else r.get("health")
-            if isinstance(h, dict) and h.get("facts"):
-                row["health"] = h["facts"]
-            if isinstance(h, dict) and (h.get("errors") or (isinstance(h.get("facts"), str) and _once.FAULT.search(h["facts"]))):
-                faults.add(first + i)  # the health has a fault that FreeCAD reports, or it was not read (once.FAULT)
+            if isinstance(h, dict) and h:
+                row["health"] = {k: v for k, v in h.items() if k not in _once.HEALTH_ASIDE}
+            if _health.fault_in(h):
+                faults.add(first + i)  # the health has a fault that FreeCAD reports, or it was not read (health.fault_in)
             if isinstance(r.get("written"), dict):
                 row["written"] = r["written"].get("path")
         lines.append(row)
@@ -181,7 +178,7 @@ def to_reply(got, first, path, size, lines="all"):
     if only in ("refused", "counts"):
         counts = {"ok": sum(1 for r in lines if r["ok"]), "refused": sum(1 for r in lines if not r["ok"])}
         # counts: no line at all (a run made for its files or pictures, read from the file afterwards)
-        # refused: the refused calls and the calls whose health has a fault word (once.FAULT) or was not read
+        # refused: the refused calls and the calls whose health has a fault (health.fault_in) or was not read
         lines = [] if only == "counts" else [r for r in lines if not r["ok"] or r["i"] in faults]
     short = {k: v for k, v in got.items() if k != "results"}
     short.update({"results": lines, "written": {"path": path, "bytes": size}})

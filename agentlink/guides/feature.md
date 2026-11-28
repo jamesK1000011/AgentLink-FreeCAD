@@ -9,7 +9,7 @@ A map of this guide. `guide_read { topic: "feature", section: [...] }` reads the
 ## workflow
 1. `pd_pad`, `pd_pocket`, `pd_revolution`, `pd_groove`, `pd_hole`, `pd_loft` and `pd_pipe` take a sketch. `sketch_state` gives its wires, closed wires, open ends, points and the closed wires that meet.
 2. `pd_fillet` / `pd_chamfer` (edges), `pd_draft` / `pd_thickness` (faces), and `pd_mirrored` / `pd_linear_pattern` / `pd_polar_pattern` work on the body (features by name, or `features: "all"` for the whole body — FreeCAD 1.1's TransformMode "Whole shape", else every pad and pocket up to the tip).
-3. Each answer gives the feature's name, the body's volume, faces, solids and size after the change, the volume change, `stored` (the values FreeCAD holds for the feature, by FreeCAD's property names), and `health` (what FreeCAD reports: recompute errors, object states, the shape check, the sketch solver).
+3. Each answer gives the feature's name, the body's volume, faces, solids and size after the change, the volume change, `stored` (the values FreeCAD holds for the feature, by FreeCAD's property names), and `health` (what FreeCAD reports, as fields: `recompute`, `sketches`, `shapes`, `measured`, `window`, `fault`).
 4. `feature_list` shows the history. `feature_edit` changes values. `feature_suppress` and `feature_remove` take features out.
 
 ## reading the answer

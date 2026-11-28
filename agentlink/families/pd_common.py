@@ -1293,12 +1293,12 @@ def check_in_result(out):
     BOPAlgo SelfIntersect" was in health only). Never raises."""
     try:
         h = out.get("health") if isinstance(out, dict) else None
-        facts = h.get("facts") if isinstance(h, dict) else None
-        if isinstance(facts, str) and isinstance(out.get("result"), str):
-            for part in re.split(r";\s*", facts):
-                i = part.find("Check Geometry reports")
-                if i >= 0:
-                    out["result"] = out["result"].rstrip() + " " + part[i:].rstrip(".") + "."
+        if isinstance(h, dict) and isinstance(out.get("result"), str):
+            for sh in h.get("shapes") or []:
+                said = sh.get("checkErrors") if isinstance(sh, dict) else None
+                if said:
+                    out["result"] = (out["result"].rstrip() + f" Check Geometry reports {str(said[0])[:120].rstrip('.')}"
+                                     + (f" and {len(said) - 1} more" if len(said) > 1 else "") + ".")
                     break
     except Exception:  # noqa: BLE001 - a reading only
         pass

@@ -26,7 +26,7 @@ sys.path.insert(0, HERE)
 from agentlink import nexthint, once  # noqa: E402
 from agentlink.protocol import Tool  # noqa: E402
 
-CLEAN = {"facts": "shape: Body: valid, closed, 1 solid"}
+CLEAN = {"recompute": "ok", "fault": False, "shapes": [{"object": "Body", "valid": True, "closed": True, "solids": 1}]}
 
 
 def changing(name="pd_pad"):
@@ -48,37 +48,37 @@ class HealthNews(unittest.TestCase):
     def test_the_same_clean_health_is_nothing_new(self):
         first = once.thin_reply(self.s, changing(), answer(CLEAN))
         self.assertEqual(first["health"], CLEAN)
-        second = once.thin_reply(self.s, changing(), answer({**CLEAN, "ms": 240, "statusBar": "Pad002"}))
+        second = once.thin_reply(self.s, changing(), answer({**CLEAN, "ms": 240, "window": {"statusBar": "Pad002"}}))
         self.assertEqual(second["health"], once.NOTHING_NEW)
         self.assertLess(len(json.dumps(second)), len(json.dumps(first)))
 
     def test_sketch_and_feature_calls_in_turn_are_quiet_per_subject(self):
         # live, 25 Nov: sketch, pad, sketch, pad in one batch; one "last given"
         # never matched, so every answer repeated the whole verdict.
-        sk = {"facts": "solver: Sketch 2: 4 DoF left on the start of lines 0, 1, 2, 3"}
+        sk = {"recompute": "ok", "fault": False, "sketches": [{"sketch": "Sketch 2", "dof": 4, "free": ["the start of lines 0, 1, 2, 3"]}]}
         once.thin_reply(self.s, changing(), answer(CLEAN))
         once.thin_reply(self.s, changing("sketch_add"), answer(sk))
         self.assertEqual(once.thin_reply(self.s, changing(), answer(CLEAN))["health"], once.NOTHING_NEW)
         self.assertEqual(once.thin_reply(self.s, changing("sketch_add"), answer(sk))["health"], once.NOTHING_NEW)
-        sk3 = {"facts": "solver: Sketch 3: empty"}
+        sk3 = {"recompute": "ok", "fault": False, "sketches": [{"sketch": "Sketch 3", "state": "empty"}]}
         self.assertEqual(once.thin_reply(self.s, changing("sketch_new"), answer(sk3))["health"], sk3)
 
     def test_a_change_is_given_whole(self):
         once.thin_reply(self.s, changing(), answer(CLEAN))
-        two = {"facts": "shape: Body: valid, closed, 2 solids"}
-        self.assertEqual(once.thin_reply(self.s, changing(), answer(two))["health"]["facts"], two["facts"])
+        two = {**CLEAN, "shapes": [{"object": "Body", "valid": True, "closed": True, "solids": 2}]}
+        self.assertEqual(once.thin_reply(self.s, changing(), answer(two))["health"]["shapes"], two["shapes"])
         # and the new one is then the one last given
         self.assertEqual(once.thin_reply(self.s, changing(), answer(two))["health"], once.NOTHING_NEW)
-        task = {**CLEAN, "taskPanel": ["Pad parameters"]}
-        self.assertEqual(once.thin_reply(self.s, changing(), answer(task))["health"]["taskPanel"], ["Pad parameters"])
+        task = {**CLEAN, "window": {"taskPanel": ["Pad parameters"]}}
+        self.assertEqual(once.thin_reply(self.s, changing(), answer(task))["health"]["window"]["taskPanel"], ["Pad parameters"])
 
     def test_something_wrong_is_always_given(self):
-        bad = {"facts": "window: a dialog is open: Missing link"}
+        bad = {"recompute": "ok", "fault": True, "window": {"dialog": "Missing link"}}
         for _ in range(3):
             h = once.thin_reply(self.s, changing(), answer(bad))["health"]
             self.assertIsInstance(h, dict)
-            self.assertIn("a dialog is open", h["facts"])
-        failed = {"facts": "the health check did not run (KeyError: x)"}
+            self.assertEqual(h["window"]["dialog"], "Missing link")
+        failed = {"notRead": "the health check did not run (KeyError: x)", "fault": True}
         for _ in range(2):
             self.assertIsInstance(once.thin_reply(self.s, changing(), answer(failed))["health"], dict)
 

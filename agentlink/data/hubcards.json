@@ -503,7 +503,7 @@
      "means": "the value of each get"
     },
     "warnings": {
-     "means": "each warning of a call, and the health's facts of a call whose health has a fault or was not read"
+     "means": "each warning of a call, and the health's fields of a call whose health has a fault or was not read"
     },
     "record": {
      "means": "the file of each call's whole answer; record_read { path, at } reads it"

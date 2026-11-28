@@ -714,13 +714,13 @@ class CompactLineSizes(unittest.TestCase):
         # say: nothing rides on every line beyond those three.
         name = "part_primitive"
         read = {"tool": name, "ok": True, "result": {"volume": 1000.0, "faces": list(range(200)), "ms": 12}}
-        made = {"tool": name, "ok": True, "result": {"body": "Bracket", "around": {"wall": 900}, "health": {"facts": "Bracket: valid, closed, 1 solid", "msBy": {"shapes": 700}}}}
+        made = {"tool": name, "ok": True, "result": {"body": "Bracket", "around": {"wall": 900}, "health": {"shapes": [{"object": "Bracket", "valid": True, "closed": True, "solids": 1}], "msBy": {"shapes": 700}}}}
         rep = self.reply([read, made] * 50)
         sizes = [len(compact(r).encode()) for r in rep["results"]]
         self.assertEqual(set(rep["results"][0]), {"i", "tool", "ok"})
         self.assertEqual(set(rep["results"][1]), {"i", "tool", "ok", "health"})
         self.assertLessEqual(max(sizes[0::2]), len(name) + 30)
-        self.assertLessEqual(max(sizes[1::2]), len(name) + 30 + len(',"health":""') + len("Bracket: valid, closed, 1 solid"))
+        self.assertLessEqual(max(sizes[1::2]), len(name) + 30 + len(compact({"health": {"shapes": [{"object": "Bracket", "valid": True, "closed": True, "solids": 1}]}})))
         fixed = len(compact(rep).encode()) - sum(sizes)
         self.assertLess(fixed, 500)   # the notes and the file, once
 

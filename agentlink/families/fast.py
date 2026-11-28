@@ -62,7 +62,7 @@ def tools(session):
                       "made lists each object made: its name (later calls take it), label and type. "
                       "checks has the main results of body_check, doc_save, doc_close, measure and other *_check steps. "
                       "The volume change is of the document the block started in, while it is open. "
-                      "values has the value of each get. warnings has each warning of a call. It also has the health's facts of a call whose health has a fault or was not read. "
+                      "values has the value of each get. warnings has each warning of a call. It also has the health's fields of a call whose health has a fault or was not read. "
                       "A required field that you leave out comes from the current body, sketch or last result. "
                       "A body or sketch field that you leave out comes from what the block made. filled names each of them. "
                       "Before step 1, each step is checked: its fields, and its leading checks up to the first change. "

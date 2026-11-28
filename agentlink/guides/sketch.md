@@ -14,7 +14,7 @@
 
 ## traps
 - A constraint that over-constrains the sketch is refused, and nothing is added. The refusal names each constraint that clashes, new and existing, with what it holds.
-- Every id counts from 0: geometry ids, constraint ids, and the conflicting / redundant lists (FreeCAD's own lists count from 1; the tools convert them). `"health"` on a changing call's reply says the same in words ("2 DoF left on line 3").
+- Every id counts from 0: geometry ids, constraint ids, and the conflicting / redundant lists (FreeCAD's own lists count from 1; the tools convert them). `health.sketches` on a changing call's reply gives the same as fields (`dof`, `free`, `conflicting`, `redundant`, `open`).
 - `sketch_add` joins a shape's own pieces, never two separate shapes: a line drawn to where an arc ends still needs `coincident` (or `tangent` on the two end points, which joins them smoothly) from `sketch_constrain`.
 - A full circle is a closed wire of its own. Lines that touch it do not make one wire with it: `sketch_state` says the wire branches. Example, arcs at x 0 (radius 10) and x 80 (radius 6) joined by two lines into one closed wire:
   four `sketch_add` calls: `arc { center: [0, 0], radius: 10, start: 90, end: 270 }` (id 0), `arc { center: [80, 0], radius: 6, start: -90, end: 90 }` (id 1), `line { from: [0, -10], to: [80, -6] }` (id 2), `line { from: [80, 6], to: [0, 10] }` (id 3). Each is one step: `kind: "arc"` or `kind: "line"` with those inputs.

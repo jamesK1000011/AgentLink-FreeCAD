@@ -79,16 +79,16 @@ srv._oriented = True
 s.server = srv
 # A read with a fixed answer, for what on an answer.
 def fixed(a):
-    h = {"facts": a.get("facts", "recompute: FreeCAD reports no recompute error")}
+    h = {"recompute": "ok", "fault": False}
     if "facts" in a:
         return {"got": a["facts"], "health": h}
     if a.get("errors"):
-        h["errors"] = [{"object": "Pad", "error": "x"}]
+        h = {"recompute": {"failing": [{"object": "Pad", "error": "x"}]}, "fault": True}
     return {"volume": 10.0, "faces": 6, "box": [1, 2, 3], "health": h}
 srv.tools["t_fixed"] = Tool("t_fixed", "A fixed answer, for the tests.", {"type": "object", "properties": {"facts": {}, "errors": {"type": "boolean"}}, "additionalProperties": False}, fixed)
 
 srv.tools["t_sound"] = Tool("t_sound", "A sound shape's answer, for the tests.", {"type": "object", "properties": {}, "additionalProperties": False},
-                            lambda a: {"volume": 5.0, "health": {"facts": "shape: B: valid, closed, 1 solid", "next": "workbench PartWorkbench"}})
+                            lambda a: {"volume": 5.0, "health": {"recompute": "ok", "fault": False, "shapes": [{"object": "B", "valid": True, "closed": True, "solids": 1}], "next": "workbench PartWorkbench"}})
 
 def call(name, args):
     r = srv.call({"name": name, "arguments": args})
@@ -225,7 +225,7 @@ class Answers(unittest.TestCase):
     def test_health_with_a_fault_always_comes_back(self):
         b = child()["ansFault"]["body"]
         self.assertEqual(b["volume"], 10.0)
-        self.assertIn("errors", b["health"])
+        self.assertIn("recompute", b["health"])
 
     def test_a_name_the_answer_has_not_gives_the_whole_answer(self):
         b = child()["ansMissing"]["body"]

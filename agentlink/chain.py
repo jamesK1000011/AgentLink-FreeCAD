@@ -218,10 +218,12 @@ def to_name(to, i):
 
 def written_row(tool, answer, written):
     """What the batch's result carries for a call whose answer went to a
-    file: where it is, its shape, and the health's facts when the call had
+    file: where it is, its shape, and the health's fields when the call had
     them (a recompute error must not hide in a file)."""
     row = {"tool": tool, "ok": True, "written": written, **summary(answer)}
     h = answer.get("health") if isinstance(answer, dict) else None
-    if isinstance(h, dict) and h.get("facts"):
-        row["health"] = {k: h[k] for k in ("facts", "errors", "build") if k in h}
+    if isinstance(h, dict) and h:
+        from . import once as _once
+
+        row["health"] = {k: v for k, v in h.items() if k not in _once.HEALTH_ASIDE}
     return row

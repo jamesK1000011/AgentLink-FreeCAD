@@ -77,21 +77,23 @@ class Thin(unittest.TestCase):
         self.assertEqual(again["machine"], machine)
 
     def test_the_standing_failure_is_said_while_it_is_news(self):
-        # 27 Nov, facts only: a health has facts and no todo; the standing part is left out while it stands
-        def h(facts):
-            return {"health": {"facts": facts}}
+        # 28 Nov, typed fields: the standing part (recompute.failingBefore) is left out while it stands
+        def h(shared):
+            return {"health": {"recompute": {"failingBefore": ["Left", "Dimension002"]}, "fault": True,
+                               "shapes": [{"object": "Trim", "valid": True, "closed": True, "solids": 1}],
+                               "measured": [{"parts": ["Trim", "Cube"], "sharedVolume": shared}]}}
 
-        v = "recompute: 2 objects still failing from before this call: Left, Dimension002"
-        a = once.thin_reply(self.s, "part_transform", h("shape: Trim: valid, closed, 1 solid; measured: Trim and Cube share 5 mm³; " + v))
-        self.assertIn(v, a["health"]["facts"])
-        b = once.thin_reply(self.s, "part_transform", h("shape: Trim: valid, closed, 1 solid; measured: Trim and Cube share 9 mm³; " + v))
-        self.assertNotIn("still failing", b["health"]["facts"])
-        self.assertIn("Trim and Cube share 9", b["health"]["facts"])  # the reading itself stays
+        failing = ["Left", "Dimension002"]
+        a = once.thin_reply(self.s, "part_transform", h(5))
+        self.assertEqual(a["health"]["recompute"]["failingBefore"], failing)
+        b = once.thin_reply(self.s, "part_transform", h(9))
+        self.assertNotIn("failingBefore", b["health"]["recompute"])
+        self.assertEqual(b["health"]["measured"][0]["sharedVolume"], 9)  # the reading itself stays
         self.assertEqual(b["health"]["saidBefore"], ["failing"])
-        c = once.thin_reply(self.s, "x", {"health": {"facts": v}})
-        self.assertEqual(c["health"]["facts"], "as before")
-        once.thin_reply(self.s, "x", {"health": {"facts": "recompute: FreeCAD reports no recompute error"}})  # fixed: the next failure is news
-        self.assertEqual(once.thin_reply(self.s, "x", {"health": {"facts": v}})["health"]["facts"], v)
+        c = once.thin_reply(self.s, "x", {"health": {"recompute": {"failingBefore": failing}, "fault": True}})
+        self.assertEqual(c["health"]["recompute"], "as before")
+        once.thin_reply(self.s, "x", {"health": {"recompute": "ok", "fault": False}})  # fixed: the next failure is news
+        self.assertEqual(once.thin_reply(self.s, "x", {"health": {"recompute": {"failingBefore": failing}, "fault": True}})["health"]["recompute"]["failingBefore"], failing)
         self.assertNotIn("overlap", once.health_said(self.s))  # no advice is kept
 
     def test_a_batch_thins_its_calls_in_order_and_never_a_refusal(self):
@@ -154,7 +156,7 @@ class FileBatch(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp()
         self.got = {"ran": 3, "results": [{"tool": "part_primitive", "ok": True, "result": {"body": f"B{i}", "volume": 1000.0 * i, "area": 600.0,
-                                                                                            "box": [10.0, 10.0, 10.0], "health": {"facts": f"B{i}: valid, closed, 1 solid"}}}
+                                                                                            "box": [10.0, 10.0, 10.0], "health": {"recompute": "ok", "fault": False, "shapes": [{"object": f"B{i}", "valid": True, "closed": True, "solids": 1}]}}}
                                           for i in range(3)], "record": "r"}
         self.path = os.path.join(self.d, "rec.json")
         with open(self.path, "w") as f:
@@ -162,7 +164,7 @@ class FileBatch(unittest.TestCase):
 
     def test_a_file_batch_answers_a_line_a_call(self):
         short = batchrec.record_reply(copy.deepcopy(self.got), 0, self.path, True, None)
-        self.assertEqual([r["health"] for r in short["results"]], [f"B{i}: valid, closed, 1 solid" for i in range(3)])
+        self.assertEqual([r["health"]["shapes"][0]["object"] for r in short["results"]], [f"B{i}" for i in range(3)])
         self.assertEqual(short["written"]["path"], self.path)
         self.assertNotIn("record", short)  # written is the record
         self.assertLess(len(compact(short)) - len(batchrec.TO_NOTE), len(compact(self.got)))  # (b), the note once a conversation

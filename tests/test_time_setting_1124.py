@@ -27,7 +27,7 @@ BODY = '''
         timelimit._first[0] = first - 125      # two minutes and a bit since the first call
     early = tools._time_state()
     # A health the same as the last one given is "nothing new" (once.quiet_health).
-    verdict = lambda h: h.get("facts") if isinstance(h, dict) else h
+    verdict = lambda h: h.get("time") if isinstance(h, dict) else h
     early_verdict = verdict(call("probe_make", {"name": "E"})[1]["health"])
     if first is not None:
         timelimit._first[0] = first - 965      # sixteen minutes and a bit: past half of 30
@@ -65,27 +65,25 @@ class TimeSet(unittest.TestCase):
         self.assertIn('(("time",), _time_state),', body)
 
     def test_the_health_verdict_shows_it_from_half_the_limit(self):
-        self.assertNotIn("time:", self.got["earlyVerdict"])
-        self.assertTrue(self.got["facts"].endswith("; time: 16 of 30 minutes used since the first tool call") or self.got["facts"] == "time: 16 of 30 minutes used since the first tool call",
-                        self.got["facts"])
-        self.assertEqual(self.got["facts"].count("time:"), 1)
+        self.assertIsNone(self.got["earlyVerdict"])
+        self.assertEqual(self.got["facts"], "16 of 30 minutes used since the first tool call")
 
     def test_a_batch_says_it_once(self):
         # On the last call's health only: the batch's answer has no health of its own.
         self.assertIsNone(self.got["batch"])
         self.assertEqual(len(self.got["rows"]), 2)
-        self.assertNotIn("time:", self.got["rows"][0])
-        self.assertEqual(self.got["rows"][1], "recompute: FreeCAD reports no recompute error; time: 16 of 30 minutes used since the first tool call")
+        self.assertIsNone(self.got["rows"][0])
+        self.assertEqual(self.got["rows"][1], "16 of 30 minutes used since the first tool call")
 
 
 class TimeNotSet(unittest.TestCase):
     def test_nothing_shows(self):
         got = run_with({})
         self.assertIsNone(got["state"])
-        self.assertNotIn("time:", got["facts"])
-        self.assertNotIn("time:", got["batch"] or "")
+        self.assertIsNone(got["facts"])
+        self.assertIsNone(got["batch"])
         for v in got["rows"]:
-            self.assertNotIn("time:", v)
+            self.assertIsNone(v)
 
 
 class TheSetting(unittest.TestCase):
@@ -110,16 +108,16 @@ class TheSetting(unittest.TestCase):
         timelimit.started(now=1.0)
         self.assertIsNone(timelimit.line())
         self.assertEqual(timelimit.state(), {})
-        h = {"facts": "recompute: FreeCAD reports no recompute error"}
-        self.assertEqual(timelimit.mark_health(h), {"facts": "recompute: FreeCAD reports no recompute error"})
+        h = {"recompute": "ok"}
+        self.assertEqual(timelimit.mark_health(h), {"recompute": "ok"})
 
     def test_the_verdict_gets_it_once_from_half_the_limit(self):
         timelimit.configure("30")
-        self.assertEqual(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"})["facts"], "recompute: FreeCAD reports no recompute error")  # before the first call
+        self.assertNotIn("time", timelimit.mark_health({"recompute": "ok"}))  # before the first call
         timelimit.started(now=1000.0)
-        self.assertEqual(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"}, now=1000.0 + 60 * 14)["facts"], "recompute: FreeCAD reports no recompute error")
-        h = timelimit.mark_health(timelimit.mark_health({"facts": "recompute: FreeCAD reports no recompute error"}, now=1000.0 + 60 * 15), now=1000.0 + 60 * 15)
-        self.assertEqual(h["facts"], "recompute: FreeCAD reports no recompute error; time: 15 of 30 minutes used since the first tool call")
+        self.assertNotIn("time", timelimit.mark_health({"recompute": "ok"}, now=1000.0 + 60 * 14))
+        h = timelimit.mark_health(timelimit.mark_health({"recompute": "ok"}, now=1000.0 + 60 * 15), now=1000.0 + 60 * 15)
+        self.assertEqual(h, {"recompute": "ok", "time": "15 of 30 minutes used since the first tool call"})
 
     def test_documented_with_the_other_settings(self):
         for doc in ("SETUP.md", "README.md", os.path.join("docs", "clients", "README.md")):

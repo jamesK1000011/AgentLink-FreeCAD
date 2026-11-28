@@ -2557,9 +2557,9 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
 
             if tools is None:
                 health.drop(m)
-                return {"facts": health.NOT_READ}
+                return health.not_read("the build was not run")
             if m is None:
-                return {"facts": "the health check is switched off or did not load"}
+                return health.not_read("the health check is switched off or did not load")
             # After sketch calls the sketches are read out as they stand.
             t = server.tools.get(next((x for x in tools if x.startswith("sketch_")), "batch"))
             return health.check(s, t, m)
@@ -3510,8 +3510,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "about 0.4 s and up to 2.5 s for each call. From its fourth changing call, a long batch runs faster. Those calls still show, with a pause of 60 ms. "
                       "That is the person's EchoBatchDelay preference, ms (0 none, -1 the full pause throughout). The last changing call shows at the full pace, so the "
                       "window ends on a readable state. So one batch of 20 calls is much quicker in the window than 20 single calls. writeTo: a .json file that gets the whole "
-                      "answer (relative: in the session's folder). The answer is then one line for each call: ok, the words of a refusal, or the health's facts. The facts "
-                      "have a standing part, \"N objects still failing from before this call: …\". A line gives it the first time it shows, and again only when it changes. "
+                      "answer (relative: in the session's folder). The answer is then one line for each call: ok, the words of a refusal, or the health's fields. The fields "
+                      "have a standing part, recompute.failingBefore. A line gives it the first time it shows, and again only when it changes. "
                       "healthNote says when later lines leave it out; a line with nothing else reads \"as before\". The batch's own note stays next to it: where it stopped and "
                       "how to continue (next, notRun, heavy). So the answers of a long run stay out of the conversation. Read the result of a call from the file when its "
                       "line needs it. Every batch keeps what ran in its own record, batches/<date>-<time>.json in the session's folder. record in the answer is its path; the "
@@ -3519,7 +3519,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "first. It shows which calls ran: running: true and ran: n while under way, and each call's whole result in results. Run nothing again before that. "
                       "Chaining keeps an answer that one call needs from another out of the conversation. (1) A call can have writeTo: { tool, <its inputs>, writeTo: \"outline.json\" } "
                       "writes the whole answer of that call to the .json file. A relative path is in the session's folder; it is written where tools can write. Its result "
-                      "here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had facts }. A refused call writes nothing, "
+                      "here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had fields }. A refused call writes nothing, "
                       "and a rollback leaves the files. (2) Anywhere in the inputs of a call, { \"$file\": \"outline.json\" } becomes the contents of that JSON file. { "
                       "\"$file\": \"outline.json\", \"$at\": \"loops.0.points\" } becomes the part at that dotted path of keys and list indices (from 0; -1 is the last). The file is "
                       "read as the call starts, so an earlier call of this batch can write it. It is read where tools can read. (3) { \"$from\": 2, \"$at\": \"bodies.0.name\" } "

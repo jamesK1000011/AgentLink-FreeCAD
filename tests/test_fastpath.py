@@ -163,14 +163,14 @@ def _child(case):
                 raise ToolError("invalid_input", "sketch: there are several sketches, name one.")
             sk = found[0]
         doc.add("Geo", "Part::GeomCircle", sk)  # a step of its own, as a real sketch edit is
-        return {"sketch": sk.Label, "added": 1, "kind": a.get("kind"), "center": a.get("center"), "health": {"facts": "recompute: FreeCAD reports no recompute error"}}
+        return {"sketch": sk.Label, "added": 1, "kind": a.get("kind"), "center": a.get("center"), "health": {"recompute": "ok", "fault": False}}
 
     def pd_pad(a):
         sk = doc.getObject(a.get("sketch") or "") if a.get("sketch") else None
         if sk is None:
             raise ToolError("invalid_input", "sketch: which one? (the stand-in wants it named)")
         pad = doc.add("Pad", "PartDesign::Pad", sk.parent)
-        return {"pad": pad.Label, "length": a.get("length"), "health": {"facts": "recompute: FreeCAD reports no recompute error"}}
+        return {"pad": pad.Label, "length": a.get("length"), "health": {"recompute": "ok", "fault": False}}
 
     srv.tools["sketch_new"].fn = sketch_new
     srv.tools["sketch_add"].fn = sketch_add
